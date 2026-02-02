@@ -1518,7 +1518,10 @@ Nout = (imax-imin+1)*(jmax-jmin+1)*(kmax-kmin+1)
 
  
 !  Open( 12 , File = filename,form='BINARY', access="SEQUENTIAL",status="replace",action='Write')
-  Open( 12 , File = filename,form='UNFORMATTED', access="DIRECT",status="replace",action='Write')
+!  Open( 12 , File = filename,form='UNFORMATTED', access="DIRECT",status="replace",action='Write')
+  integer :: recl_val
+  INQUIRE(IOLENGTH=recl_val) time,nx,ny,nz,xmin,xmax,ymin,ymax,zmin,zmax,data_out
+  Open( 12 , File = filename,form='UNFORMATTED', access="DIRECT",status="replace",action='Write',RECL=recl_val)
   Write( 12 ) time,nx,ny,nz,xmin,xmax,ymin,ymax,zmin,zmax,data_out
 
   Close( 12 )

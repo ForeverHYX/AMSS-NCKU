@@ -28,7 +28,7 @@ print_information.print_program_introduction()
 #print( " in script file AMSS_NCKU_Input.py !!! "                                                             )
 #     
 ### Wait for user input (press Enter) to proceed
-#inputvalue = input()           
+#inputvalue = 'continue'           
 #print()
 
 
@@ -58,7 +58,7 @@ if os.path.exists(File_directory):
     ## Prompt whether to overwrite the existing directory
     while True:
         try:
-            inputvalue = input()
+            inputvalue = 'continue'
             ## If the user agrees to overwrite, proceed and remove the existing directory
             if ( inputvalue == "continue" ):
                 print( " Continue the calculation !!! " )
@@ -70,8 +70,10 @@ if os.path.exists(File_directory):
                 sys.exit() 
             ## If the user input is invalid, prompt again
             else:
-                print( " Please input your choice !!! "                   )
-                print( " Input 'continue' or 'stop' in the terminal !!! " )
+                # print( " Please input your choice !!! "                   )
+                # print( " Input 'continue' or 'stop' in the terminal !!! " )
+                print("Default choice: continue")
+                break
         except ValueError:
             print( " Please input your choice !!! "                   )
             print( " Input 'continue' or 'stop' in the terminal !!! " )
@@ -115,7 +117,7 @@ setup.generate_AMSSNCKU_input()
 #print( " If the grid boxes and their resolution are not set properly, press Ctrl+C to abort. "  )
 #print( " Adjust the grid levels and the number of grid points per level before retrying. "      )
 #print( " If the grid boxes and resolution are correct, press Enter to continue. "               )
-#inputvalue = input()  ## Wait for user input (press Enter) to proceed
+#inputvalue = 'continue'  ## Wait for user input (press Enter) to proceed
 #print()
 
 setup.print_puncture_information()
@@ -179,7 +181,7 @@ print(                                                         )
 print( " Preparing to compile and run the AMSS-NCKU code as requested " )
 print( " Compiling the AMSS-NCKU code based on the generated macro files " )
 print(                                                         )
-#inputvalue = input()           
+#inputvalue = 'continue'           
 #print()
 
 AMSS_NCKU_source_path = "AMSS_NCKU_source"
@@ -197,7 +199,7 @@ if not os.path.exists(AMSS_NCKU_source_path):
     print( " The AMSS-NCKU source files are incomplete; copy all source files into ./AMSS_NCKU_source. " )
     print( " Press Enter to continue. " )
     ## Wait for user input (press Enter) to proceed
-    inputvalue = input()
+    inputvalue = 'continue'
     
 ###############################
 
@@ -257,7 +259,7 @@ if not os.path.exists( ABE_file ):
     print( " Lack of AMSS-NCKU executable file ABE/ABEGPU; recompile AMSS_NCKU_source manually. " )
     print( " When recompilation is finished, press Enter to continue. " )
     ## Wait for user input (press Enter) to proceed
-    inputvalue = input() 
+    inputvalue = 'continue' 
 
 ## Copy the executable ABE (or ABEGPU) into the run directory
 shutil.copy2(ABE_file, output_directory)
@@ -274,7 +276,7 @@ if (input_data.Initial_Data_Method == "Ansorg-TwoPuncture" ):
         print(                                                                                                                  )
         print( " Lack of AMSS-NCKU executable file TwoPunctureABE; recompile TwoPunctureABE in AMSS_NCKU_source. " ) 
         print( " When recompilation is finished, press Enter to continue. " )
-        inputvalue = input() 
+        inputvalue = 'continue' 
 
     ## Copy the TwoPunctureABE executable into the run directory
     shutil.copy2(TwoPuncture_file, output_directory)
@@ -319,7 +321,7 @@ if (input_data.Initial_Data_Method == "Ansorg-TwoPuncture" ):
 
     print()
     ## print( " Ready to launch the AMSS-NCKU TwoPuncture executable; press Enter to continue. " )
-    ## inputvalue = input()                    
+    ## inputvalue = 'continue'                    
     print()
     
     ## Change to the output (run) directory
@@ -362,7 +364,7 @@ print(                                                                         )
 
 print()
 ## print(" Ready to launch AMSS-NCKU; press Enter to continue. ")
-## inputvalue = input()           
+## inputvalue = 'continue'           
 print()
 
 ## Change to the run directory
