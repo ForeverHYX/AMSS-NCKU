@@ -12,14 +12,21 @@ echo "Job start at $(date)"
 echo "Node: $(hostname)"
 
 . ~/spack/share/spack/setup-env.sh
-spack load openmpi
+# spack load openmpi
+spack load intel-oneapi-compilers
+spack load intel-oneapi-mpi
 
-source ~/miniconda3/etc/profile.d/conda.sh
+source ~/anaconda3/etc/profile.d/conda.sh
 conda activate AMSS
+
+export I_MPI_FABRICS=shm
+export I_MPI_PIN_DOMAIN=core
 
 ulimit -s unlimited
 export OMP_NUM_THREADS=1
 
-stdbuf -oL python3 AMSS_NCKU_Program.py
+export I_MPI_DEBUG=5 # Mysterious parameters for MPI_AllReduce
+
+python -u AMSS_NCKU_Program.py
 
 echo "Job finished at $(date)"
