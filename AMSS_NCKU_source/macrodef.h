@@ -29,7 +29,7 @@
 
 #define REGLEV 0
 
-#define USE_GPU
+//#define USE_GPU
 
 //#define CHECKDETAIL
 
