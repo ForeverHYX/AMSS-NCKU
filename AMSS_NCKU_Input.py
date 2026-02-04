@@ -16,12 +16,12 @@ import numpy
 File_directory   = "GW150914"                    ## output file directory
 Output_directory = "binary_output"               ## binary data file directory
                                                  ## The file directory name should not be too long
-MPI_processes    = 16                             ## number of mpi processes used in the simulation
+MPI_processes    = 1                             ## number of mpi processes used in the simulation
 
-GPU_Calculation  = "no"                          ## Use GPU or not 
+GPU_Calculation  = "yes"                          ## Use GPU or not 
                                                  ## (prefer "no" in the current version, because the GPU part may have bugs when integrated in this Python interface)
-CPU_Part         = 1.0
-GPU_Part         = 0.0
+CPU_Part         = 0.0
+GPU_Part         = 1.0
 
 #################################################
 
