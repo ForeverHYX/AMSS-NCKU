@@ -28,7 +28,7 @@ print_information.print_program_introduction()
 #print( " in script file AMSS_NCKU_Input.py !!! "                                                             )
 #     
 ### Wait for user input (press Enter) to proceed
-#inputvalue = 'continue'           
+#inputvalue = input()           
 #print()
 
 
@@ -49,40 +49,47 @@ import time
 File_directory = os.path.join(input_data.File_directory)   
 
 ## If the specified output directory exists, ask the user whether to continue
-if os.path.exists(File_directory):
-    print( " Output dictionary has been existed !!!  "                                                              )
-    print( " If you want to overwrite the existing file directory, please input 'continue' in the terminal !! "     ) 
-    print( " If you want to retain the existing file directory, please input 'stop' in the terminal to stop the "   ) 
-    print( " simulation. Then you can reset the output dictionary in the input script file AMSS_NCKU_Input.py !!! " )
-    print(                                                                                                          )
-    ## Prompt whether to overwrite the existing directory
-    while True:
-        try:
-            inputvalue = 'continue'
-            ## If the user agrees to overwrite, proceed and remove the existing directory
-            if ( inputvalue == "continue" ):
-                print( " Continue the calculation !!! " )
-                print(                                  )
-                break  
-            ## If the user chooses not to overwrite, exit and keep the existing directory
-            elif ( inputvalue == "stop" ):
-                print( " Stop the calculation !!! "    )
-                sys.exit() 
-            ## If the user input is invalid, prompt again
-            else:
-                # print( " Please input your choice !!! "                   )
-                # print( " Input 'continue' or 'stop' in the terminal !!! " )
-                print("Default choice: continue")
-                break
-        except ValueError:
-            print( " Please input your choice !!! "                   )
-            print( " Input 'continue' or 'stop' in the terminal !!! " )
+# if os.path.exists(File_directory):
+#     print( " Output dictionary has been existed !!!  "                                                              )
+#     print( " If you want to overwrite the existing file directory, please input 'continue' in the terminal !! "     ) 
+#     print( " If you want to retain the existing file directory, please input 'stop' in the terminal to stop the "   ) 
+#     print( " simulation. Then you can reset the output dictionary in the input script file AMSS_NCKU_Input.py !!! " )
+#     print(                                                                                                          )
+#     ## Prompt whether to overwrite the existing directory
+#     while True:
+#         try:
+#             inputvalue = input()
+#             ## If the user agrees to overwrite, proceed and remove the existing directory
+#             if ( inputvalue == "continue" ):
+#                 print( " Continue the calculation !!! " )
+#                 print(                                  )
+#                 break  
+#             ## If the user chooses not to overwrite, exit and keep the existing directory
+#             elif ( inputvalue == "stop" ):
+#                 print( " Stop the calculation !!! "    )
+#                 sys.exit() 
+#             ## If the user input is invalid, prompt again
+#             else:
+#                 print( " Please input your choice !!! "                   )
+#                 print( " Input 'continue' or 'stop' in the terminal !!! " )
+#         except ValueError:
+#             print( " Please input your choice !!! "                   )
+#             print( " Input 'continue' or 'stop' in the terminal !!! " )
         
 ## Remove the existing output directory if present
-shutil.rmtree(File_directory, ignore_errors=True)
+# shutil.rmtree(File_directory, ignore_errors=True)
 
 ## Create the output directory
-os.mkdir(File_directory)
+# os.mkdir(File_directory)
+
+# ========================================================
+# MODIFIED FOR SBATCH: Bypass interaction & keep directory
+# ========================================================
+if not os.path.exists(File_directory):
+    os.makedirs(File_directory)
+    print(f" Created new output directory: {File_directory}")
+else:
+    print(f" Output directory {File_directory} exists. Keeping it for incremental build.")
 
 ## Copy the Python input file into the run directory
 shutil.copy("AMSS_NCKU_Input.py", File_directory)
@@ -90,13 +97,13 @@ shutil.copy("AMSS_NCKU_Input.py", File_directory)
 # Generate subdirectories to store various output files
 
 output_directory = os.path.join(File_directory, "AMSS_NCKU_output")
-os.mkdir(output_directory)
+os.makedirs(output_directory, exist_ok=True)
 
 binary_results_directory = os.path.join(output_directory, input_data.Output_directory)
-os.mkdir(binary_results_directory)
+os.makedirs(binary_results_directory, exist_ok=True)
 
 figure_directory = os.path.join(File_directory, "figure")
-os.mkdir(figure_directory)
+os.makedirs(figure_directory, exist_ok=True)
 
 print( " Output directory has been generated "     )
 print(                                            )
@@ -117,7 +124,7 @@ setup.generate_AMSSNCKU_input()
 #print( " If the grid boxes and their resolution are not set properly, press Ctrl+C to abort. "  )
 #print( " Adjust the grid levels and the number of grid points per level before retrying. "      )
 #print( " If the grid boxes and resolution are correct, press Enter to continue. "               )
-#inputvalue = 'continue'  ## Wait for user input (press Enter) to proceed
+#inputvalue = input()  ## Wait for user input (press Enter) to proceed
 #print()
 
 setup.print_puncture_information()
@@ -181,7 +188,7 @@ print(                                                         )
 print( " Preparing to compile and run the AMSS-NCKU code as requested " )
 print( " Compiling the AMSS-NCKU code based on the generated macro files " )
 print(                                                         )
-#inputvalue = 'continue'           
+#inputvalue = input()           
 #print()
 
 AMSS_NCKU_source_path = "AMSS_NCKU_source"
@@ -199,12 +206,17 @@ if not os.path.exists(AMSS_NCKU_source_path):
     print( " The AMSS-NCKU source files are incomplete; copy all source files into ./AMSS_NCKU_source. " )
     print( " Press Enter to continue. " )
     ## Wait for user input (press Enter) to proceed
-    inputvalue = 'continue'
+    inputvalue = input()
     
 ###############################
 
 # Copy AMSS-NCKU source files to prepare for compilation
-shutil.copytree(AMSS_NCKU_source_path, AMSS_NCKU_source_copy)    
+# shutil.copytree(AMSS_NCKU_source_path, AMSS_NCKU_source_copy)
+if not os.path.exists(AMSS_NCKU_source_copy):
+    shutil.copytree(AMSS_NCKU_source_path, AMSS_NCKU_source_copy)
+else:
+    print(" Syncing source files using incremental update (cp -rup)...")
+    os.system(f"cp -rup {AMSS_NCKU_source_path}/* {AMSS_NCKU_source_copy}/")    
 
 # (Comment) Example: copy the src folder to destination
 # shutil.copytree(src, dst)
@@ -214,8 +226,21 @@ shutil.copytree(AMSS_NCKU_source_path, AMSS_NCKU_source_copy)
 macrodef_h_path  = os.path.join(File_directory, "macrodef.h") 
 macrodef_fh_path = os.path.join(File_directory, "macrodef.fh") 
 
-shutil.copy2(macrodef_h_path,  AMSS_NCKU_source_copy)
-shutil.copy2(macrodef_fh_path, AMSS_NCKU_source_copy)
+# shutil.copy2(macrodef_h_path,  AMSS_NCKU_source_copy)
+# shutil.copy2(macrodef_fh_path, AMSS_NCKU_source_copy)
+def smart_copy_header(src, dst_folder):
+    """Only copy if content is different, to preserve timestamp and avoid make rebuild."""
+    dst = os.path.join(dst_folder, os.path.basename(src))
+    if os.path.exists(dst):
+        with open(src, 'rb') as f1, open(dst, 'rb') as f2:
+            if f1.read() == f2.read():
+                print(f" {os.path.basename(src)} content unchanged, skipping update.")
+                return
+    shutil.copy2(src, dst_folder)
+    print(f" Updated {os.path.basename(src)}")
+
+smart_copy_header(macrodef_h_path,  AMSS_NCKU_source_copy)
+smart_copy_header(macrodef_fh_path, AMSS_NCKU_source_copy)
 
 # Notes on copying files:
 # shutil.copy2 preserves file metadata such as modification time.
@@ -259,7 +284,7 @@ if not os.path.exists( ABE_file ):
     print( " Lack of AMSS-NCKU executable file ABE/ABEGPU; recompile AMSS_NCKU_source manually. " )
     print( " When recompilation is finished, press Enter to continue. " )
     ## Wait for user input (press Enter) to proceed
-    inputvalue = 'continue' 
+    inputvalue = input() 
 
 ## Copy the executable ABE (or ABEGPU) into the run directory
 shutil.copy2(ABE_file, output_directory)
@@ -276,7 +301,7 @@ if (input_data.Initial_Data_Method == "Ansorg-TwoPuncture" ):
         print(                                                                                                                  )
         print( " Lack of AMSS-NCKU executable file TwoPunctureABE; recompile TwoPunctureABE in AMSS_NCKU_source. " ) 
         print( " When recompilation is finished, press Enter to continue. " )
-        inputvalue = 'continue' 
+        inputvalue = input() 
 
     ## Copy the TwoPunctureABE executable into the run directory
     shutil.copy2(TwoPuncture_file, output_directory)
@@ -321,7 +346,7 @@ if (input_data.Initial_Data_Method == "Ansorg-TwoPuncture" ):
 
     print()
     ## print( " Ready to launch the AMSS-NCKU TwoPuncture executable; press Enter to continue. " )
-    ## inputvalue = 'continue'                    
+    ## inputvalue = input()                    
     print()
     
     ## Change to the output (run) directory
@@ -364,7 +389,7 @@ print(                                                                         )
 
 print()
 ## print(" Ready to launch AMSS-NCKU; press Enter to continue. ")
-## inputvalue = 'continue'           
+## inputvalue = input()           
 print()
 
 ## Change to the run directory
