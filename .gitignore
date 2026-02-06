@@ -2,3 +2,4 @@ __pycache__/
 GW150914*/
 profile/
 .vscode/
+*debug*

@@ -173,6 +173,8 @@
     #endif
     // distribute the data to cprocessors
     #if (PSTR == 0)
+constexpr double cut_ratio[9] = {0.45, 0.425, 0.425, 0.425, 0.425, 0.425, 0.425, 0.425, 0.425};
+
 MyList<Block> *Parallel::distribute(MyList<Patch> *PatchLIST, int cpusize, int ingfsi, int fngfsi,
                                     bool periodic, int nodes)
 {
@@ -189,17 +191,6 @@ MyList<Block> *Parallel::distribute(MyList<Patch> *PatchLIST, int cpusize, int i
         MPI_Abort(MPI_COMM_WORLD, 1);
     }
 
-    // ============================================================
-    // [参数设定] 手动切分比例 (Manual Cut Ratio)
-    // 含义：边缘 Block 占据总长度的比例。
-    // 范围：0.0 < ratio < 0.5
-    // 
-    // - 0.25: 均匀切分 (每个 Block 占 25%)
-    // - 0.35: 边缘大，中间小 (边缘 35%, 中间 15%) -> 轻度挤压
-    // - 0.40: 边缘更大，中间更小 (边缘 40%, 中间 10%) -> 中度挤压
-    // - 0.45: 极度挤压 (边缘 45%, 中间 5%) -> 应对极端的黑洞中心负载
-    // ============================================================
-    const double manual_cut_ratio = 0.425; 
     MyList<Block> *BlL = 0;
 
     int split_size, min_size, block_size = 0;
@@ -211,6 +202,9 @@ MyList<Block> *Parallel::distribute(MyList<Patch> *PatchLIST, int cpusize, int i
     for (int i = 0; i < dim; i++)
         min_shape[i] = PLi->data->shape[i];
     int lev = PLi->data->lev;
+
+    const double manual_cut_ratio = cut_ratio[lev]; 
+
     PLi = PLi->next;
     while (PLi)
     {
