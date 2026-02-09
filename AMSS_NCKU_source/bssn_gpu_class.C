@@ -1894,19 +1894,6 @@ void bssn_class::Evolve(int Steps)
   clock_t prev_clock, curr_clock;
   double LastDump = 0.0, LastCheck = 0.0, Last2dDump = 0.0;
   LastAnas = 0;
-#if 0
-//initial checkpoint for special uasge
-     {
-       CheckPoint->write_Black_Hole_position(BH_num_input,BH_num,Porg0,Porgbr,Mass);
-       CheckPoint->writecheck_cgh(PhysTime,GH);
-#ifdef WithShell   
-       CheckPoint->writecheck_sh(PhysTime,SH);
-#endif
-       CheckPoint->write_bssn(LastDump,Last2dDump,LastAnas);
-       misc::tillherecheck("complete initialization preparation"); // we need synchronization here
-       if(myrank==0) MPI_Abort(MPI_COMM_WORLD,1);
-     }
-#endif
 
   double beg_time;
   beg_time = MPI_Wtime();
@@ -1983,50 +1970,6 @@ void bssn_class::Evolve(int Steps)
     CheckPoint->read_bssn(LastDump, Last2dDump, LastAnas);
 
   double dT_mon = dT * pow(0.5, Mymax(0, trfls));
-  /*
-  #ifdef With_AHF
-  //initial apparent horizon finding
-      {
-         double gam;
-         double massmin=Mass[0];
-         for(int ihn=1;ihn<BH_num;ihn++) massmin=Mymin(massmin,Mass[ihn]);
-
-         for(int ihn=0;ihn<BH_num;ihn++)
-         {
-           xc[ihn] = Porg0[ihn][0];
-           yc[ihn] = Porg0[ihn][1];
-           zc[ihn] = Porg0[ihn][2];
-           gam = fabs(Pmom[ihn*3])/(Mass[ihn]);
-           gam = sqrt(1-gam*gam);
-           xr[ihn] = Mass[ihn]*gam;
-           gam = fabs(Pmom[ihn*3+1])/(Mass[ihn]);
-           gam = sqrt(1-gam*gam);
-           yr[ihn] = Mass[ihn]*gam;
-           gam = fabs(Pmom[ihn*3+2])/(Mass[ihn]);
-           gam = sqrt(1-gam*gam);
-           zr[ihn] = Mass[ihn]*gam;
-           findeveryl[ihn] = findeveryl[ihn]*(Mymax(int(Mass[ihn]/massmin),1));
-         }
-         int ihn = BH_num;
-         for(int ia=0;ia<BH_num;ia++)
-           for(int ib=ia+1;ib<BH_num;ib++)
-           {
-             xc[ihn] = (Porg0[ia][0] + Porg0[ib][0])/2;
-             yc[ihn] = (Porg0[ia][1] + Porg0[ib][1])/2;
-             zc[ihn] = (Porg0[ia][2] + Porg0[ib][2])/2;
-             xr[ihn] = yr[ihn] = zr[ihn] = (Mass[ia])+(Mass[ib]);
-             findeveryl[ihn] = findeveryl[ihn]*(int(xr[ihn]/Mass[0]));
-
-             ihn++;
-           }
-
-         AHFinderDirect::AHFinderDirect_enforcefind(HN_num,xc,yc,zc,xr,yr,zr);  
-         // note rhs has been used as temp storage space
-
-         delete[] xc; delete[] yc; delete[] zc; delete[] xr; delete[] yr; delete[] zr;
-      }
-  #endif
-  */
   perf bssn_perf;
   size_t current_min, current_avg, current_max, peak_min, peak_avg, peak_max;
 
@@ -2206,10 +2149,11 @@ void bssn_class::RecursiveStep(int lev)
 
 // added by yangquan
 #ifdef USE_GPU
-    if (use_gpu == 1)
-      Step_GPU(lev, YN);
-    else
-      Step(lev, YN);
+    Step_GPU(lev, YN);
+    // if (use_gpu == 1)
+    //   Step_GPU(lev, YN);
+    // else
+    //   Step(lev, YN);
 #else
     Step(lev, YN);
 #endif

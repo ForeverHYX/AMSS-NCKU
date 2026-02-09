@@ -23,8 +23,8 @@ export I_MPI_DEBUG=0
 
 # vtune -collect hotspots -result-dir ../../profile/TwoPunctureABE/${TS}/ -- ./TwoPunctureABE
 # ./TwoPunctureABE
-# mpirun -bootstrap fork -np 16 vtune -collect hotspots -trace-mpi -result-dir ../../profile/ABE/${TS}/ -- ./ABE
-# mpirun -bootstrap fork -np 16 ./ABE
-mpirun -bootstrap fork -np 2 ./ABEGPU
+mpirun -bootstrap fork -np 1 ./ABEGPU
 # mpirun -bootstrap fork -np 2 ncu --target-processes all ./ABEGPU
-# mpirun -bootstrap fork -np 2 vtune -collect hotspots -trace-mpi -result-dir ../../profile/ABEGPU/${TS}/ -- ./ABEGPU
+# uarch-exploration
+# mpirun -bootstrap fork -np 1 vtune -collect hotspots -trace-mpi -result-dir ../../profile/ABEGPU/${TS}/ -- ./ABEGPU
+# mpirun -bootstrap fork -np 1 vtune -collect uarch-exploration -trace-mpi -result-dir ../../profile/ABEGPU/ue${TS}/ -- ./ABEGPU
