@@ -27,6 +27,10 @@ export OMP_NUM_THREADS=1
 
 export I_MPI_DEBUG=5 # Mysterious parameters for MPI_AllReduce
 
+nvidia-cuda-mps-control -d
+
 python -u AMSS_NCKU_Program.py
+
+echo quit | nvidia-cuda-mps-control
 
 echo "Job finished at $(date)"

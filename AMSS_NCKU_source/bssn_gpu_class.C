@@ -1925,9 +1925,10 @@ void bssn_class::Evolve(int Steps)
   }
 #else
   // old yangquan code
-  use_gpu = 0;
-  if (myrank % 2 == 1)
+  // use_gpu = 0;
+  // if (myrank % 2 == 1)
     use_gpu = 1;
+  // if (!myrank) use_gpu = 1;
 #endif
 #endif
 
@@ -2077,7 +2078,9 @@ void bssn_class::Evolve(int Steps)
 
       CheckPoint->write_Black_Hole_position(BH_num_input, BH_num, Porg0, Porgbr, Mass);
       CheckPoint->writecheck_cgh(PhysTime, GH);
+#ifdef WithShell
       CheckPoint->writecheck_sh(PhysTime, SH);
+#endif
       CheckPoint->write_bssn(LastDump, Last2dDump, LastAnas);
     }
   }
@@ -2149,11 +2152,11 @@ void bssn_class::RecursiveStep(int lev)
 
 // added by yangquan
 #ifdef USE_GPU
-    Step_GPU(lev, YN);
-    // if (use_gpu == 1)
-    //   Step_GPU(lev, YN);
-    // else
-    //   Step(lev, YN);
+    // Step_GPU(lev, YN);
+    if (use_gpu == 1)
+      Step_GPU(lev, YN);
+    else
+      Step(lev, YN);
 #else
     Step(lev, YN);
 #endif
