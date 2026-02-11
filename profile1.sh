@@ -23,8 +23,8 @@ export I_MPI_DEBUG=0
 
 # vtune -collect hotspots -result-dir ../../profile/TwoPunctureABE/${TS}/ -- ./TwoPunctureABE
 # ./TwoPunctureABE
-# mpirun -bootstrap fork -np 16 ./ABEGPU
-mpirun -bootstrap fork -np 16 vtune -collect hotspots -trace-mpi -result-dir ../../profile/ABEGPU/${TS}/ -- ./ABEGPU
+mpirun -bootstrap fork -np 16 ./ABEGPU
+# mpirun -bootstrap fork -np 16 vtune -collect hotspots -trace-mpi -result-dir ../../profile/ABEGPU/${TS}/ -- ./ABEGPU
 echo quit | nvidia-cuda-mps-control
 # mpirun -bootstrap fork -np 2 ncu --target-processes all ./ABEGPU
 # uarch-exploration

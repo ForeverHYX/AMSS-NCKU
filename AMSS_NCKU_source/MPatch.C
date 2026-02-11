@@ -409,20 +409,9 @@ void Patch::Interp_Points(MyList<var> *VarList,
 // so (0,1) does not belong to any part for vertex structure
 // here we put (0,0.5) to left part and (0.5,1) to right part
 // BUT for cell structure the bbox is (-1.5,0.5) and (0.5,2.5), there is no missing region at all
-#ifdef Vertex
-#ifdef Cell
-#error Both Cell and Vertex are defined
-#endif
-        llb[i] = (feq(BP->bbox[i], bbox[i], DH[i] / 2)) ? BP->bbox[i] + lli[i] * DH[i] : BP->bbox[i] + (ghost_width - 0.5) * DH[i];
-        uub[i] = (feq(BP->bbox[dim + i], bbox[dim + i], DH[i] / 2)) ? BP->bbox[dim + i] - uui[i] * DH[i] : BP->bbox[dim + i] - (ghost_width - 0.5) * DH[i];
-#else
-#ifdef Cell
         llb[i] = (feq(BP->bbox[i], bbox[i], DH[i] / 2)) ? BP->bbox[i] + lli[i] * DH[i] : BP->bbox[i] + ghost_width * DH[i];
         uub[i] = (feq(BP->bbox[dim + i], bbox[dim + i], DH[i] / 2)) ? BP->bbox[dim + i] - uui[i] * DH[i] : BP->bbox[dim + i] - ghost_width * DH[i];
-#else
-#error Not define Vertex nor Cell
-#endif
-#endif
+
         if (XX[i][j] - llb[i] < -DH[i] / 2 || XX[i][j] - uub[i] > DH[i] / 2)
         {
           flag = false;
@@ -501,9 +490,6 @@ void Patch::Interp_Points(MyList<var> *VarList,
         else
           cout << ")" << endl;
       }
-#if 0
-       checkBlock();
-#else
       cout << "splited domains:" << endl;
       {
         MyList<Block> *Bp = blb;
@@ -513,20 +499,8 @@ void Patch::Interp_Points(MyList<var> *VarList,
 
           for (int i = 0; i < dim; i++)
           {
-#ifdef Vertex
-#ifdef Cell
-#error Both Cell and Vertex are defined
-#endif
-            llb[i] = (feq(BP->bbox[i], bbox[i], DH[i] / 2)) ? BP->bbox[i] + lli[i] * DH[i] : BP->bbox[i] + (ghost_width - 0.5) * DH[i];
-            uub[i] = (feq(BP->bbox[dim + i], bbox[dim + i], DH[i] / 2)) ? BP->bbox[dim + i] - uui[i] * DH[i] : BP->bbox[dim + i] - (ghost_width - 0.5) * DH[i];
-#else
-#ifdef Cell
             llb[i] = (feq(BP->bbox[i], bbox[i], DH[i] / 2)) ? BP->bbox[i] + lli[i] * DH[i] : BP->bbox[i] + ghost_width * DH[i];
             uub[i] = (feq(BP->bbox[dim + i], bbox[dim + i], DH[i] / 2)) ? BP->bbox[dim + i] - uui[i] * DH[i] : BP->bbox[dim + i] - ghost_width * DH[i];
-#else
-#error Not define Vertex nor Cell
-#endif
-#endif
           }
           cout << "(";
           for (int j = 0; j < dim; j++)
@@ -542,7 +516,6 @@ void Patch::Interp_Points(MyList<var> *VarList,
           Bp = Bp->next;
         }
       }
-#endif
       MPI_Abort(MPI_COMM_WORLD, 1);
     }
   }
@@ -872,20 +845,8 @@ bool Patch::Interp_ONE_Point(MyList<var> *VarList, double *XX,
 // so (0,1) does not belong to any part for vertex structure
 // here we put (0,0.5) to left part and (0.5,1) to right part
 // BUT for cell structure the bbox is (-1.5,0.5) and (0.5,2.5), there is no missing region at all
-#ifdef Vertex
-#ifdef Cell
-#error Both Cell and Vertex are defined
-#endif
-      llb[i] = (feq(BP->bbox[i], bbox[i], DH[i] / 2)) ? BP->bbox[i] + lli[i] * DH[i] : BP->bbox[i] + (ghost_width - 0.5) * DH[i];
-      uub[i] = (feq(BP->bbox[dim + i], bbox[dim + i], DH[i] / 2)) ? BP->bbox[dim + i] - uui[i] * DH[i] : BP->bbox[dim + i] - (ghost_width - 0.5) * DH[i];
-#else
-#ifdef Cell
       llb[i] = (feq(BP->bbox[i], bbox[i], DH[i] / 2)) ? BP->bbox[i] + lli[i] * DH[i] : BP->bbox[i] + ghost_width * DH[i];
       uub[i] = (feq(BP->bbox[dim + i], bbox[dim + i], DH[i] / 2)) ? BP->bbox[dim + i] - uui[i] * DH[i] : BP->bbox[dim + i] - ghost_width * DH[i];
-#else
-#error Not define Vertex nor Cell
-#endif
-#endif
       if (XX[i] - llb[i] < -DH[i] / 2 || XX[i] - uub[i] > DH[i] / 2)
       {
         flag = false;
@@ -898,57 +859,6 @@ bool Patch::Interp_ONE_Point(MyList<var> *VarList, double *XX,
       notfind = false;
       if (myrank == BP->rank)
       {
-// test old code
-#if 0
-#define floorint(a) ((a) < 0 ? int(a) - 1 : int(a))
-//---> interpolation
-                int ixl,iyl,izl,ixu,iyu,izu;
-	    	double Delx,Dely,Delz;
-
-		ixl = 1+floorint((pox[0]-BP->X[0][0])/DH[0]);
-	   	iyl = 1+floorint((pox[1]-BP->X[1][0])/DH[1]);
-	   	izl = 1+floorint((pox[2]-BP->X[2][0])/DH[2]);
-
-		int nn=ordn/2;
-
-		ixl = ixl-nn;
-		iyl = iyl-nn;
-		izl = izl-nn;
-	   
-		int tmi;
-		tmi = (Symmetry==2)?-1:0;
-		if(ixl<tmi) ixl=tmi;
-	   	if(iyl<tmi) iyl=tmi;
-		tmi = (Symmetry>0)?-1:0;
-	   	if(izl<tmi) izl=tmi;
-      
-	   	if(ixl+ordn>BP->shape[0]) ixl=BP->shape[0]-ordn;
-	   	if(iyl+ordn>BP->shape[1]) iyl=BP->shape[1]-ordn;
-	   	if(izl+ordn>BP->shape[2]) izl=BP->shape[2]-ordn;
-// support cell center
-		if(ixl>=0) Delx = ( pox[0] - BP->X[0][ixl] )/ DH[0];
-		else       Delx = ( pox[0] + BP->X[0][0] )/ DH[0];
-                if(iyl>=0) Dely = ( pox[1] - BP->X[1][iyl] )/ DH[1];
-		else       Dely = ( pox[1] + BP->X[1][0] )/ DH[1];
-                if(izl>=0) Delz = ( pox[2] - BP->X[2][izl] )/ DH[2];
-		else       Delz = ( pox[2] + BP->X[2][0] )/ DH[2];
-//change to fortran index
-                ixl++;
-	   	iyl++;
-	   	izl++;
-	   	ixu = ixl + ordn - 1;
-	   	iyu = iyl + ordn - 1;
-	   	izu = izl + ordn - 1;
-	    	varl=VarList;
-		int j=0;
-	    	while(varl)
-		{
-                 f_interp_2(BP->shape,BP->fgfs[varl->data->sgfn],shellf[j],ixl,ixu,iyl,iyu,izl,izu,Delx,Dely,Delz,
-                                     ordn,varl->data->SoA,Symmetry);
-		 varl=varl->next;
-		 j++;
-		} //varl
-#else
         //---> interpolation
         varl = VarList;
         int k = 0;
@@ -961,7 +871,6 @@ bool Patch::Interp_ONE_Point(MyList<var> *VarList, double *XX,
           varl = varl->next;
           k++;
         }
-#endif
       }
     }
     if (Bp == ble)
@@ -998,9 +907,6 @@ bool Patch::Interp_ONE_Point(MyList<var> *VarList, double *XX,
       else
         cout << ")" << endl;
     }
-#if 0
-       checkBlock();
-#else
     cout << "splited domains:" << endl;
     {
       MyList<Block> *Bp = blb;
@@ -1010,20 +916,8 @@ bool Patch::Interp_ONE_Point(MyList<var> *VarList, double *XX,
 
         for (int i = 0; i < dim; i++)
         {
-#ifdef Vertex
-#ifdef Cell
-#error Both Cell and Vertex are defined
-#endif
-          llb[i] = (feq(BP->bbox[i], bbox[i], DH[i] / 2)) ? BP->bbox[i] + lli[i] * DH[i] : BP->bbox[i] + (ghost_width - 0.5) * DH[i];
-          uub[i] = (feq(BP->bbox[dim + i], bbox[dim + i], DH[i] / 2)) ? BP->bbox[dim + i] - uui[i] * DH[i] : BP->bbox[dim + i] - (ghost_width - 0.5) * DH[i];
-#else
-#ifdef Cell
           llb[i] = (feq(BP->bbox[i], bbox[i], DH[i] / 2)) ? BP->bbox[i] + lli[i] * DH[i] : BP->bbox[i] + ghost_width * DH[i];
           uub[i] = (feq(BP->bbox[dim + i], bbox[dim + i], DH[i] / 2)) ? BP->bbox[dim + i] - uui[i] * DH[i] : BP->bbox[dim + i] - ghost_width * DH[i];
-#else
-#error Not define Vertex nor Cell
-#endif
-#endif
         }
         cout << "(";
         for (int j = 0; j < dim; j++)
@@ -1039,7 +933,6 @@ bool Patch::Interp_ONE_Point(MyList<var> *VarList, double *XX,
         Bp = Bp->next;
       }
     }
-#endif
     MPI_Abort(MPI_COMM_WORLD, 1);
   }
 

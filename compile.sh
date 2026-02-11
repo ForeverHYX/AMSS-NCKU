@@ -23,7 +23,7 @@ export OMP_NUM_THREADS=1
 PROJECT_ROOT="$(pwd)"
 
 # 使用绝对路径定义工作目录
-WORK_DIR="${PROJECT_ROOT}/GW150914"
+WORK_DIR="${PROJECT_ROOT}/GW"
 ORIGINAL_SRC="${PROJECT_ROOT}/AMSS_NCKU_source"
 
 # 编译源码的位置

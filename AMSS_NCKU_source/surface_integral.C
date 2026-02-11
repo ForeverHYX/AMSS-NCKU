@@ -338,14 +338,9 @@ void surface_integral::surf_Wave(double rex, int lev, cgh *GH, var *Rpsi4, var *
           }
 
           thetap = sqrt((2 * pl + 1.0) / 4.0 / PI) * misc::Wigner_d_function(pl, pm, spinw, costheta); // note the variation from -2 to 2
-#ifdef GaussInt
           // wtcostheta is even function respect costheta
           RP_out[countlm] = RP_out[countlm] + thetap * (psi4RR * cosmphi + psi4II * sinmphi) * wtcostheta[i];
           IP_out[countlm] = IP_out[countlm] + thetap * (psi4II * cosmphi - psi4RR * sinmphi) * wtcostheta[i];
-#else
-          RP_out[countlm] = RP_out[countlm] + thetap * (psi4RR * cosmphi + psi4II * sinmphi);
-          IP_out[countlm] = IP_out[countlm] + thetap * (psi4II * cosmphi - psi4RR * sinmphi);
-#endif
         }
         countlm++; // no sanity check for countlm and NN which should be noted in the input parameters
       }
@@ -353,13 +348,8 @@ void surface_integral::surf_Wave(double rex, int lev, cgh *GH, var *Rpsi4, var *
 
   for (int ii = 0; ii < NN; ii++)
   {
-#ifdef GaussInt
     RP_out[ii] = RP_out[ii] * rex * dphi;
     IP_out[ii] = IP_out[ii] * rex * dphi;
-#else
-    RP_out[ii] = RP_out[ii] * rex * dphi * dcostheta;
-    IP_out[ii] = IP_out[ii] * rex * dphi * dcostheta;
-#endif
   }
   //|------+  Communicate and sum the results from each processor.
 
@@ -2375,12 +2365,8 @@ void surface_integral::surf_MassPAng(double rex, int lev, cgh *GH, var *chi, var
 
 // Chi^2 corresponds to metric determinant
 // but this factor has been considered in f_admmass_bssn
-#ifdef GaussInt
     // wtcostheta is even function respect costheta
     Mass_out = Mass_out + (shellf[InList * n] * nx_g[n] + shellf[InList * n + 1] * ny_g[n] + shellf[InList * n + 2] * nz_g[n]) * wtcostheta[i];
-#else
-    Mass_out = Mass_out + (shellf[InList * n] * nx_g[n] + shellf[InList * n + 1] * ny_g[n] + shellf[InList * n + 2] * nz_g[n]);
-#endif
 
     gupzz = Gxx * Gyy * Gzz + Gxy * Gyz * Gxz + Gxz * Gxy * Gyz -
             Gxz * Gyy * Gxz - Gxy * Gxy * Gzz - Gxx * Gyz * Gyz;
@@ -2402,7 +2388,6 @@ void surface_integral::surf_MassPAng(double rex, int lev, cgh *GH, var *chi, var
     aupzz = gupxz * axz + gupyz * ayz + gupzz * azz;
     if (Symmetry == 0)
     {
-#ifdef GaussInt
       // wtcostheta is even function respect costheta
       //  1/8\pi \int \psi^6 (y A^m_z - zA^m_y) dS_m
       ang_outx = ang_outx + f1o8 * Psi * (nx_g[n] * (pox[1][n] * aupxz - pox[2][n] * aupxy) + ny_g[n] * (pox[1][n] * aupyz - pox[2][n] * aupyy) + nz_g[n] * (pox[1][n] * aupzz - pox[2][n] * aupzy)) * wtcostheta[i];
@@ -2410,22 +2395,10 @@ void surface_integral::surf_MassPAng(double rex, int lev, cgh *GH, var *chi, var
       ang_outy = ang_outy + f1o8 * Psi * (nx_g[n] * (pox[2][n] * aupxx - pox[0][n] * aupxz) + ny_g[n] * (pox[2][n] * aupyx - pox[0][n] * aupyz) + nz_g[n] * (pox[2][n] * aupzx - pox[0][n] * aupzz)) * wtcostheta[i];
       // 1/8\pi \int \psi^6 (x A^m_y - yA^m_x) dS_m
       ang_outz = ang_outz + f1o8 * Psi * (nx_g[n] * (pox[0][n] * aupxy - pox[1][n] * aupxx) + ny_g[n] * (pox[0][n] * aupyy - pox[1][n] * aupyx) + nz_g[n] * (pox[0][n] * aupzy - pox[1][n] * aupzx)) * wtcostheta[i];
-#else
-      //  1/8\pi \int \psi^6 (y A^m_z - zA^m_y) dS_m
-      ang_outx = ang_outx + f1o8 * Psi * (nx_g[n] * (pox[1][n] * aupxz - pox[2][n] * aupxy) + ny_g[n] * (pox[1][n] * aupyz - pox[2][n] * aupyy) + nz_g[n] * (pox[1][n] * aupzz - pox[2][n] * aupzy));
-      //  1/8\pi \int \psi^6 (z A^m_x - xA^m_z) dS_m
-      ang_outy = ang_outy + f1o8 * Psi * (nx_g[n] * (pox[2][n] * aupxx - pox[0][n] * aupxz) + ny_g[n] * (pox[2][n] * aupyx - pox[0][n] * aupyz) + nz_g[n] * (pox[2][n] * aupzx - pox[0][n] * aupzz));
-      // 1/8\pi \int \psi^6 (x A^m_y - yA^m_x) dS_m
-      ang_outz = ang_outz + f1o8 * Psi * (nx_g[n] * (pox[0][n] * aupxy - pox[1][n] * aupxx) + ny_g[n] * (pox[0][n] * aupyy - pox[1][n] * aupyx) + nz_g[n] * (pox[0][n] * aupzy - pox[1][n] * aupzx));
-#endif
     }
     else if (Symmetry == 1)
     {
-#ifdef GaussInt
       ang_outz = ang_outz + f1o8 * Psi * (nx_g[n] * (pox[0][n] * aupxy - pox[1][n] * aupxx) + ny_g[n] * (pox[0][n] * aupyy - pox[1][n] * aupyx) + nz_g[n] * (pox[0][n] * aupzy - pox[1][n] * aupzx)) * wtcostheta[i];
-#else
-      ang_outz = ang_outz + f1o8 * Psi * (nx_g[n] * (pox[0][n] * aupxy - pox[1][n] * aupxx) + ny_g[n] * (pox[0][n] * aupyy - pox[1][n] * aupyx) + nz_g[n] * (pox[0][n] * aupzy - pox[1][n] * aupzx));
-#endif
     }
 
     axx = Chi * (axx + Gxx * TRK / 3.0);
@@ -2442,25 +2415,14 @@ void surface_integral::surf_MassPAng(double rex, int lev, cgh *GH, var *chi, var
     // 1/8\pi \int \psi^6 (K_mi - \delta_mi trK) dS^m: lower index linear momentum
     if (Symmetry == 0)
     {
-#ifdef GaussInt
       p_outx = p_outx + f1o8 * Psi * (nx_g[n] * axx + ny_g[n] * axy + nz_g[n] * axz) * wtcostheta[i];
       p_outy = p_outy + f1o8 * Psi * (nx_g[n] * axy + ny_g[n] * ayy + nz_g[n] * ayz) * wtcostheta[i];
       p_outz = p_outz + f1o8 * Psi * (nx_g[n] * axz + ny_g[n] * ayz + nz_g[n] * azz) * wtcostheta[i];
-#else
-      p_outx = p_outx + f1o8 * Psi * (nx_g[n] * axx + ny_g[n] * axy + nz_g[n] * axz);
-      p_outy = p_outy + f1o8 * Psi * (nx_g[n] * axy + ny_g[n] * ayy + nz_g[n] * ayz);
-      p_outz = p_outz + f1o8 * Psi * (nx_g[n] * axz + ny_g[n] * ayz + nz_g[n] * azz);
-#endif
     }
     else if (Symmetry == 1)
     {
-#ifdef GaussInt
       p_outx = p_outx + f1o8 * Psi * (nx_g[n] * axx + ny_g[n] * axy + nz_g[n] * axz) * wtcostheta[i];
       p_outy = p_outy + f1o8 * Psi * (nx_g[n] * axy + ny_g[n] * ayy + nz_g[n] * ayz) * wtcostheta[i];
-#else
-      p_outx = p_outx + f1o8 * Psi * (nx_g[n] * axx + ny_g[n] * axy + nz_g[n] * axz);
-      p_outy = p_outy + f1o8 * Psi * (nx_g[n] * axy + ny_g[n] * ayy + nz_g[n] * ayz);
-#endif
     }
   }
 
@@ -2473,8 +2435,6 @@ void surface_integral::surf_MassPAng(double rex, int lev, cgh *GH, var *chi, var
   MPI_Allreduce(&p_outx, &px, 1, MPI_DOUBLE, MPI_SUM, MPI_COMM_WORLD);
   MPI_Allreduce(&p_outy, &py, 1, MPI_DOUBLE, MPI_SUM, MPI_COMM_WORLD);
   MPI_Allreduce(&p_outz, &pz, 1, MPI_DOUBLE, MPI_SUM, MPI_COMM_WORLD);
-
-#ifdef GaussInt
   mass = mass * rex * rex * dphi * factor;
 
   sx = sx * rex * rex * dphi * (1.0 / PI) * factor;
@@ -2484,17 +2444,6 @@ void surface_integral::surf_MassPAng(double rex, int lev, cgh *GH, var *chi, var
   px = px * rex * rex * dphi * (1.0 / PI) * factor;
   py = py * rex * rex * dphi * (1.0 / PI) * factor;
   pz = pz * rex * rex * dphi * (1.0 / PI) * factor;
-#else
-  mass = mass * rex * rex * dphi * dcostheta * factor;
-
-  sx = sx * rex * rex * dphi * dcostheta * (1.0 / PI) * factor;
-  sy = sy * rex * rex * dphi * dcostheta * (1.0 / PI) * factor;
-  sz = sz * rex * rex * dphi * dcostheta * (1.0 / PI) * factor;
-
-  px = px * rex * rex * dphi * dcostheta * (1.0 / PI) * factor;
-  py = py * rex * rex * dphi * dcostheta * (1.0 / PI) * factor;
-  pz = pz * rex * rex * dphi * dcostheta * (1.0 / PI) * factor;
-#endif
 
   Rout[0] = mass;
   Rout[1] = px;
@@ -2510,6 +2459,7 @@ void surface_integral::surf_MassPAng(double rex, int lev, cgh *GH, var *chi, var
   delete[] shellf;
   DG_List->clearList();
 }
+
 void surface_integral::surf_MassPAng(double rex, int lev, cgh *GH, var *chi, var *trK,
                                      var *gxx, var *gxy, var *gxz, var *gyy, var *gyz, var *gzz,
                                      var *Axx, var *Axy, var *Axz, var *Ayy, var *Ayz, var *Azz,

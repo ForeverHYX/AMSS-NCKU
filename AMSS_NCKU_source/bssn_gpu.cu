@@ -2008,203 +2008,13 @@ int gpu_rhs(int calledby, int mpi_rank, int *ex, double &T,double *X, double *Y,
 	//#1------------init gpu meta data---------------------
 	//cout<<"init GPU meta data\n";
 
-#ifdef DEVICE_ID  
   	// which device to use
   	cudaSetDevice(DEVICE_ID);
-#endif
-
-#ifdef DEVICE_ID_BY_PID
-	pid_t pid = getpid();
-	cudaSetDevice(pid % 2);
-	cout<<"My pid= "<<pid<<endl;
-#endif
-
-#ifdef DEVICE_ID_BY_MPI_RANK
-	cudaSetDevice(mpi_rank % 2);
-#endif
-
-#ifdef TIMING  
-  struct timeval tvStart, tvEnd;
-  struct timeval tv1, tv2;
-  gettimeofday(&tvStart, NULL );
-  gettimeofday(&tv1, NULL );
-#endif
 
 	//int dim = 3;
 	int matrix_size = ex[0] * ex[1] * ex[2];
 	Meta met;
 	Meta * meta = &met;
-	
-	/*
-	//#1--------------------init_gpu_meta(meta,matrix_size)---------------------------
-
-	//1.1 inout
-	CUDA_SAFE_CALL(cudaMalloc((void**)&(Mh_ X), ex[0] * sizeof(double)));
-	CUDA_SAFE_CALL(cudaMalloc((void**)&(Mh_ Y), ex[1] * sizeof(double)));
-	CUDA_SAFE_CALL(cudaMalloc((void**)&(Mh_ Z), ex[2] * sizeof(double)));
-	CUDA_SAFE_CALL(cudaMalloc((void**)&(Mh_ chi), matrix_size * sizeof(double)));
-	CUDA_SAFE_CALL(cudaMalloc((void**)&(Mh_ dxx), matrix_size * sizeof(double)));
-	CUDA_SAFE_CALL(cudaMalloc((void**)&(Mh_ dyy), matrix_size * sizeof(double)));
-	CUDA_SAFE_CALL(cudaMalloc((void**)&(Mh_ dzz), matrix_size * sizeof(double)));
-	CUDA_SAFE_CALL(cudaMalloc((void**)&(Mh_ trK), matrix_size * sizeof(double)));
-	CUDA_SAFE_CALL(cudaMalloc((void**)&(Mh_ gxy), matrix_size * sizeof(double)));
-	CUDA_SAFE_CALL(cudaMalloc((void**)&(Mh_ gxz), matrix_size * sizeof(double)));
-	CUDA_SAFE_CALL(cudaMalloc((void**)&(Mh_ gyz), matrix_size * sizeof(double)));
-	CUDA_SAFE_CALL(cudaMalloc((void**)&(Mh_ Axx), matrix_size * sizeof(double)));
-	CUDA_SAFE_CALL(cudaMalloc((void**)&(Mh_ Axy), matrix_size * sizeof(double)));
-	CUDA_SAFE_CALL(cudaMalloc((void**)&(Mh_ Axz), matrix_size * sizeof(double)));
-	CUDA_SAFE_CALL(cudaMalloc((void**)&(Mh_ Ayz), matrix_size * sizeof(double)));
-	CUDA_SAFE_CALL(cudaMalloc((void**)&(Mh_ Ayy), matrix_size * sizeof(double)));
-	CUDA_SAFE_CALL(cudaMalloc((void**)&(Mh_ Azz), matrix_size * sizeof(double)));
-	CUDA_SAFE_CALL(cudaMalloc((void**)&(Mh_ Gamx), matrix_size * sizeof(double)));
-	CUDA_SAFE_CALL(cudaMalloc((void**)&(Mh_ Gamy), matrix_size * sizeof(double)));
-	CUDA_SAFE_CALL(cudaMalloc((void**)&(Mh_ Gamz), matrix_size * sizeof(double)));
-	CUDA_SAFE_CALL(cudaMalloc((void**)&(Mh_ Lap), matrix_size * sizeof(double)));
-	CUDA_SAFE_CALL(cudaMalloc((void**)&(Mh_ betax), matrix_size * sizeof(double)));
-	CUDA_SAFE_CALL(cudaMalloc((void**)&(Mh_ betay), matrix_size * sizeof(double)));
-	CUDA_SAFE_CALL(cudaMalloc((void**)&(Mh_ betaz), matrix_size * sizeof(double)));
-	CUDA_SAFE_CALL(cudaMalloc((void**)&(Mh_ dtSfx), matrix_size * sizeof(double)));
-	CUDA_SAFE_CALL(cudaMalloc((void**)&(Mh_ dtSfy), matrix_size * sizeof(double)));
-	CUDA_SAFE_CALL(cudaMalloc((void**)&(Mh_ dtSfz), matrix_size * sizeof(double)));
-	CUDA_SAFE_CALL(cudaMalloc((void**)&(Mh_ chi_rhs), matrix_size * sizeof(double)));
-	CUDA_SAFE_CALL(cudaMalloc((void**)&(Mh_ trK_rhs), matrix_size * sizeof(double)));
-	CUDA_SAFE_CALL(cudaMalloc((void**)&(Mh_ gxx_rhs), matrix_size * sizeof(double)));
-	CUDA_SAFE_CALL(cudaMalloc((void**)&(Mh_ gxy_rhs), matrix_size * sizeof(double)));
-	CUDA_SAFE_CALL(cudaMalloc((void**)&(Mh_ gyy_rhs), matrix_size * sizeof(double)));
-	CUDA_SAFE_CALL(cudaMalloc((void**)&(Mh_ gxz_rhs), matrix_size * sizeof(double)));
-	CUDA_SAFE_CALL(cudaMalloc((void**)&(Mh_ gyz_rhs), matrix_size * sizeof(double)));
-	CUDA_SAFE_CALL(cudaMalloc((void**)&(Mh_ gzz_rhs), matrix_size * sizeof(double)));
-	CUDA_SAFE_CALL(cudaMalloc((void**)&(Mh_ Axx_rhs), matrix_size * sizeof(double)));
-	CUDA_SAFE_CALL(cudaMalloc((void**)&(Mh_ Axy_rhs), matrix_size * sizeof(double)));
-	CUDA_SAFE_CALL(cudaMalloc((void**)&(Mh_ Axz_rhs), matrix_size * sizeof(double)));
-	CUDA_SAFE_CALL(cudaMalloc((void**)&(Mh_ Ayz_rhs), matrix_size * sizeof(double)));
-	CUDA_SAFE_CALL(cudaMalloc((void**)&(Mh_ Ayy_rhs), matrix_size * sizeof(double)));
-	CUDA_SAFE_CALL(cudaMalloc((void**)&(Mh_ Azz_rhs), matrix_size * sizeof(double)));
-	CUDA_SAFE_CALL(cudaMalloc((void**)&(Mh_ Gamx_rhs), matrix_size * sizeof(double)));
-	CUDA_SAFE_CALL(cudaMalloc((void**)&(Mh_ Gamy_rhs), matrix_size * sizeof(double)));
-	CUDA_SAFE_CALL(cudaMalloc((void**)&(Mh_ Gamz_rhs), matrix_size * sizeof(double)));
-	CUDA_SAFE_CALL(cudaMalloc((void**)&(Mh_ Lap_rhs), matrix_size * sizeof(double)));
-	CUDA_SAFE_CALL(cudaMalloc((void**)&(Mh_ betax_rhs), matrix_size * sizeof(double)));
-	CUDA_SAFE_CALL(cudaMalloc((void**)&(Mh_ betay_rhs), matrix_size * sizeof(double)));
-	CUDA_SAFE_CALL(cudaMalloc((void**)&(Mh_ betaz_rhs), matrix_size * sizeof(double)));
-	CUDA_SAFE_CALL(cudaMalloc((void**)&(Mh_ dtSfx_rhs), matrix_size * sizeof(double)));
-	CUDA_SAFE_CALL(cudaMalloc((void**)&(Mh_ dtSfy_rhs), matrix_size * sizeof(double)));
-	CUDA_SAFE_CALL(cudaMalloc((void**)&(Mh_ dtSfz_rhs), matrix_size * sizeof(double)));
-
-	CUDA_SAFE_CALL(cudaMalloc((void**)&(Mh_ rho), matrix_size * sizeof(double)));
-	CUDA_SAFE_CALL(cudaMalloc((void**)&(Mh_ Sx), matrix_size * sizeof(double)));
-	CUDA_SAFE_CALL(cudaMalloc((void**)&(Mh_ Sy), matrix_size * sizeof(double)));
-	CUDA_SAFE_CALL(cudaMalloc((void**)&(Mh_ Sz), matrix_size * sizeof(double)));
-	CUDA_SAFE_CALL(cudaMalloc((void**)&(Mh_ Sxx), matrix_size * sizeof(double)));
-	CUDA_SAFE_CALL(cudaMalloc((void**)&(Mh_ Sxy), matrix_size * sizeof(double)));
-	CUDA_SAFE_CALL(cudaMalloc((void**)&(Mh_ Sxz), matrix_size * sizeof(double)));
-	CUDA_SAFE_CALL(cudaMalloc((void**)&(Mh_ Syz), matrix_size * sizeof(double)));
-	CUDA_SAFE_CALL(cudaMalloc((void**)&(Mh_ Syy), matrix_size * sizeof(double)));
-	CUDA_SAFE_CALL(cudaMalloc((void**)&(Mh_ Szz), matrix_size * sizeof(double)));
-	CUDA_SAFE_CALL(cudaMalloc((void**)&(Mh_ Gamxxx), matrix_size * sizeof(double)));
-	CUDA_SAFE_CALL(cudaMalloc((void**)&(Mh_ Gamxxy), matrix_size * sizeof(double)));
-	CUDA_SAFE_CALL(cudaMalloc((void**)&(Mh_ Gamxxz), matrix_size * sizeof(double)));
-	CUDA_SAFE_CALL(cudaMalloc((void**)&(Mh_ Gamxyy), matrix_size * sizeof(double)));
-	CUDA_SAFE_CALL(cudaMalloc((void**)&(Mh_ Gamxyz), matrix_size * sizeof(double)));
-	CUDA_SAFE_CALL(cudaMalloc((void**)&(Mh_ Gamxzz), matrix_size * sizeof(double)));
-	CUDA_SAFE_CALL(cudaMalloc((void**)&(Mh_ Gamyxx), matrix_size * sizeof(double)));
-	CUDA_SAFE_CALL(cudaMalloc((void**)&(Mh_ Gamyxy), matrix_size * sizeof(double)));
-	CUDA_SAFE_CALL(cudaMalloc((void**)&(Mh_ Gamyxz), matrix_size * sizeof(double)));
-	CUDA_SAFE_CALL(cudaMalloc((void**)&(Mh_ Gamyyy), matrix_size * sizeof(double)));
-	CUDA_SAFE_CALL(cudaMalloc((void**)&(Mh_ Gamyyz), matrix_size * sizeof(double)));
-	CUDA_SAFE_CALL(cudaMalloc((void**)&(Mh_ Gamyzz), matrix_size * sizeof(double)));
-	CUDA_SAFE_CALL(cudaMalloc((void**)&(Mh_ Gamzxx), matrix_size * sizeof(double)));
-	CUDA_SAFE_CALL(cudaMalloc((void**)&(Mh_ Gamzxy), matrix_size * sizeof(double)));
-	CUDA_SAFE_CALL(cudaMalloc((void**)&(Mh_ Gamzxz), matrix_size * sizeof(double)));
-	CUDA_SAFE_CALL(cudaMalloc((void**)&(Mh_ Gamzyz), matrix_size * sizeof(double)));
-	CUDA_SAFE_CALL(cudaMalloc((void**)&(Mh_ Gamzyy), matrix_size * sizeof(double)));
-	CUDA_SAFE_CALL(cudaMalloc((void**)&(Mh_ Gamzzz), matrix_size * sizeof(double)));
-	CUDA_SAFE_CALL(cudaMalloc((void**)&(Mh_ Rxx), matrix_size * sizeof(double)));
-	CUDA_SAFE_CALL(cudaMalloc((void**)&(Mh_ Rxy), matrix_size * sizeof(double)));
-	CUDA_SAFE_CALL(cudaMalloc((void**)&(Mh_ Rxz), matrix_size * sizeof(double)));
-	CUDA_SAFE_CALL(cudaMalloc((void**)&(Mh_ Ryy), matrix_size * sizeof(double)));
-	CUDA_SAFE_CALL(cudaMalloc((void**)&(Mh_ Ryz), matrix_size * sizeof(double)));
-	CUDA_SAFE_CALL(cudaMalloc((void**)&(Mh_ Rzz), matrix_size * sizeof(double)));
-	CUDA_SAFE_CALL(cudaMalloc((void**)&(Mh_ ham_Res), matrix_size * sizeof(double)));
-	CUDA_SAFE_CALL(cudaMalloc((void**)&(Mh_ movx_Res), matrix_size * sizeof(double)));
-	CUDA_SAFE_CALL(cudaMalloc((void**)&(Mh_ movy_Res), matrix_size * sizeof(double)));
-	CUDA_SAFE_CALL(cudaMalloc((void**)&(Mh_ movz_Res), matrix_size * sizeof(double)));
-	CUDA_SAFE_CALL(cudaMalloc((void**)&(Mh_ Gmx_Res), matrix_size * sizeof(double)));
-	CUDA_SAFE_CALL(cudaMalloc((void**)&(Mh_ Gmy_Res), matrix_size * sizeof(double)));
-	CUDA_SAFE_CALL(cudaMalloc((void**)&(Mh_ Gmz_Res), matrix_size * sizeof(double)));
-
-	//1.2 local Data
-	CUDA_SAFE_CALL(cudaMalloc((void**)&(Mh_ gxx), matrix_size * sizeof(double)));
-	CUDA_SAFE_CALL(cudaMalloc((void**)&(Mh_ gyy), matrix_size * sizeof(double)));
-	CUDA_SAFE_CALL(cudaMalloc((void**)&(Mh_ gzz), matrix_size * sizeof(double)));
-	CUDA_SAFE_CALL(cudaMalloc((void**)&(Mh_ chix), matrix_size * sizeof(double)));
-	CUDA_SAFE_CALL(cudaMalloc((void**)&(Mh_ chiy), matrix_size * sizeof(double)));
-	CUDA_SAFE_CALL(cudaMalloc((void**)&(Mh_ chiz), matrix_size * sizeof(double)));
-	CUDA_SAFE_CALL(cudaMalloc((void**)&(Mh_ gxxx), matrix_size * sizeof(double)));
-	CUDA_SAFE_CALL(cudaMalloc((void**)&(Mh_ gxyx), matrix_size * sizeof(double)));
-	CUDA_SAFE_CALL(cudaMalloc((void**)&(Mh_ gxzx), matrix_size * sizeof(double)));
-	CUDA_SAFE_CALL(cudaMalloc((void**)&(Mh_ gyyx), matrix_size * sizeof(double)));
-	CUDA_SAFE_CALL(cudaMalloc((void**)&(Mh_ gyzx), matrix_size * sizeof(double)));
-	CUDA_SAFE_CALL(cudaMalloc((void**)&(Mh_ gzzx), matrix_size * sizeof(double)));
-	CUDA_SAFE_CALL(cudaMalloc((void**)&(Mh_ gxxy), matrix_size * sizeof(double)));
-	CUDA_SAFE_CALL(cudaMalloc((void**)&(Mh_ gxyy), matrix_size * sizeof(double)));
-	CUDA_SAFE_CALL(cudaMalloc((void**)&(Mh_ gxzy), matrix_size * sizeof(double)));
-	CUDA_SAFE_CALL(cudaMalloc((void**)&(Mh_ gyyy), matrix_size * sizeof(double)));
-	CUDA_SAFE_CALL(cudaMalloc((void**)&(Mh_ gyzy), matrix_size * sizeof(double)));
-	CUDA_SAFE_CALL(cudaMalloc((void**)&(Mh_ gzzy), matrix_size * sizeof(double)));
-	CUDA_SAFE_CALL(cudaMalloc((void**)&(Mh_ gxxz), matrix_size * sizeof(double)));
-	CUDA_SAFE_CALL(cudaMalloc((void**)&(Mh_ gxyz), matrix_size * sizeof(double)));
-	CUDA_SAFE_CALL(cudaMalloc((void**)&(Mh_ gxzz), matrix_size * sizeof(double)));
-	CUDA_SAFE_CALL(cudaMalloc((void**)&(Mh_ gyyz), matrix_size * sizeof(double)));
-	CUDA_SAFE_CALL(cudaMalloc((void**)&(Mh_ gyzz), matrix_size * sizeof(double)));
-	CUDA_SAFE_CALL(cudaMalloc((void**)&(Mh_ gzzz), matrix_size * sizeof(double)));
-	CUDA_SAFE_CALL(cudaMalloc((void**)&(Mh_ Lapx), matrix_size * sizeof(double)));
-	CUDA_SAFE_CALL(cudaMalloc((void**)&(Mh_ Lapy), matrix_size * sizeof(double)));
-	CUDA_SAFE_CALL(cudaMalloc((void**)&(Mh_ Lapz), matrix_size * sizeof(double)));
-	CUDA_SAFE_CALL(cudaMalloc((void**)&(Mh_ betaxx), matrix_size * sizeof(double)));
-	CUDA_SAFE_CALL(cudaMalloc((void**)&(Mh_ betaxy), matrix_size * sizeof(double)));
-	CUDA_SAFE_CALL(cudaMalloc((void**)&(Mh_ betaxz), matrix_size * sizeof(double)));
-	CUDA_SAFE_CALL(cudaMalloc((void**)&(Mh_ betayy), matrix_size * sizeof(double)));
-	CUDA_SAFE_CALL(cudaMalloc((void**)&(Mh_ betayz), matrix_size * sizeof(double)));
-	CUDA_SAFE_CALL(cudaMalloc((void**)&(Mh_ betazz), matrix_size * sizeof(double)));
-	CUDA_SAFE_CALL(cudaMalloc((void**)&(Mh_ betayx), matrix_size * sizeof(double)));
-	CUDA_SAFE_CALL(cudaMalloc((void**)&(Mh_ betazy), matrix_size * sizeof(double)));
-	CUDA_SAFE_CALL(cudaMalloc((void**)&(Mh_ betazx), matrix_size * sizeof(double)));
-	CUDA_SAFE_CALL(cudaMalloc((void**)&(Mh_ Kx), matrix_size * sizeof(double)));
-	CUDA_SAFE_CALL(cudaMalloc((void**)&(Mh_ Ky), matrix_size * sizeof(double)));
-	CUDA_SAFE_CALL(cudaMalloc((void**)&(Mh_ Kz), matrix_size * sizeof(double)));
-	CUDA_SAFE_CALL(cudaMalloc((void**)&(Mh_ Gamxx), matrix_size * sizeof(double)));
-	CUDA_SAFE_CALL(cudaMalloc((void**)&(Mh_ Gamxy), matrix_size * sizeof(double)));
-	CUDA_SAFE_CALL(cudaMalloc((void**)&(Mh_ Gamxz), matrix_size * sizeof(double)));
-	CUDA_SAFE_CALL(cudaMalloc((void**)&(Mh_ Gamyy), matrix_size * sizeof(double)));
-	CUDA_SAFE_CALL(cudaMalloc((void**)&(Mh_ Gamyz), matrix_size * sizeof(double)));
-	CUDA_SAFE_CALL(cudaMalloc((void**)&(Mh_ Gamzz), matrix_size * sizeof(double)));
-	CUDA_SAFE_CALL(cudaMalloc((void**)&(Mh_ Gamyx), matrix_size * sizeof(double)));
-	CUDA_SAFE_CALL(cudaMalloc((void**)&(Mh_ Gamzy), matrix_size * sizeof(double)));
-	CUDA_SAFE_CALL(cudaMalloc((void**)&(Mh_ Gamzx), matrix_size * sizeof(double)));
-	CUDA_SAFE_CALL(cudaMalloc((void**)&(Mh_ div_beta), matrix_size * sizeof(double)));
-	CUDA_SAFE_CALL(cudaMalloc((void**)&(Mh_ S), matrix_size * sizeof(double)));
-	CUDA_SAFE_CALL(cudaMalloc((void**)&(Mh_ f), matrix_size * sizeof(double)));
-	CUDA_SAFE_CALL(cudaMalloc((void**)&(Mh_ fxx), matrix_size * sizeof(double)));
-	CUDA_SAFE_CALL(cudaMalloc((void**)&(Mh_ fxy), matrix_size * sizeof(double)));
-	CUDA_SAFE_CALL(cudaMalloc((void**)&(Mh_ fxz), matrix_size * sizeof(double)));
-	CUDA_SAFE_CALL(cudaMalloc((void**)&(Mh_ fyy), matrix_size * sizeof(double)));
-	CUDA_SAFE_CALL(cudaMalloc((void**)&(Mh_ fyz), matrix_size * sizeof(double)));
-	CUDA_SAFE_CALL(cudaMalloc((void**)&(Mh_ fzz), matrix_size * sizeof(double)));
-	CUDA_SAFE_CALL(cudaMalloc((void**)&(Mh_ gupxx), matrix_size * sizeof(double)));
-	CUDA_SAFE_CALL(cudaMalloc((void**)&(Mh_ gupxy), matrix_size * sizeof(double)));
-	CUDA_SAFE_CALL(cudaMalloc((void**)&(Mh_ gupxz), matrix_size * sizeof(double)));
-	CUDA_SAFE_CALL(cudaMalloc((void**)&(Mh_ gupyy), matrix_size * sizeof(double)));
-	CUDA_SAFE_CALL(cudaMalloc((void**)&(Mh_ gupyz), matrix_size * sizeof(double)));
-	CUDA_SAFE_CALL(cudaMalloc((void**)&(Mh_ gupzz), matrix_size * sizeof(double)));
-	CUDA_SAFE_CALL(cudaMalloc((void**)&(Mh_ Gamxa), matrix_size * sizeof(double)));
-	CUDA_SAFE_CALL(cudaMalloc((void**)&(Mh_ Gamya), matrix_size * sizeof(double)));
-	CUDA_SAFE_CALL(cudaMalloc((void**)&(Mh_ Gamza), matrix_size * sizeof(double)));
-	CUDA_SAFE_CALL(cudaMalloc((void**)&(Mh_ alpn1), matrix_size * sizeof(double)));
-	CUDA_SAFE_CALL(cudaMalloc((void**)&(Mh_ chin1), matrix_size * sizeof(double)));
-	CUDA_SAFE_CALL(cudaMalloc((void**)&(Mh_ fh), (ex[0]+2)*(ex[1]+2)*(ex[2]+2) * sizeof(double)));
-	CUDA_SAFE_CALL(cudaMalloc((void**)&(Mh_ fh2), (ex[0]+3)*(ex[1]+3)*(ex[2]+3) * sizeof(double)));
-	*/
 	
 	//#1--------------------init_gpu_meta(meta,matrix_size)---------------------------
 
@@ -2383,12 +2193,6 @@ int gpu_rhs(int calledby, int mpi_rank, int *ex, double &T,double *X, double *Y,
 	cudaMalloc((void**)&(Mh_ chin1), matrix_size * sizeof(double));
 	cudaMalloc((void**)&(Mh_ fh), (ex[0]+2)*(ex[1]+2)*(ex[2]+2) * sizeof(double));
 	cudaMalloc((void**)&(Mh_ fh2), (ex[0]+3)*(ex[1]+3)*(ex[2]+3) * sizeof(double));
-	
-	#if (GAUGE == 2 || GAUGE == 3 || GAUGE == 4 || GAUGE == 5 || GAUGE == 6 || GAUGE == 7)
-
-  		cudaMalloc((void**)&(Mh_ reta), matrix_size * sizeof(double));
-
-	#endif
 	  
 //2 ----------------Copy Data to Device------------------
 	cudaMemcpy(Mh_ X, X, ex[0] * sizeof(double), cudaMemcpyHostToDevice);
@@ -2509,48 +2313,6 @@ int gpu_rhs(int calledby, int mpi_rank, int *ex, double &T,double *X, double *Y,
 	double ssa[3] = {1,1,-1};
 
 //3 --------------------Init constant memory---------------------
-#if (GAUGE == 6 || GAUGE == 7)
-	int BHN_h;
-
-	double Porg_h[9];
-
-	double Mass_h[3];
-//call getpbh(BHN,Porg,Mass)
-#ifdef fortran1
-
-	getpbh
-
-#endif	
-
-#ifdef fortran2
-
-	GETPBH
-
-#endif
-
-#ifdef fortran3
-
-	getpbh_
-
-#endif
-	(BHN_h,double Porg_h,double Mass_h);
-	
-	cudaMemcpyToSymbol(BHN,&BHN_h, sizeof(int));
-	cudaMemcpyToSymbol(Porg,&Porg_h,9 * sizeof(double));
-	cudaMemcpyToSymbol(Mass,&Mass_h,3 * sizeof(double));
-	
-	double tmp_con = Mass[0] + Mass[1]; //t = M
-	cudaMemcpyToSymbol(M, &tmp_con, sizeof(double));
-	tmp_con = 2 / tmp_con;  //t = A
-	cudaMemcpyToSymbol(A, &tmp_con, sizeof(double));
-	
-	double tmp_con2 = 1/Mass[0] - tmp_con;
-	cudaMemcpyToSymbol(C1, &tmp_con2, sizeof(double));
-	double tmp_con2 = 1/Mass[1] - tmp_con;
-	cudaMemcpyToSymbol(C2, &tmp_con2, sizeof(double));
-		
-
-#endif//if (GAUGE == 6 || GAUGE == 7)
 //3.1-----for compute_rhs_bssn---------
 	//cout<<"Size of Meta:"<<sizeof(Meta)<<endl;
 	cudaMemcpyToSymbol(metac,meta, sizeof(Meta));
@@ -2654,32 +2416,10 @@ int gpu_rhs(int calledby, int mpi_rank, int *ex, double &T,double *X, double *Y,
 
 //3.4---------for lopsided---------------------------
 
-
-#ifdef TIMING1
-	cudaThreadSynchronize();
-	gettimeofday(&tv2, NULL);
-   	cout<<"TIME USED"<<TimeBetween(tv1, tv2)<<endl; 
-#endif	
 	//cout<<"GPU meta data ready.\n";
 	
 	cudaThreadSynchronize();
 
-//--------------test constant memory address & value--------------
-/*	double rank = mpi_rank;
-	cudaMemcpyToSymbol(F1o3,&rank, sizeof(double));
-	double ctest1 = -1;
-	double * ctest = &ctest1;
-	double * ctest_d;
-	cudaMalloc((void**)&ctest_d,sizeof(double));
-	test_const_address<<<1,1>>>(ctest_d);
-	cudaMemcpy(ctest, ctest_d, sizeof(double), cudaMemcpyDeviceToHost);
-	cout<<"My rank is: "<<rank<<" "<<"const value is: "<<ctest[0]<<" const Address is:"<<&F1o3<<endl;
-	cudaFree(ctest_d);
-*/
-//-------------get device info-------------------------------------
-/*	int deviceCount; cudaGetDeviceCount(&deviceCount);
-	cout<<"myrank is: "<<mpi_rank<<" deviceCount is:"<<deviceCount<<endl;
-*/
 //#4-----------------------calculate------------------------------
 	//4.0------enforce_ga---------
 	//sub_enforce_ga(matrix_size);
@@ -2735,11 +2475,6 @@ int gpu_rhs(int calledby, int mpi_rank, int *ex, double &T,double *X, double *Y,
 	compute_rhs_bssn_part6<<<GRID_DIM,BLOCK_DIM>>>();
 	cudaThreadSynchronize();
 	
-#if (GAUGE == 2 || GAUGE == 3 || GAUGE == 4 || GAUGE == 5)
-	sub_fderivs(Mh_ chi,Mh_ fh, Mh_ dtSfx_rhs, Mh_ dtSfy_rhs, Mh_ dtSfz_rhs,sss);
-	compute_rhs_bssn_part6_gauge<<<GRID_DIM,BLOCK_DIM>>>();
-#endif	
-
 	sub_lopsided(Mh_ gxx,Mh_ fh2,Mh_ gxx_rhs,Mh_ betax,Mh_ betay,Mh_ betaz,sss);
 	sub_lopsided(Mh_ gxy,Mh_ fh2,Mh_ gxy_rhs,Mh_ betax,Mh_ betay,Mh_ betaz,aas);
 	sub_lopsided(Mh_ gxz,Mh_ fh2,Mh_ gxz_rhs,Mh_ betax,Mh_ betay,Mh_ betaz,asa);
@@ -2758,19 +2493,15 @@ int gpu_rhs(int calledby, int mpi_rank, int *ex, double &T,double *X, double *Y,
 	sub_lopsided(Mh_ Gamy,Mh_ fh2,Mh_ Gamy_rhs,Mh_ betax,Mh_ betay,Mh_ betaz,sas);
 	sub_lopsided(Mh_ Gamz,Mh_ fh2,Mh_ Gamz_rhs,Mh_ betax,Mh_ betay,Mh_ betaz,ssa);
 	sub_lopsided(Mh_ Lap,Mh_ fh2,Mh_ Lap_rhs,Mh_ betax,Mh_ betay,Mh_ betaz,sss);
-	
-#if (GAUGE == 0 || GAUGE == 1 || GAUGE == 2 || GAUGE == 3 || GAUGE == 6 || GAUGE == 7)
 
   	sub_lopsided(Mh_ betax,Mh_ fh2,Mh_ betax_rhs,Mh_ betax,Mh_ betay,Mh_ betaz,ass);
 	sub_lopsided(Mh_ betay,Mh_ fh2,Mh_ betay_rhs,Mh_ betax,Mh_ betay,Mh_ betaz,sas);
 	sub_lopsided(Mh_ betaz,Mh_ fh2,Mh_ betaz_rhs,Mh_ betax,Mh_ betay,Mh_ betaz,ssa);
 
-#endif
-#if (GAUGE == 0 || GAUGE == 2 || GAUGE == 3 || GAUGE == 6 || GAUGE == 7)	
 	sub_lopsided(Mh_ dtSfx,Mh_ fh2,Mh_ dtSfx_rhs,Mh_ betax,Mh_ betay,Mh_ betaz,ass);
 	sub_lopsided(Mh_ dtSfy,Mh_ fh2,Mh_ dtSfy_rhs,Mh_ betax,Mh_ betay,Mh_ betaz,sas);
 	sub_lopsided(Mh_ dtSfz,Mh_ fh2,Mh_ dtSfz_rhs,Mh_ betax,Mh_ betay,Mh_ betaz,ssa);
-#endif	
+
 	if(eps > 0){
 		sub_kodis(Mh_ chi,Mh_ fh2, Mh_ chi_rhs,sss);
 		sub_kodis(Mh_ trK,Mh_ fh2, Mh_ trK_rhs,sss);
@@ -2794,13 +2525,10 @@ int gpu_rhs(int calledby, int mpi_rank, int *ex, double &T,double *X, double *Y,
 		sub_kodis(Mh_ betax,Mh_ fh2, Mh_ betax_rhs,ass);
 		sub_kodis(Mh_ betay,Mh_ fh2, Mh_ betay_rhs,sas);
 		sub_kodis(Mh_ betaz,Mh_ fh2, Mh_ betaz_rhs,ssa);
-		
-#if (GAUGE == 0 || GAUGE == 2 || GAUGE == 3 || GAUGE == 6 || GAUGE == 7)		
+			
 		sub_kodis(Mh_ dtSfx,Mh_ fh2, Mh_ dtSfx_rhs,ass);
 		sub_kodis(Mh_ dtSfy,Mh_ fh2, Mh_ dtSfy_rhs,sas);
 		sub_kodis(Mh_ dtSfz,Mh_ fh2, Mh_ dtSfz_rhs,ssa);
-#endif
-
 	}
 	
 	if(co == 0){
@@ -2816,19 +2544,7 @@ int gpu_rhs(int calledby, int mpi_rank, int *ex, double &T,double *X, double *Y,
 		compute_rhs_bssn_part8<<<GRID_DIM,BLOCK_DIM>>>();
 		cudaThreadSynchronize();
 	}
-
-#if (ABV == 1)
-	cout<<"TODO: bssn_gpu.cu::2373 (ABV == 1)"<<endl;
-#endif
 //5---------------------------get result----------------------------
-	/*cudaMemcpy(chi, Mh_ chi, matrix_size * sizeof(double), cudaMemcpyDeviceToHost);
-	cudaMemcpy(dxx, Mh_ dxx, matrix_size * sizeof(double), cudaMemcpyDeviceToHost);
-	cudaMemcpy(dyy, Mh_ dyy, matrix_size * sizeof(double), cudaMemcpyDeviceToHost);
-	cudaMemcpy(dzz, Mh_ dzz, matrix_size * sizeof(double), cudaMemcpyDeviceToHost);
-	cudaMemcpy(Lap, Mh_ Lap, matrix_size * sizeof(double), cudaMemcpyDeviceToHost);
-	cudaMemcpy(betax, Mh_ betax, matrix_size * sizeof(double), cudaMemcpyDeviceToHost);
-	cudaMemcpy(betay, Mh_ betay, matrix_size * sizeof(double), cudaMemcpyDeviceToHost);
-	cudaMemcpy(betaz, Mh_ betaz, matrix_size * sizeof(double), cudaMemcpyDeviceToHost);*/
 	if(calledby == CALLED_BY_STEP)
 	{	
 		cudaMemcpy(chi_rhs, Mh_ chi_rhs, matrix_size * sizeof(double), cudaMemcpyDeviceToHost);
@@ -2894,11 +2610,6 @@ int gpu_rhs(int calledby, int mpi_rank, int *ex, double &T,double *X, double *Y,
 //-----------------------------------------------------
 //-------------------FOR GPU TEST----------------------
 //-----------------------------------------------------
-#ifdef TIMING
-	cudaThreadSynchronize();
-	gettimeofday(&tv2, NULL);
-   	cout<<"MPI rank is: "<<mpi_rank<<" GPU TIME is"<<TimeBetween(tv1, tv2)<<" (s)."<<endl; 
-#endif
 
 
 	destroy_meta(meta);

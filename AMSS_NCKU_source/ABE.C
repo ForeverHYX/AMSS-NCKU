@@ -1,5 +1,3 @@
-
-#ifdef newc
 #include <iostream>
 #include <iomanip>
 #include <fstream>
@@ -9,46 +7,13 @@
 #include <cmath>
 #include <map>
 using namespace std;
-#else
-#include <iostream.h>
-#include <iomanip.h>
-#include <fstream.h>
-#include <stdlib.h>
-#include <stdio.h>
-#include <string.h>
-#include <math.h>
-#include <map.h>
-#endif
 
 #include <mpi.h>
 
 #include "misc.h"
 #include "macrodef.h"
 
-#ifndef ABEtype
-#error "not define ABEtype"
-#endif
-
-#if (ABEtype == 0)
-
-#ifdef USE_GPU
 #include "bssn_gpu_class.h"
-#else
-#include "bssn_class.h"
-#endif
-
-#elif (ABEtype == 1)
-#include "bssnEScalar_class.h"
-
-#elif (ABEtype == 2)
-#include "Z4c_class.h"
-
-#elif (ABEtype == 3)
-#include "bssnEM_class.h"
-
-#else
-#error "not recognized ABEtype"
-#endif
 
 namespace parameters
 {
@@ -229,61 +194,25 @@ int main(int argc, char *argv[])
             // echo the micro definition in "microdef.fh"
             setfile << "macro definition used in microdef.fh" << endl;
 
-#if (tetradtype == 0)
-            setfile << "my own tetrad type for psi4 calculation" << endl;
-#elif (tetradtype == 1)
-            setfile << "Lousto's tetrad type for psi4 calculation" << endl;
-#elif (tetradtype == 2)
             setfile << "Frans' tetrad type for psi4 calculation" << endl;
-#else
-            setfile << "not recognized tetrad type" << endl;
-            MPI_Abort(MPI_COMM_WORLD, 1);
-#endif
 
-#ifdef Cell
             setfile << "Cell center numerical grid structure" << endl;
-#endif
-#ifdef Vertex
-            setfile << "Vertex center numerical grid structure" << endl;
-#endif
 
             setfile << "                   ghost zone = " << ghost_width << endl;
 
             setfile << "                  buffer zone = " << buffer_width << endl;
 
-#ifdef CPBC
-            setfile << "constraint preserving boundary condition is used" << endl;
-            setfile << "          ghost zone for CPBC = " << CPBC_ghost_width << endl;
-#endif
-
             setfile << "                  Gauge type = " << GAUGE << endl;
 
-#if (ABV == 0)
             setfile << "using BSSN variable for constraint violation and psi4 calculation" << endl;
-#elif (tetradtype == 1)
-            setfile << "using ADM variable for constraint violation and psi4 calculation" << endl;
-#else
-            setfile << "not recognized ABV type" << endl;
-            MPI_Abort(MPI_COMM_WORLD, 1);
-#endif
 
             // echo the micro definition in "microdef.h"
             setfile << "macro definition used in microdef.h" << endl;
             setfile << "     Sommerfeld boundary type = " << SommerType << endl;
-#ifdef GaussInt
             setfile << "using Gauss integral in waveshell" << endl;
-#else
-            setfile << "using usual integral in waveshell" << endl;
-#endif
             setfile << "                     ABE type = " << ABEtype << endl;
             setfile << "                     ID  type = " << ID_type << endl;
-#ifdef With_AHF
-            setfile << "Apparent Horizon Finder is turned on" << endl;
-#endif
             setfile << "        Psi4 calculation type = " << Psi4type << endl;
-#ifdef Point_Psi4
-            setfile << "Using point Psi4 calculation method" << endl;
-#endif
             setfile << "    RestrictProlong time type = " << RPS << endl;
             setfile << "    RestrictProlong scheme type = " << RPB << endl;
             setfile << "Enforce algebra constraint type = " << AGM << endl;
@@ -392,47 +321,11 @@ int main(int argc, char *argv[])
 
       bssn_class *ADM;
 
-#if (ABEtype == 0)
       ADM = new bssn_class(Courant, StartTime, TotalTime, DumpTime, d2DumpTime, CheckTime, AnasTime,
                            Symmetry, checkrun, checkfilename, numepss, numepsb, numepsh,
                            a_lev, maxl, decn, maxrex, drex);
-#elif (ABEtype == 1)
-      ADM = new bssnEScalar_class(Courant, StartTime, TotalTime, DumpTime, d2DumpTime, CheckTime, AnasTime,
-                                  Symmetry, checkrun, checkfilename, numepss, numepsb, numepsh,
-                                  a_lev, maxl, decn, maxrex, drex);
-#elif (ABEtype == 2)
-      ADM = new Z4c_class(Courant, StartTime, TotalTime, DumpTime, d2DumpTime, CheckTime, AnasTime,
-                          Symmetry, checkrun, checkfilename, numepss, numepsb, numepsh,
-                          a_lev, maxl, decn, maxrex, drex);
-#elif (ABEtype == 3)
-      ADM = new bssnEM_class(Courant, StartTime, TotalTime, DumpTime, d2DumpTime, CheckTime, AnasTime,
-                             Symmetry, checkrun, checkfilename, numepss, numepsb, numepsh,
-                             a_lev, maxl, decn, maxrex, drex);
-#endif
 
       ADM->Initialize();
-      //   ADM->testRestrict();
-      //   ADM->testOutBd();
-
-      // set up initial data
-
-      // old code  manually
-      /*
-      #if (ABEtype == 0)
-      // set up initial data with analytical formula
-         // ADM->Setup_Initial_Data();
-         ADM->Read_Ansorg();
-      #elif (ABEtype == 1)
-         // ADM->Read_Pablo();
-         ADM->Read_Ansorg();
-      #elif (ABEtype == 2)
-         ADM->Read_Ansorg();
-      //   ADM->Setup_KerrSchild();
-      #elif (ABEtype == 3)
-         ADM->Setup_Initial_Data();
-      //   ADM->Read_Ansorg();
-      #endif
-      */
 
       // new code   Xiao Qu
       switch (ID_type)

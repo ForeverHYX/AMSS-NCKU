@@ -1830,7 +1830,7 @@ void bssn_class::Read_Ansorg()
 #if 0
 // for check fderivs_sh
             f_fderivs_sh(cg->shape,cg->fgfs[Ayz0->sgfn],
-			 cg->fgfs[Sfx0->sgfn],cg->fgfs[Sfy0->sgfn],cg->fgfs[Sfz0->sgfn],
+       cg->fgfs[Sfx0->sgfn],cg->fgfs[Sfy0->sgfn],cg->fgfs[Sfz0->sgfn],
                          cg->X[0],cg->X[1],cg->X[2],
                          Ayz0->SoA[0],Ayz0->SoA[1],Ayz0->SoA[2],
                          Symmetry,Pp->data->sst,Pp->data->sst);
@@ -1839,7 +1839,7 @@ void bssn_class::Read_Ansorg()
 // for check fderivs_shc
             int fngfs = Pp->data->fngfs;
             f_fderivs_shc(cg->shape,cg->fgfs[Ayz0->sgfn],
-			  cg->fgfs[Sfx0->sgfn],cg->fgfs[Sfy0->sgfn],cg->fgfs[Sfz0->sgfn],
+        cg->fgfs[Sfx0->sgfn],cg->fgfs[Sfy0->sgfn],cg->fgfs[Sfz0->sgfn],
                           cg->X[0],cg->X[1],cg->X[2],
                           Ayz0->SoA[0],Ayz0->SoA[1],Ayz0->SoA[2],
                           Symmetry,Pp->data->sst,Pp->data->sst,
@@ -1897,75 +1897,12 @@ void bssn_class::Evolve(int Steps)
 
   double beg_time;
   beg_time = MPI_Wtime();
-// added by yangquan
-#ifdef USE_GPU
-#ifdef USE_GPU_DIVIDE
-  // new code considering different partition for cpu and gpu
-  {
-    MyList<Patch> *Pp = GH->PatL[0];
-    bool fg = true;
-    while (fg && Pp)
-    {
-      MyList<Block> *BP = Pp->data->blb;
-      while (fg && BP)
-      {
-        Block *cg = BP->data;
-        if (myrank == cg->rank)
-        {
-          use_gpu = cg->cgpu;
-          fg = false;
-          break;
-        }
-        if (BP == Pp->data->ble)
-          break;
-        BP = BP->next;
-      }
-      Pp = Pp->next;
-    }
-  }
-#else
-  // old yangquan code
-  // use_gpu = 0;
-  // if (myrank % 2 == 1)
+  use_gpu = 0;
+  if (myrank % 2 == 1)
     use_gpu = 1;
-  // if (!myrank) use_gpu = 1;
-#endif
-#endif
 
   // for step 0 constraint interpolation
   Interp_Constraint(true);
-
-#ifdef With_AHF
-  // setup apparent horizon finder direct of thornburg
-  {
-    HN_num = BH_num;
-    for (int ia = 0; ia < BH_num; ia++)
-      for (int ib = ia + 1; ib < BH_num; ib++)
-        HN_num++;
-
-    AHFinderDirect::AHFinderDirect_setup(AHList, GaugeList,
-                                         this,
-                                         Symmetry, HN_num, &PhysTime);
-
-    lastahdumpid = new int[HN_num];
-    findeveryl = new int[HN_num];
-    xc = new double[HN_num];
-    yc = new double[HN_num];
-    zc = new double[HN_num];
-    xr = new double[HN_num];
-    yr = new double[HN_num];
-    zr = new double[HN_num];
-    dTT = new double[HN_num];
-    trigger = new bool[HN_num];
-    dumpid = new int[HN_num];
-
-    for (int ihn = 0; ihn < HN_num; ihn++)
-    {
-      lastahdumpid[ihn] = 0;
-      findeveryl[ihn] = AHfindevery;
-    }
-  }
-#endif
 
   if (checkrun)
     CheckPoint->read_bssn(LastDump, Last2dDump, LastAnas);
@@ -1984,19 +1921,10 @@ void bssn_class::Evolve(int Steps)
     cout << "Before Step: " << ncount << " My Rank: " << myrank 
          << " takes " << MPI_Wtime() - beg_time << " seconds!" << endl;
     beg_time = MPI_Wtime();
-#if (PSTR == 0)
     RecursiveStep(0);
-#elif (PSTR == 1)
-    // data analysis part
-    // Warning NOTE: the variables1 are used as temp storege room
-    AnalysisStuff(a_lev, dT_mon);
-    ParallelStep();
-#endif
     cout << "After Step: " << ncount << " My Rank: " << myrank 
          << " takes " << MPI_Wtime() - beg_time << " seconds!" << endl;
     beg_time = MPI_Wtime();
-
-    //     misc::tillherecheck("before Constraint_Out");
 
     Constraint_Out(); // this will affect the Dump_List
 
@@ -2006,13 +1934,9 @@ void bssn_class::Evolve(int Steps)
 
     if (LastDump >= DumpTime)
     {
-      //       misc::tillherecheck("before Dump_Data");
 
       for (int lev = 0; lev < GH->levels; lev++)
         Parallel::Dump_Data(GH->PatL[lev], DumpList, 0, PhysTime, dT_mon);
-#ifdef WithShell
-      SH->Dump_Data(DumpList, 0, PhysTime, dT_mon);
-#endif
 
       LastDump = 0;
 
@@ -2048,18 +1972,6 @@ void bssn_class::Evolve(int Steps)
     if (PhysTime >= TotalTime)
       break;
 
-#if (REGLEV == 1)
-    GH->Regrid(Symmetry, BH_num, Porgbr, Porg0,
-               SynchList_cor, OldStateList, StateList, SynchList_pre,
-               fgt(PhysTime - dT_mon, StartTime, dT_mon / 2), ErrorMonitor);
-#endif
-
-#if (REGLEV == 0 && PSTR == 1)
-//     GH->Regrid_fake(Symmetry,BH_num,Porgbr,Porg0,
-//		SynchList_cor,OldStateList,StateList,SynchList_pre,
-//		fgt(PhysTime-dT_mon,StartTime,dT_mon/2),ErrorMonitor);
-#endif
-
     bssn_perf.MemoryUsage(&current_min, &current_avg, &current_max,
                           &peak_min, &peak_avg, &peak_max, nprocs);
     if (myrank == 0)
@@ -2075,53 +1987,11 @@ void bssn_class::Evolve(int Steps)
     if (LastCheck >= CheckTime)
     {
       LastCheck = 0;
-
       CheckPoint->write_Black_Hole_position(BH_num_input, BH_num, Porg0, Porgbr, Mass);
       CheckPoint->writecheck_cgh(PhysTime, GH);
-#ifdef WithShell
-      CheckPoint->writecheck_sh(PhysTime, SH);
-#endif
       CheckPoint->write_bssn(LastDump, Last2dDump, LastAnas);
     }
   }
-  /*
-  #ifdef With_AHF
-  // final apparent horizon finding
-      {
-         double gam;
-         for(int ihn=0;ihn<BH_num;ihn++)
-         {
-      xc[ihn] = Porg0[ihn][0];
-      yc[ihn] = Porg0[ihn][1];
-      zc[ihn] = Porg0[ihn][2];
-      gam = fabs(Pmom[ihn*3]  )/(Mass[ihn]);
-      gam = sqrt(1-gam*gam);
-      xr[ihn] = Mass[ihn]*gam;
-      gam = fabs(Pmom[ihn*3+1])/(Mass[ihn]);
-      gam = sqrt(1-gam*gam);
-      yr[ihn] = Mass[ihn]*gam;
-      gam = fabs(Pmom[ihn*3+2])/(Mass[ihn]);
-      gam = sqrt(1-gam*gam);
-      zr[ihn] = Mass[ihn]*gam;
-         }
-         int ihn = BH_num;
-         for(int ia=0;ia<BH_num;ia++)
-      for(int ib=ia+1;ib<BH_num;ib++)
-      {
-           xc[ihn] = (Porg0[ia][0] + Porg0[ib][0])/2;
-           yc[ihn] = (Porg0[ia][1] + Porg0[ib][1])/2;
-           zc[ihn] = (Porg0[ia][2] + Porg0[ib][2])/2;
-           xr[ihn] = yr[ihn] = zr[ihn] = (Mass[ia])+(Mass[ib]);
-
-           ihn++;
-      }
-
-         AHFinderDirect::AHFinderDirect_enforcefind(HN_num,xc,yc,zc,xr,yr,zr);  // note rhs has been used as temp storage space
-
-         delete[] xc; delete[] yc; delete[] zc; delete[] xr; delete[] yr; delete[] zr;
-      }
-  #endif
-  */
 }
 
 //================================================================================================
@@ -2147,26 +2017,13 @@ void bssn_class::RecursiveStep(int lev)
 
   for (int i = 0; i < NoIterations; i++)
   {
-    //     if(myrank==0) cout<<"level now = "<<lev<<" NoIteration = "<<i<<endl;
     YN = (i == NoIterations - 1) ? 1 : 0; // 1: same time level for coarse level and fine level
 
-// added by yangquan
-#ifdef USE_GPU
     // Step_GPU(lev, YN);
     if (use_gpu == 1)
       Step_GPU(lev, YN);
     else
       Step(lev, YN);
-#else
-    Step(lev, YN);
-#endif
-
-#if (AGM == 2)
-    if (GH->levels == 1)
-    {
-      Enforce_algcon(lev, 0);
-    }
-#endif
 
     GH->Lt[lev] += dT_lev;
 
@@ -2178,324 +2035,15 @@ void bssn_class::RecursiveStep(int lev)
     else
       PhysTime += dT * pow(0.5, lev);
 
-#if (AGM == 2)
-    if (lev > 0)
-    {
-      Enforce_algcon(lev, 0);
-      if (YN == 1)
-        Enforce_algcon(lev - 1, 0);
-    }
-#endif
-
-#if (RPS == 1)
     // mesh refinement boundary part
     //
     // till here the PhysTime has updated dT_lev
     RestrictProlong(lev, YN, fgt(PhysTime - dT_lev, StartTime, dT_lev / 2), StateList, OldStateList, SynchList_cor);
-    // RestrictProlong(lev,YN,false,StateList,OldStateList,SynchList_cor);
-
-#ifdef WithShell
-    if (lev == 0)
-    {
-      clock_t prev_clock, curr_clock;
-      if (myrank == 0)
-        curr_clock = clock();
-      SH->CS_Inter(StateList, Symmetry);
-      if (myrank == 0)
-      {
-        prev_clock = curr_clock;
-        curr_clock = clock();
-        cout << "CS_Inter used " << (double)(curr_clock - prev_clock) / ((double)CLOCKS_PER_SEC) << " seconds!" << endl;
-      }
-    }
-#endif
-
-#endif
-
-    //     Parallel::Dump_Data(GH->PatL[lev],StateList,0,PhysTime,dT_lev);
   }
-
-#if 0
-    if(lev>0) Parallel::Restrict_after(GH->PatL[lev-1],GH->PatL[lev],StateList,StateList,Symmetry);
-#endif
-
-#if (REGLEV == 0)
   GH->Regrid_Onelevel(lev, Symmetry, BH_num, Porgbr, Porg0,
                       SynchList_cor, OldStateList, StateList, SynchList_pre,
                       fgt(PhysTime - dT_lev, StartTime, dT_lev / 2), ErrorMonitor);
-#endif
 }
-
-//================================================================================================
-
-
-
-//================================================================================================
-
-// ParallelStep performs time evolution across multiple grid levels (includes parallel execution)
-// This section applies only when PSTR == 1
-
-//================================================================================================
-
-#if (PSTR == 1)
-void bssn_class::ParallelStep()
-{
-  //  stringstream a_stream;
-  //  a_stream.setf(ios::left);
-
-  double *tporg, *tporgo;
-  tporg = new double[3 * BH_num];
-  tporgo = new double[3 * BH_num];
-
-  int lev = GH->mylev;
-  double dT_lev = dT * pow(0.5, Mymax(lev, trfls));
-  double dT_levp1 = dT * pow(0.5, Mymax(lev + 1, trfls));
-  double dT_levm1 = dT * pow(0.5, Mymax(lev - 1, trfls));
-
-  int NoIterations = 1, YN;
-  if (lev <= trfls)
-    NoIterations = 1;
-  else
-    NoIterations = int(pow(2.0, lev - trfls));
-
-  for (int i = 0; i < NoIterations; i++)
-  {
-    //     if(myrank==GH->start_rank[lev]) cout<<"level now = "<<lev<<" NoIteration = "<<i<<endl;
-
-    if (NoIterations == 1)
-      YN = 1;
-    else if (i % 2 == 0)
-      YN = 0;
-    else
-      YN = 1; // 1: same time level for coarse level and fine level
-
-      //     a_stream<<lev<<": before calling Step";
-      //     misc::tillherecheck(GH->Commlev[lev],GH->start_rank[lev],a_stream.str());
-
-      // Step(lev,YN);
-#ifdef USE_GPU
-    if (use_gpu == 1)
-      Step_GPU(lev, YN);
-    else
-      Step(lev, YN);
-#else
-    Step(lev, YN);
-#endif
-
-      //     a_stream.clear();
-      //     a_stream.str("");
-      //     a_stream<<lev<<": after calling Step";
-      //     misc::tillherecheck(GH->Commlev[lev],GH->start_rank[lev],a_stream.str());
-
-#if (AGM == 2)
-    if (GH->levels == 1)
-    {
-      Enforce_algcon(lev, 0);
-    }
-#endif
-
-    GH->Lt[lev] += dT_lev;
-
-    PhysTime += dT_lev;
-
-#if (AGM == 2)
-    if (lev > 0)
-    {
-      Enforce_algcon(lev, 0);
-      if (YN == 1)
-        Enforce_algcon(lev - 1, 0);
-    }
-#endif
-
-#if (RPS == 1)
-    // mesh refinement boundary part
-    //
-    // till here the PhysTime has updated dT_lev
-    //   a_stream.clear();
-    //   a_stream.str("");
-    //   a_stream<<lev<<": before RestrictProlong";
-    //   misc::tillherecheck(GH->Commlev[lev],GH->start_rank[lev],a_stream.str());
-    if (lev < GH->levels - 1)
-    {
-      if (lev + 1 <= trfls)
-      {
-        //	RestrictProlong_aux(lev,1,fgt(PhysTime-dT_lev,StartTime,dT_levp1/2),StateList,OldStateList,SynchList_cor);
-        RestrictProlong(lev + 1, 1, fgt(PhysTime - dT_lev, StartTime, dT_levp1 / 2), StateList, OldStateList, SynchList_cor);
-      }
-      else
-      {
-        //        if(myrank==GH->start_rank[lev]) cout<<GH->mylev<<", "<<YN<<endl;
-        //        misc::tillherecheck(GH->Commlev[lev],GH->start_rank[lev],"between RestrictProlong");
-
-        //	RestrictProlong_aux(lev,0,fgt(PhysTime-dT_lev,StartTime,dT_levp1/2),StateList,OldStateList,SynchList_cor);
-        //	RestrictProlong_aux(lev,1,fgt(PhysTime-dT_levp1,StartTime,dT_levp1/2),StateList,OldStateList,SynchList_cor);
-        RestrictProlong(lev + 1, 0, fgt(PhysTime - dT_lev, StartTime, dT_levp1 / 2), StateList, OldStateList, SynchList_cor);
-        RestrictProlong(lev + 1, 1, fgt(PhysTime - dT_levp1, StartTime, dT_levp1 / 2), StateList, OldStateList, SynchList_cor);
-      }
-    }
-
-    //   if(myrank==GH->start_rank[lev]) cout<<GH->mylev<<", "<<YN<<endl;
-    //   a_stream.clear();
-    //   a_stream.str("");
-    //   a_stream<<lev<<": between RestrictProlong";
-    //   misc::tillherecheck(GH->Commlev[lev],GH->start_rank[lev],a_stream.str());
-
-    RestrictProlong(lev, YN, fgt(PhysTime - dT_lev, StartTime, dT_lev / 2), StateList, OldStateList, SynchList_cor);
-    // RestrictProlong(lev,YN,false,StateList,OldStateList,SynchList_cor);
-
-//   if(myrank==GH->start_rank[lev]) cout<<GH->mylev<<endl;
-//   a_stream.clear();
-//   a_stream.str("");
-//   a_stream<<lev<<": after RestrictProlong";
-//   misc::tillherecheck(GH->Commlev[lev],GH->start_rank[lev],a_stream.str());
-#endif
-
-    //     Parallel::Dump_Data(GH->PatL[lev],StateList,0,PhysTime,dT_lev);
-
-    {
-      MPI_Status status;
-      // receive
-      if (lev < GH->levels - 1)
-      {
-        if (myrank == GH->start_rank[lev])
-        {
-          MPI_Recv(tporgo, 3 * BH_num, MPI_DOUBLE, GH->start_rank[lev + 1], 1, MPI_COMM_WORLD, &status);
-          //	 cout<<tporgo[0]<<","<<tporgo[1]<<","<<tporgo[2]<<endl;
-        }
-        else
-          for (int i = 0; i < 3 * BH_num; i++)
-            tporgo[i] = 0;
-        MPI_Allreduce(tporgo, tporg, 3 * BH_num, MPI_DOUBLE, MPI_SUM, GH->Commlev[lev]);
-
-        for (int i = 0; i < BH_num; i++)
-          for (int j = 0; j < 3; j++)
-            Porg0[i][j] = tporg[3 * i + j];
-
-        //      if(myrank==GH->start_rank[lev]) cout<<Porg0[0][0]<<","<<Porg0[0][1]<<","<<Porg0[0][2]<<endl;
-      }
-      // send
-      if (lev > 0 && YN == 1 && myrank == GH->start_rank[lev])
-      {
-        for (int i = 0; i < BH_num; i++)
-          for (int j = 0; j < 3; j++)
-            tporg[3 * i + j] = Porg0[i][j];
-
-        MPI_Send(tporg, 3 * BH_num, MPI_DOUBLE, GH->start_rank[lev - 1], 1, MPI_COMM_WORLD);
-      }
-
-      //   a_stream.clear();
-      //   a_stream.str("");
-      //   a_stream<<lev<<": after PBH Sync";
-      //   misc::tillherecheck(GH->Commlev[lev],GH->start_rank[lev],a_stream.str());
-    }
-#if (REGLEV == 0)
-    // for higher level
-    if (lev < GH->levels - 1)
-    {
-      if (lev + 1 >= GH->movls)
-      {
-        //	       GH->Regrid_Onelevel_aux(lev,Symmetry,BH_num,Porgbr,Porg0,
-        GH->Regrid_Onelevel(lev + 1, Symmetry, BH_num, Porgbr, Porg0,
-                            SynchList_cor, OldStateList, StateList, SynchList_pre,
-                            fgt(PhysTime - dT_levp1, StartTime, dT_levp1 / 2), ErrorMonitor);
-
-        //               a_stream.clear();
-        //               a_stream.str("");
-        //               a_stream<<lev<<": after calling GH->Regrid_Onelevel_aux for higher level";
-        //               misc::tillherecheck(GH->Commlev[lev],GH->start_rank[lev],a_stream.str());
-      }
-    }
-
-    // for this level
-    if (YN == 1)
-    {
-      GH->Regrid_Onelevel(lev, Symmetry, BH_num, Porgbr, Porg0,
-                          SynchList_cor, OldStateList, StateList, SynchList_pre,
-                          fgt(PhysTime - dT_lev, StartTime, dT_lev / 2), ErrorMonitor);
-
-      //               a_stream.clear();
-      //               a_stream.str("");
-      //               a_stream<<lev<<": after calling GH->Regrid_Onelevel";
-      //               misc::tillherecheck(GH->Commlev[lev],GH->start_rank[lev],a_stream.str());
-    }
-
-    // for lower level
-    if (lev - 1 >= GH->movls)
-    {
-      if (lev - 1 <= trfls)
-      {
-        if (YN == 1)
-        {
-          //	   GH->Regrid_Onelevel_aux(lev-2,Symmetry,BH_num,Porgbr,Porg0,
-          GH->Regrid_Onelevel(lev - 1, Symmetry, BH_num, Porgbr, Porg0,
-                              SynchList_cor, OldStateList, StateList, SynchList_pre,
-                              fgt(PhysTime - dT_lev, StartTime, dT_levm1 / 2), ErrorMonitor);
-
-          //               a_stream.clear();
-          //               a_stream.str("");
-          //               a_stream<<lev<<": after calling GH->Regrid_Onelevel_aux for lower level";
-          //               misc::tillherecheck(GH->Commlev[lev],GH->start_rank[lev],a_stream.str());
-        }
-      }
-      else
-      {
-        if (i % 4 == 3)
-        {
-          //	   GH->Regrid_Onelevel_aux(lev-2,Symmetry,BH_num,Porgbr,Porg0,
-          GH->Regrid_Onelevel(lev - 1, Symmetry, BH_num, Porgbr, Porg0,
-                              SynchList_cor, OldStateList, StateList, SynchList_pre,
-                              fgt(PhysTime - dT_lev, StartTime, dT_levm1 / 2), ErrorMonitor);
-
-          //               a_stream.clear();
-          //               a_stream.str("");
-          //               a_stream<<lev<<": after calling GH->Regrid_Onelevel_aux for lower level";
-          //               misc::tillherecheck(GH->Commlev[lev],GH->start_rank[lev],a_stream.str());
-        }
-      }
-    }
-#endif
-  }
-
-#ifdef WithShell
-  SHStep();
-  //               a_stream.clear();
-  //               a_stream.str("");
-  //               a_stream<<lev<<": after calling SHStep";
-  //               misc::tillherecheck(GH->Commlev[lev],GH->start_rank[lev],a_stream.str());
-
-#if (RPS == 1)
-  {
-    clock_t prev_clock, curr_clock;
-    if (myrank == 0)
-      curr_clock = clock();
-    SH->CS_Inter(StateList, Symmetry);
-    if (myrank == 0)
-    {
-      prev_clock = curr_clock;
-      curr_clock = clock();
-      cout << "CS_Inter used " << (double)(curr_clock - prev_clock) / ((double)CLOCKS_PER_SEC) << " seconds!" << endl;
-    }
-    //               a_stream.clear();
-    //               a_stream.str("");
-    //               a_stream<<lev<<": after calling shell cartisian sync";
-    //               misc::tillherecheck(GH->Commlev[lev],GH->start_rank[lev],a_stream.str());
-  }
-#endif
-
-#endif
-
-#if 0
-    if(lev>0) Parallel::Restrict_after(GH->PatL[lev-1],GH->PatL[lev],StateList,StateList,Symmetry);
-#endif
-
-  delete[] tporg;
-  delete[] tporgo;
-}
-#endif
-
-//================================================================================================
-
-
 
 //================================================================================================
 
@@ -2505,8 +2053,6 @@ void bssn_class::ParallelStep()
 
 //================================================================================================
 
-#if (PSTR == 0)
-#if 1
 void bssn_class::Step(int lev, int YN)
 {
   setpbh(BH_num, Porg0, Mass, BH_num_input);
@@ -2514,7 +2060,6 @@ void bssn_class::Step(int lev, int YN)
   double dT_lev = dT * pow(0.5, Mymax(lev, trfls));
 
 // new code 2013-2-15, zjcao
-#if (MAPBH == 1)
   // for black hole position
   if (BH_num > 0 && lev == GH->levels - 1)
   {
@@ -2552,11 +2097,7 @@ void bssn_class::Step(int lev, int YN)
   {
     AnalysisStuff(lev, dT_lev);
   }
-#endif
 
-#ifdef With_AHF
-  AH_Step_Find(lev, dT_lev);
-#endif
   bool BB = fgt(PhysTime, StartTime, dT_lev / 2);
   double ndeps = numepss;
   if (lev < GH->movls)
@@ -2577,13 +2118,11 @@ void bssn_class::Step(int lev, int YN)
       Block *cg = BP->data;
       if (myrank == cg->rank)
       {
-#if (AGM == 0)
         f_enforce_ga(cg->shape,
                      cg->fgfs[gxx0->sgfn], cg->fgfs[gxy0->sgfn], cg->fgfs[gxz0->sgfn], 
                      cg->fgfs[gyy0->sgfn], cg->fgfs[gyz0->sgfn], cg->fgfs[gzz0->sgfn],
                      cg->fgfs[Axx0->sgfn], cg->fgfs[Axy0->sgfn], cg->fgfs[Axz0->sgfn], 
                      cg->fgfs[Ayy0->sgfn], cg->fgfs[Ayz0->sgfn], cg->fgfs[Azz0->sgfn]);
-#endif
 
         if (f_compute_rhs_bssn(cg->shape, TRK4, cg->X[0], cg->X[1], cg->X[2],
                                cg->fgfs[phi0->sgfn], cg->fgfs[trK0->sgfn],
@@ -2634,8 +2173,6 @@ void bssn_class::Step(int lev, int YN)
           
           while (varl0)
           {
-#if (SommerType == 0)
-#ifndef WithShell
             if (lev == 0) // sommerfeld indeed
               f_sommerfeld_routbam(cg->shape, cg->X[0], cg->X[1], cg->X[2],
                                    Pp->data->bbox[0], Pp->data->bbox[1], Pp->data->bbox[2], 
@@ -2644,17 +2181,12 @@ void bssn_class::Step(int lev, int YN)
                                    cg->fgfs[varl0->data->sgfn], 
                                    varl0->data->propspeed, varl0->data->SoA,
                                    Symmetry);
-
-#endif
-#endif
             f_rungekutta4_rout(cg->shape, dT_lev, 
                                cg->fgfs[varl0->data->sgfn], 
                                cg->fgfs[varl->data->sgfn], 
                                cg->fgfs[varlrhs->data->sgfn],
                                iter_count);
-#ifndef WithShell
             if (lev > 0) // fix BD point
-#endif
               f_sommerfeld_rout(cg->shape, cg->X[0], cg->X[1], cg->X[2],
                                 Pp->data->bbox[0], Pp->data->bbox[1], Pp->data->bbox[2], 
                                 Pp->data->bbox[3], Pp->data->bbox[4], Pp->data->bbox[5],
@@ -2664,20 +2196,6 @@ void bssn_class::Step(int lev, int YN)
                                 cg->fgfs[varl0->data->sgfn], cg->fgfs[varl->data->sgfn], 
                                 varl0->data->SoA,
                                 Symmetry, cor);
-
-#if (SommerType == 1)
-#warning "shell part still bam type"
-            if (lev == 0) // Shibata type sommerfeld
-              f_sommerfeld_rout(cg->shape, cg->X[0], cg->X[1], cg->X[2],
-                                Pp->data->bbox[0], Pp->data->bbox[1], Pp->data->bbox[2], 
-                                Pp->data->bbox[3], Pp->data->bbox[4], Pp->data->bbox[5],
-                                dT_lev, 
-                                cg->fgfs[phi0->sgfn],
-                                cg->fgfs[Lap0->sgfn], 
-                                cg->fgfs[varl0->data->sgfn], cg->fgfs[varl->data->sgfn], 
-                                varl0->data->SoA,
-                                Symmetry, pre);
-#endif
 
             varl0 = varl0->next;
             varl = varl->next;
@@ -2708,224 +2226,7 @@ void bssn_class::Step(int lev, int YN)
     }
   }
 
-#ifdef WithShell
-  // evolve Shell Patches
-  if (lev == 0)
-  {
-    sPp = SH->PatL;
-    while (sPp)
-    {
-      MyList<Block> *BP = sPp->data->blb;
-      int fngfs = sPp->data->fngfs;
-      while (BP)
-      {
-        Block *cg = BP->data;
-        if (myrank == cg->rank)
-        {
-#if (AGM == 0)
-          f_enforce_ga(cg->shape,
-                       cg->fgfs[gxx0->sgfn], cg->fgfs[gxy0->sgfn], cg->fgfs[gxz0->sgfn], 
-                       cg->fgfs[gyy0->sgfn], cg->fgfs[gyz0->sgfn], cg->fgfs[gzz0->sgfn],
-                       cg->fgfs[Axx0->sgfn], cg->fgfs[Axy0->sgfn], cg->fgfs[Axz0->sgfn], 
-                       cg->fgfs[Ayy0->sgfn], cg->fgfs[Ayz0->sgfn], cg->fgfs[Azz0->sgfn]);
-#endif
-
-          if (f_compute_rhs_bssn_ss(cg->shape, TRK4, cg->X[0], cg->X[1], cg->X[2],
-                                    cg->fgfs[fngfs + ShellPatch::gx], 
-                                    cg->fgfs[fngfs + ShellPatch::gy], 
-                                    cg->fgfs[fngfs + ShellPatch::gz],
-                                    cg->fgfs[fngfs + ShellPatch::drhodx], 
-                                    cg->fgfs[fngfs + ShellPatch::drhody], 
-                                    cg->fgfs[fngfs + ShellPatch::drhodz],
-                                    cg->fgfs[fngfs + ShellPatch::dsigmadx], 
-                                    cg->fgfs[fngfs + ShellPatch::dsigmady], 
-                                    cg->fgfs[fngfs + ShellPatch::dsigmadz],
-                                    cg->fgfs[fngfs + ShellPatch::dRdx], 
-                                    cg->fgfs[fngfs + ShellPatch::dRdy], 
-                                    cg->fgfs[fngfs + ShellPatch::dRdz],
-                                    cg->fgfs[fngfs + ShellPatch::drhodxx], 
-                                    cg->fgfs[fngfs + ShellPatch::drhodxy], 
-                                    cg->fgfs[fngfs + ShellPatch::drhodxz],
-                                    cg->fgfs[fngfs + ShellPatch::drhodyy], 
-                                    cg->fgfs[fngfs + ShellPatch::drhodyz], 
-                                    cg->fgfs[fngfs + ShellPatch::drhodzz],
-                                    cg->fgfs[fngfs + ShellPatch::dsigmadxx], 
-                                    cg->fgfs[fngfs + ShellPatch::dsigmadxy], 
-                                    cg->fgfs[fngfs + ShellPatch::dsigmadxz],
-                                    cg->fgfs[fngfs + ShellPatch::dsigmadyy], 
-                                    cg->fgfs[fngfs + ShellPatch::dsigmadyz], 
-                                    cg->fgfs[fngfs + ShellPatch::dsigmadzz],
-                                    cg->fgfs[fngfs + ShellPatch::dRdxx], 
-                                    cg->fgfs[fngfs + ShellPatch::dRdxy], 
-                                    cg->fgfs[fngfs + ShellPatch::dRdxz],
-                                    cg->fgfs[fngfs + ShellPatch::dRdyy], 
-                                    cg->fgfs[fngfs + ShellPatch::dRdyz], 
-                                    cg->fgfs[fngfs + ShellPatch::dRdzz],
-                                    cg->fgfs[phi0->sgfn], cg->fgfs[trK0->sgfn],
-                                    cg->fgfs[gxx0->sgfn], cg->fgfs[gxy0->sgfn], cg->fgfs[gxz0->sgfn], 
-                                    cg->fgfs[gyy0->sgfn], cg->fgfs[gyz0->sgfn], cg->fgfs[gzz0->sgfn],
-                                    cg->fgfs[Axx0->sgfn], cg->fgfs[Axy0->sgfn], cg->fgfs[Axz0->sgfn], 
-                                    cg->fgfs[Ayy0->sgfn], cg->fgfs[Ayz0->sgfn], cg->fgfs[Azz0->sgfn],
-                                    cg->fgfs[Gmx0->sgfn], cg->fgfs[Gmy0->sgfn], cg->fgfs[Gmz0->sgfn],
-                                    cg->fgfs[Lap0->sgfn], 
-                                    cg->fgfs[Sfx0->sgfn], cg->fgfs[Sfy0->sgfn], cg->fgfs[Sfz0->sgfn],
-                                    cg->fgfs[dtSfx0->sgfn], cg->fgfs[dtSfy0->sgfn], cg->fgfs[dtSfz0->sgfn],
-                                    cg->fgfs[phi_rhs->sgfn], cg->fgfs[trK_rhs->sgfn],
-                                    cg->fgfs[gxx_rhs->sgfn], cg->fgfs[gxy_rhs->sgfn], cg->fgfs[gxz_rhs->sgfn],
-                                    cg->fgfs[gyy_rhs->sgfn], cg->fgfs[gyz_rhs->sgfn], cg->fgfs[gzz_rhs->sgfn],
-                                    cg->fgfs[Axx_rhs->sgfn], cg->fgfs[Axy_rhs->sgfn], cg->fgfs[Axz_rhs->sgfn],
-                                    cg->fgfs[Ayy_rhs->sgfn], cg->fgfs[Ayz_rhs->sgfn], cg->fgfs[Azz_rhs->sgfn],
-                                    cg->fgfs[Gmx_rhs->sgfn], cg->fgfs[Gmy_rhs->sgfn], cg->fgfs[Gmz_rhs->sgfn],
-                                    cg->fgfs[Lap_rhs->sgfn], 
-                                    cg->fgfs[Sfx_rhs->sgfn], cg->fgfs[Sfy_rhs->sgfn], cg->fgfs[Sfz_rhs->sgfn],
-                                    cg->fgfs[dtSfx_rhs->sgfn], cg->fgfs[dtSfy_rhs->sgfn], cg->fgfs[dtSfz_rhs->sgfn],
-                                    cg->fgfs[rho->sgfn], cg->fgfs[Sx->sgfn], cg->fgfs[Sy->sgfn], cg->fgfs[Sz->sgfn],
-                                    cg->fgfs[Sxx->sgfn], cg->fgfs[Sxy->sgfn], cg->fgfs[Sxz->sgfn], 
-                                    cg->fgfs[Syy->sgfn], cg->fgfs[Syz->sgfn], cg->fgfs[Szz->sgfn],
-                                    cg->fgfs[Gamxxx->sgfn], cg->fgfs[Gamxxy->sgfn], cg->fgfs[Gamxxz->sgfn],
-                                    cg->fgfs[Gamxyy->sgfn], cg->fgfs[Gamxyz->sgfn], cg->fgfs[Gamxzz->sgfn],
-                                    cg->fgfs[Gamyxx->sgfn], cg->fgfs[Gamyxy->sgfn], cg->fgfs[Gamyxz->sgfn],
-                                    cg->fgfs[Gamyyy->sgfn], cg->fgfs[Gamyyz->sgfn], cg->fgfs[Gamyzz->sgfn],
-                                    cg->fgfs[Gamzxx->sgfn], cg->fgfs[Gamzxy->sgfn], cg->fgfs[Gamzxz->sgfn],
-                                    cg->fgfs[Gamzyy->sgfn], cg->fgfs[Gamzyz->sgfn], cg->fgfs[Gamzzz->sgfn],
-                                    cg->fgfs[Rxx->sgfn], cg->fgfs[Rxy->sgfn], cg->fgfs[Rxz->sgfn], 
-                                    cg->fgfs[Ryy->sgfn], cg->fgfs[Ryz->sgfn], cg->fgfs[Rzz->sgfn],
-                                    cg->fgfs[Cons_Ham->sgfn],
-                                    cg->fgfs[Cons_Px->sgfn], cg->fgfs[Cons_Py->sgfn], cg->fgfs[Cons_Pz->sgfn],
-                                    cg->fgfs[Cons_Gx->sgfn], cg->fgfs[Cons_Gy->sgfn], cg->fgfs[Cons_Gz->sgfn],
-                                    Symmetry, lev, numepsh, sPp->data->sst, pre))
-          {
-            cout << "find NaN in Shell domain: sst = " << sPp->data->sst << ", (" 
-                 << cg->bbox[0] << ":" << cg->bbox[3] << ","
-                 << cg->bbox[1] << ":" << cg->bbox[4] << "," 
-                 << cg->bbox[2] << ":" << cg->bbox[5] << ")" << endl;
-            ERROR = 1;
-          }
-
-          // rk4 substep and boundary
-          {
-            MyList<var> *varl0 = StateList, *varl = SynchList_pre, *varlrhs = RHSList; 
-            // we do not check the correspondence here
-            
-            while (varl0)
-            {
-              // sommerfeld indeed for outter boudary while fix BD for inner boundary
-              f_sommerfeld_routbam_ss(cg->shape, cg->X[0], cg->X[1], cg->X[2],
-                                      sPp->data->bbox[0], sPp->data->bbox[1], sPp->data->bbox[2], 
-                                      sPp->data->bbox[3], sPp->data->bbox[4], sPp->data->bbox[5],
-                                      cg->fgfs[varlrhs->data->sgfn],
-                                      cg->fgfs[varl0->data->sgfn], 
-                                      varl0->data->propspeed, varl0->data->SoA,
-                                      Symmetry);
-
-              f_rungekutta4_rout(cg->shape, dT_lev, 
-                                 cg->fgfs[varl0->data->sgfn], 
-                                 cg->fgfs[varl->data->sgfn], 
-                                 cg->fgfs[varlrhs->data->sgfn],
-                                 iter_count);
-
-              varl0 = varl0->next;
-              varl = varl->next;
-              varlrhs = varlrhs->next;
-            }
-          }
-          f_lowerboundset(cg->shape, cg->fgfs[phi->sgfn], chitiny);
-        }
-        if (BP == sPp->data->ble)
-          break;
-        BP = BP->next;
-      }
-      sPp = sPp->next;
-    }
-#if 0 
-// check rhs    
-  {
-         SH->Dump_Data(RHSList,0,PhysTime,dT_lev);
-         if(myrank == 0)
-	 {
-            cout<<"check rhs"<<endl;
-	    MPI_Abort(MPI_COMM_WORLD,1);
-	 }
-  }
-#endif
-  }
-
-  // check error information
-  {
-    int erh = ERROR;
-    MPI_Allreduce(&erh, &ERROR, 1, MPI_INT, MPI_SUM, MPI_COMM_WORLD);
-  }
-
-  if (ERROR)
-  {
-    SH->Dump_Data(StateList, 0, PhysTime, dT_lev);
-    if (myrank == 0)
-    {
-      if (ErrorMonitor->outfile)
-        ErrorMonitor->outfile << "find NaN in state variables on Shell Patches at t = " << PhysTime << endl;
-      MPI_Abort(MPI_COMM_WORLD, 1);
-    }
-  }
-#endif
-
   Parallel::Sync(GH->PatL[lev], SynchList_pre, Symmetry);
-
-#ifdef WithShell
-  if (lev == 0)
-  {
-    clock_t prev_clock, curr_clock;
-    if (myrank == 0)
-      curr_clock = clock();
-    SH->Synch(SynchList_pre, Symmetry);
-    if (myrank == 0)
-    {
-      prev_clock = curr_clock;
-      curr_clock = clock();
-      cout << "Shell stuff synchronization used " << (double)(curr_clock - prev_clock) / ((double)CLOCKS_PER_SEC) << " seconds!" << endl;
-    }
-  }
-#endif
-
-#if (MAPBH == 0)
-  // for black hole position
-  if (BH_num > 0 && lev == GH->levels - 1)
-  {
-    compute_Porg_rhs(Porg0, Porg_rhs, Sfx0, Sfy0, Sfz0, lev);
-    for (int ithBH = 0; ithBH < BH_num; ithBH++)
-    {
-      f_rungekutta4_scalar(dT_lev, Porg0[ithBH][0], Porg[ithBH][0], Porg_rhs[ithBH][0], iter_count);
-      f_rungekutta4_scalar(dT_lev, Porg0[ithBH][1], Porg[ithBH][1], Porg_rhs[ithBH][1], iter_count);
-      f_rungekutta4_scalar(dT_lev, Porg0[ithBH][2], Porg[ithBH][2], Porg_rhs[ithBH][2], iter_count);
-      if (Symmetry > 0)
-        Porg[ithBH][2] = fabs(Porg[ithBH][2]);
-      if (Symmetry == 2)
-      {
-        Porg[ithBH][0] = fabs(Porg[ithBH][0]);
-        Porg[ithBH][1] = fabs(Porg[ithBH][1]);
-      }
-      if (!finite(Porg[ithBH][0]) || !finite(Porg[ithBH][1]) || !finite(Porg[ithBH][2]))
-      {
-        if (ErrorMonitor->outfile)
-          ErrorMonitor->outfile << "predictor step finds NaN for BH's position from ("
-                                << Porg0[ithBH][0] << "," << Porg0[ithBH][1] << "," << Porg0[ithBH][2] 
-                                << ")" << endl;
-
-        MyList<var> *DG_List = new MyList<var>(Sfx0);
-        DG_List->insert(Sfx0);
-        DG_List->insert(Sfy0);
-        DG_List->insert(Sfz0);
-        Parallel::Dump_Data(GH->PatL[lev], DG_List, 0, PhysTime, dT_lev);
-        DG_List->clearList();
-      }
-    }
-  }
-  // data analysis part
-  // Warning NOTE: the variables1 are used as temp storege room
-  if (lev == a_lev)
-  {
-    AnalysisStuff(lev, dT_lev);
-  }
-#endif
 
   // corrector
   for (iter_count = 1; iter_count < 4; iter_count++)
@@ -2942,21 +2243,11 @@ void bssn_class::Step(int lev, int YN)
         Block *cg = BP->data;
         if (myrank == cg->rank)
         {
-#if (AGM == 0)
           f_enforce_ga(cg->shape,
                        cg->fgfs[gxx->sgfn], cg->fgfs[gxy->sgfn], cg->fgfs[gxz->sgfn], 
                        cg->fgfs[gyy->sgfn], cg->fgfs[gyz->sgfn], cg->fgfs[gzz->sgfn],
                        cg->fgfs[Axx->sgfn], cg->fgfs[Axy->sgfn], cg->fgfs[Axz->sgfn], 
                        cg->fgfs[Ayy->sgfn], cg->fgfs[Ayz->sgfn], cg->fgfs[Azz->sgfn]);
-#elif (AGM == 1)
-          if (iter_count == 3)
-            f_enforce_ga(cg->shape,
-                         cg->fgfs[gxx->sgfn], cg->fgfs[gxy->sgfn], cg->fgfs[gxz->sgfn], 
-                         cg->fgfs[gyy->sgfn], cg->fgfs[gyz->sgfn], cg->fgfs[gzz->sgfn],
-                         cg->fgfs[Axx->sgfn], cg->fgfs[Axy->sgfn], cg->fgfs[Axz->sgfn], 
-                         cg->fgfs[Ayy->sgfn], cg->fgfs[Ayz->sgfn], cg->fgfs[Azz->sgfn]);
-#endif
-
           if (f_compute_rhs_bssn(cg->shape, TRK4, cg->X[0], cg->X[1], cg->X[2],
                                  cg->fgfs[phi->sgfn], cg->fgfs[trK->sgfn],
                                  cg->fgfs[gxx->sgfn], cg->fgfs[gxy->sgfn], cg->fgfs[gxz->sgfn], 
@@ -3006,8 +2297,6 @@ void bssn_class::Step(int lev, int YN)
             
             while (varl0)
             {
-#if (SommerType == 0)
-#ifndef WithShell
               if (lev == 0) // sommerfeld indeed
                 f_sommerfeld_routbam(cg->shape, cg->X[0], cg->X[1], cg->X[2],
                                      Pp->data->bbox[0], Pp->data->bbox[1], Pp->data->bbox[2], 
@@ -3016,17 +2305,13 @@ void bssn_class::Step(int lev, int YN)
                                      cg->fgfs[varl->data->sgfn], 
                                      varl0->data->propspeed, varl0->data->SoA,
                                      Symmetry);
-#endif
-#endif
               f_rungekutta4_rout(cg->shape, dT_lev, 
                                  cg->fgfs[varl0->data->sgfn], 
                                  cg->fgfs[varl1->data->sgfn], 
                                  cg->fgfs[varlrhs->data->sgfn],
                                  iter_count);
 
-#ifndef WithShell
               if (lev > 0) // fix BD point
-#endif
                 f_sommerfeld_rout(cg->shape, cg->X[0], cg->X[1], cg->X[2],
                                   Pp->data->bbox[0], Pp->data->bbox[1], Pp->data->bbox[2], 
                                   Pp->data->bbox[3], Pp->data->bbox[4], Pp->data->bbox[5],
@@ -3036,19 +2321,6 @@ void bssn_class::Step(int lev, int YN)
                                   cg->fgfs[varl0->data->sgfn], cg->fgfs[varl1->data->sgfn], 
                                   varl0->data->SoA,
                                   Symmetry, cor);
-
-#if (SommerType == 1)
-              if (lev == 1) // shibata type sommerfeld
-                f_sommerfeld_rout(cg->shape, cg->X[0], cg->X[1], cg->X[2],
-                                  Pp->data->bbox[0], Pp->data->bbox[1], Pp->data->bbox[2], 
-                                  Pp->data->bbox[3], Pp->data->bbox[4], Pp->data->bbox[5],
-                                  dT_lev, 
-                                  cg->fgfs[phi0->sgfn],
-                                  cg->fgfs[Lap0->sgfn], 
-                                  cg->fgfs[varl->data->sgfn], cg->fgfs[varl1->data->sgfn], 
-                                  varl0->data->SoA,
-                                  Symmetry, cor);
-#endif
 
               varl0 = varl0->next;
               varl = varl->next;
@@ -3084,216 +2356,7 @@ void bssn_class::Step(int lev, int YN)
       }
     }
 
-#ifdef WithShell
-    // evolve Shell Patches
-    if (lev == 0)
-    {
-      sPp = SH->PatL;
-      while (sPp)
-      {
-        MyList<Block> *BP = sPp->data->blb;
-        int fngfs = sPp->data->fngfs;
-        while (BP)
-        {
-          Block *cg = BP->data;
-          if (myrank == cg->rank)
-          {
-#if (AGM == 0)
-            f_enforce_ga(cg->shape,
-                         cg->fgfs[gxx->sgfn], cg->fgfs[gxy->sgfn], cg->fgfs[gxz->sgfn], 
-                         cg->fgfs[gyy->sgfn], cg->fgfs[gyz->sgfn], cg->fgfs[gzz->sgfn],
-                         cg->fgfs[Axx->sgfn], cg->fgfs[Axy->sgfn], cg->fgfs[Axz->sgfn], 
-                         cg->fgfs[Ayy->sgfn], cg->fgfs[Ayz->sgfn], cg->fgfs[Azz->sgfn]);
-#elif (AGM == 1)
-            if (iter_count == 3)
-              f_enforce_ga(cg->shape,
-                           cg->fgfs[gxx->sgfn], cg->fgfs[gxy->sgfn], cg->fgfs[gxz->sgfn], 
-                           cg->fgfs[gyy->sgfn], cg->fgfs[gyz->sgfn], cg->fgfs[gzz->sgfn],
-                           cg->fgfs[Axx->sgfn], cg->fgfs[Axy->sgfn], cg->fgfs[Axz->sgfn], 
-                           cg->fgfs[Ayy->sgfn], cg->fgfs[Ayz->sgfn], cg->fgfs[Azz->sgfn]);
-#endif
-
-            if (f_compute_rhs_bssn_ss(cg->shape, TRK4, cg->X[0], cg->X[1], cg->X[2],
-                                      cg->fgfs[fngfs + ShellPatch::gx], 
-                                      cg->fgfs[fngfs + ShellPatch::gy], 
-                                      cg->fgfs[fngfs + ShellPatch::gz],
-                                      cg->fgfs[fngfs + ShellPatch::drhodx], 
-                                      cg->fgfs[fngfs + ShellPatch::drhody], 
-                                      cg->fgfs[fngfs + ShellPatch::drhodz],
-                                      cg->fgfs[fngfs + ShellPatch::dsigmadx], 
-                                      cg->fgfs[fngfs + ShellPatch::dsigmady], 
-                                      cg->fgfs[fngfs + ShellPatch::dsigmadz],
-                                      cg->fgfs[fngfs + ShellPatch::dRdx], 
-                                      cg->fgfs[fngfs + ShellPatch::dRdy], 
-                                      cg->fgfs[fngfs + ShellPatch::dRdz],
-                                      cg->fgfs[fngfs + ShellPatch::drhodxx], 
-                                      cg->fgfs[fngfs + ShellPatch::drhodxy], 
-                                      cg->fgfs[fngfs + ShellPatch::drhodxz],
-                                      cg->fgfs[fngfs + ShellPatch::drhodyy], 
-                                      cg->fgfs[fngfs + ShellPatch::drhodyz], 
-                                      cg->fgfs[fngfs + ShellPatch::drhodzz],
-                                      cg->fgfs[fngfs + ShellPatch::dsigmadxx], 
-                                      cg->fgfs[fngfs + ShellPatch::dsigmadxy], 
-                                      cg->fgfs[fngfs + ShellPatch::dsigmadxz],
-                                      cg->fgfs[fngfs + ShellPatch::dsigmadyy], 
-                                      cg->fgfs[fngfs + ShellPatch::dsigmadyz], 
-                                      cg->fgfs[fngfs + ShellPatch::dsigmadzz],
-                                      cg->fgfs[fngfs + ShellPatch::dRdxx], 
-                                      cg->fgfs[fngfs + ShellPatch::dRdxy], 
-                                      cg->fgfs[fngfs + ShellPatch::dRdxz],
-                                      cg->fgfs[fngfs + ShellPatch::dRdyy], 
-                                      cg->fgfs[fngfs + ShellPatch::dRdyz], 
-                                      cg->fgfs[fngfs + ShellPatch::dRdzz],
-                                      cg->fgfs[phi->sgfn], cg->fgfs[trK->sgfn],
-                                      cg->fgfs[gxx->sgfn], cg->fgfs[gxy->sgfn], cg->fgfs[gxz->sgfn], 
-                                      cg->fgfs[gyy->sgfn], cg->fgfs[gyz->sgfn], cg->fgfs[gzz->sgfn],
-                                      cg->fgfs[Axx->sgfn], cg->fgfs[Axy->sgfn], cg->fgfs[Axz->sgfn], 
-                                      cg->fgfs[Ayy->sgfn], cg->fgfs[Ayz->sgfn], cg->fgfs[Azz->sgfn],
-                                      cg->fgfs[Gmx->sgfn], cg->fgfs[Gmy->sgfn], cg->fgfs[Gmz->sgfn],
-                                      cg->fgfs[Lap->sgfn], 
-                                      cg->fgfs[Sfx->sgfn], cg->fgfs[Sfy->sgfn], cg->fgfs[Sfz->sgfn],
-                                      cg->fgfs[dtSfx->sgfn], cg->fgfs[dtSfy->sgfn], cg->fgfs[dtSfz->sgfn],
-                                      cg->fgfs[phi1->sgfn], cg->fgfs[trK1->sgfn],
-                                      cg->fgfs[gxx1->sgfn], cg->fgfs[gxy1->sgfn], cg->fgfs[gxz1->sgfn],
-                                      cg->fgfs[gyy1->sgfn], cg->fgfs[gyz1->sgfn], cg->fgfs[gzz1->sgfn],
-                                      cg->fgfs[Axx1->sgfn], cg->fgfs[Axy1->sgfn], cg->fgfs[Axz1->sgfn],
-                                      cg->fgfs[Ayy1->sgfn], cg->fgfs[Ayz1->sgfn], cg->fgfs[Azz1->sgfn],
-                                      cg->fgfs[Gmx1->sgfn], cg->fgfs[Gmy1->sgfn], cg->fgfs[Gmz1->sgfn],
-                                      cg->fgfs[Lap1->sgfn], 
-                                      cg->fgfs[Sfx1->sgfn], cg->fgfs[Sfy1->sgfn], cg->fgfs[Sfz1->sgfn],
-                                      cg->fgfs[dtSfx1->sgfn], cg->fgfs[dtSfy1->sgfn], cg->fgfs[dtSfz1->sgfn],
-                                      cg->fgfs[rho->sgfn], 
-                                      cg->fgfs[Sx->sgfn], cg->fgfs[Sy->sgfn], cg->fgfs[Sz->sgfn],
-                                      cg->fgfs[Sxx->sgfn], cg->fgfs[Sxy->sgfn], cg->fgfs[Sxz->sgfn], 
-                                      cg->fgfs[Syy->sgfn], cg->fgfs[Syz->sgfn], cg->fgfs[Szz->sgfn],
-                                      cg->fgfs[Gamxxx->sgfn], cg->fgfs[Gamxxy->sgfn], cg->fgfs[Gamxxz->sgfn],
-                                      cg->fgfs[Gamxyy->sgfn], cg->fgfs[Gamxyz->sgfn], cg->fgfs[Gamxzz->sgfn],
-                                      cg->fgfs[Gamyxx->sgfn], cg->fgfs[Gamyxy->sgfn], cg->fgfs[Gamyxz->sgfn],
-                                      cg->fgfs[Gamyyy->sgfn], cg->fgfs[Gamyyz->sgfn], cg->fgfs[Gamyzz->sgfn],
-                                      cg->fgfs[Gamzxx->sgfn], cg->fgfs[Gamzxy->sgfn], cg->fgfs[Gamzxz->sgfn],
-                                      cg->fgfs[Gamzyy->sgfn], cg->fgfs[Gamzyz->sgfn], cg->fgfs[Gamzzz->sgfn],
-                                      cg->fgfs[Rxx->sgfn], cg->fgfs[Rxy->sgfn], cg->fgfs[Rxz->sgfn], 
-                                      cg->fgfs[Ryy->sgfn], cg->fgfs[Ryz->sgfn], cg->fgfs[Rzz->sgfn],
-                                      cg->fgfs[Cons_Ham->sgfn],
-                                      cg->fgfs[Cons_Px->sgfn], cg->fgfs[Cons_Py->sgfn], cg->fgfs[Cons_Pz->sgfn],
-                                      cg->fgfs[Cons_Gx->sgfn], cg->fgfs[Cons_Gy->sgfn], cg->fgfs[Cons_Gz->sgfn],
-                                      Symmetry, lev, numepsh, sPp->data->sst, cor))
-            {
-              cout << "find NaN in Shell domain: sst = " << sPp->data->sst << ", (" 
-                   << cg->bbox[0] << ":" << cg->bbox[3] << ","
-                   << cg->bbox[1] << ":" << cg->bbox[4] << "," 
-                   << cg->bbox[2] << ":" << cg->bbox[5] << ")" << endl;
-              ERROR = 1;
-            }
-            // rk4 substep and boundary
-            {
-              MyList<var> *varl0 = StateList, *varl = SynchList_pre, *varl1 = SynchList_cor, *varlrhs = RHSList; 
-              // we do not check the correspondence here
-              
-              while (varl0)
-              {
-                // sommerfeld indeed for outter boudary while fix BD for inner boundary
-                f_sommerfeld_routbam_ss(cg->shape, cg->X[0], cg->X[1], cg->X[2],
-                                        sPp->data->bbox[0], sPp->data->bbox[1], sPp->data->bbox[2], 
-                                        sPp->data->bbox[3], sPp->data->bbox[4], sPp->data->bbox[5],
-                                        cg->fgfs[varl1->data->sgfn],
-                                        cg->fgfs[varl->data->sgfn], 
-                                        varl0->data->propspeed, varl0->data->SoA,
-                                        Symmetry);
-
-                f_rungekutta4_rout(cg->shape, dT_lev, 
-                                   cg->fgfs[varl0->data->sgfn], 
-                                   cg->fgfs[varl1->data->sgfn], 
-                                   cg->fgfs[varlrhs->data->sgfn],
-                                   iter_count);
-
-                varl0 = varl0->next;
-                varl = varl->next;
-                varl1 = varl1->next;
-                varlrhs = varlrhs->next;
-              }
-            }
-            f_lowerboundset(cg->shape, cg->fgfs[phi1->sgfn], chitiny);
-          }
-          if (BP == sPp->data->ble)
-            break;
-          BP = BP->next;
-        }
-        sPp = sPp->next;
-      }
-    }
-    // check error information
-    {
-      int erh = ERROR;
-      MPI_Allreduce(&erh, &ERROR, 1, MPI_INT, MPI_SUM, MPI_COMM_WORLD);
-    }
-    if (ERROR)
-    {
-      SH->Dump_Data(SynchList_pre, 0, PhysTime, dT_lev);
-      if (myrank == 0)
-      {
-        if (ErrorMonitor->outfile)
-          ErrorMonitor->outfile << "find NaN on Shell Patches in RK4 substep#" << iter_count 
-                                << " variables at t = " << PhysTime << endl;
-        MPI_Abort(MPI_COMM_WORLD, 1);
-      }
-    }
-#endif
-
     Parallel::Sync(GH->PatL[lev], SynchList_cor, Symmetry);
-
-#ifdef WithShell
-    if (lev == 0)
-    {
-      clock_t prev_clock, curr_clock;
-      if (myrank == 0)
-        curr_clock = clock();
-      SH->Synch(SynchList_cor, Symmetry);
-      if (myrank == 0)
-      {
-        prev_clock = curr_clock;
-        curr_clock = clock();
-        cout << "Shell stuff synchronization used " 
-             << (double)(curr_clock - prev_clock) / ((double)CLOCKS_PER_SEC) 
-             << " seconds!" << endl;
-      }
-    }
-#endif
-
-#if (MAPBH == 0)
-    // for black hole position
-    if (BH_num > 0 && lev == GH->levels - 1)
-    {
-      compute_Porg_rhs(Porg, Porg1, Sfx, Sfy, Sfz, lev);
-      for (int ithBH = 0; ithBH < BH_num; ithBH++)
-      {
-        f_rungekutta4_scalar(dT_lev, Porg0[ithBH][0], Porg1[ithBH][0], Porg_rhs[ithBH][0], iter_count);
-        f_rungekutta4_scalar(dT_lev, Porg0[ithBH][1], Porg1[ithBH][1], Porg_rhs[ithBH][1], iter_count);
-        f_rungekutta4_scalar(dT_lev, Porg0[ithBH][2], Porg1[ithBH][2], Porg_rhs[ithBH][2], iter_count);
-        if (Symmetry > 0)
-          Porg1[ithBH][2] = fabs(Porg1[ithBH][2]);
-        if (Symmetry == 2)
-        {
-          Porg1[ithBH][0] = fabs(Porg1[ithBH][0]);
-          Porg1[ithBH][1] = fabs(Porg1[ithBH][1]);
-        }
-        if (!finite(Porg1[ithBH][0]) || !finite(Porg1[ithBH][1]) || !finite(Porg1[ithBH][2]))
-        {
-          if (ErrorMonitor->outfile)
-            ErrorMonitor->outfile << iter_count << " corrector step finds NaN for BH's position from ("
-                                  << Porg[ithBH][0] << "," << Porg[ithBH][1] << "," << Porg[ithBH][2] 
-                                  << ")" << endl;
-
-          MyList<var> *DG_List = new MyList<var>(Sfx0);
-          DG_List->insert(Sfx0);
-          DG_List->insert(Sfy0);
-          DG_List->insert(Sfz0);
-          Parallel::Dump_Data(GH->PatL[lev], DG_List, 0, PhysTime, dT_lev);
-          DG_List->clearList();
-        }
-      }
-    }
-#endif
 
     // swap time level
     if (iter_count < 3)
@@ -3312,62 +2375,8 @@ void bssn_class::Step(int lev, int YN)
         }
         Pp = Pp->next;
       }
-#ifdef WithShell
-      if (lev == 0)
-      {
-        sPp = SH->PatL;
-        while (sPp)
-        {
-          MyList<Block> *BP = sPp->data->blb;
-          while (BP)
-          {
-            Block *cg = BP->data;
-            cg->swapList(SynchList_pre, SynchList_cor, myrank);
-            if (BP == sPp->data->ble)
-              break;
-            BP = BP->next;
-          }
-          sPp = sPp->next;
-        }
-      }
-#endif
-
-#if (MAPBH == 0)
-      // for black hole position
-      if (BH_num > 0 && lev == GH->levels - 1)
-      {
-        for (int ithBH = 0; ithBH < BH_num; ithBH++)
-        {
-          Porg[ithBH][0] = Porg1[ithBH][0];
-          Porg[ithBH][1] = Porg1[ithBH][1];
-          Porg[ithBH][2] = Porg1[ithBH][2];
-        }
-      }
-#endif
     }
   }
-#if (RPS == 0)
-  // mesh refinement boundary part
-  RestrictProlong(lev, YN, BB);
-
-#ifdef WithShell
-  if (lev == 0)
-  {
-    clock_t prev_clock, curr_clock;
-    if (myrank == 0)
-      curr_clock = clock();
-    SH->CS_Inter(SynchList_cor, Symmetry);
-    if (myrank == 0)
-    {
-      prev_clock = curr_clock;
-      curr_clock = clock();
-      cout << "CS_Inter used " << (double)(curr_clock - prev_clock) / ((double)CLOCKS_PER_SEC) 
-           << " seconds!" << endl;
-    }
-  }
-#endif
-
-#endif
   // note the data structure before update
   // SynchList_cor 1   -----------
   //
@@ -3390,37 +2399,6 @@ void bssn_class::Step(int lev, int YN)
     }
     Pp = Pp->next;
   }
-#ifdef WithShell
-  if (lev == 0)
-  {
-    sPp = SH->PatL;
-    while (sPp)
-    {
-      MyList<Block> *BP = sPp->data->blb;
-      while (BP)
-      {
-        Block *cg = BP->data;
-        cg->swapList(StateList, SynchList_cor, myrank);
-        cg->swapList(OldStateList, SynchList_cor, myrank);
-        if (BP == sPp->data->ble)
-          break;
-        BP = BP->next;
-      }
-      sPp = sPp->next;
-    }
-#if 0
-// check StateList   
-  {
-         SH->Dump_Data(StateList,0,PhysTime,dT_lev);
-         if(myrank == 0)
-	 {
-            cout<<"check StateList"<<endl;
-	    MPI_Abort(MPI_COMM_WORLD,1);
-	 }
-  }
-#endif
-  }
-#endif
   // for black hole position
   if (BH_num > 0 && lev == GH->levels - 1)
   {
@@ -3443,844 +2421,7 @@ void bssn_class::Step(int lev, int YN)
 
 //================================================================================================
 
-#else // #if 1 (comment may be incorrect; should be #if 0)
-// ICN for bam comparison
-void bssn_class::Step(int lev, int YN)
-{
-  double dT_lev = dT * pow(0.5, Mymax(lev, trfls));
-#ifdef With_AHF
-  AH_Step_Find(lev, dT_lev);
-#endif
-  bool BB = fgt(PhysTime, StartTime, dT_lev / 2);
-  double ndeps = numepss;
-  if (lev < GH->movls)
-    ndeps = numepsb;
-  double TRK4 = PhysTime;
-  int iter_count = 0; // count RK4 substeps
-  int pre = 0, cor = 1;
-  int ERROR = 0;
 
-  MyList<ss_patch> *sPp;
-  // Predictor
-  MyList<Patch> *Pp = GH->PatL[lev];
-  while (Pp)
-  {
-    MyList<Block> *BP = Pp->data->blb;
-    while (BP)
-    {
-      Block *cg = BP->data;
-      if (myrank == cg->rank)
-      {
-#if (AGM == 0)
-        f_enforce_ga(cg->shape,
-                     cg->fgfs[gxx0->sgfn], cg->fgfs[gxy0->sgfn], cg->fgfs[gxz0->sgfn], 
-                     cg->fgfs[gyy0->sgfn], cg->fgfs[gyz0->sgfn], cg->fgfs[gzz0->sgfn],
-                     cg->fgfs[Axx0->sgfn], cg->fgfs[Axy0->sgfn], cg->fgfs[Axz0->sgfn], 
-                     cg->fgfs[Ayy0->sgfn], cg->fgfs[Ayz0->sgfn], cg->fgfs[Azz0->sgfn]);
-#endif
-
-        if (f_compute_rhs_bssn(cg->shape, TRK4, cg->X[0], cg->X[1], cg->X[2],
-                               cg->fgfs[phi0->sgfn], cg->fgfs[trK0->sgfn],
-                               cg->fgfs[gxx0->sgfn], cg->fgfs[gxy0->sgfn], cg->fgfs[gxz0->sgfn], 
-                               cg->fgfs[gyy0->sgfn], cg->fgfs[gyz0->sgfn], cg->fgfs[gzz0->sgfn],
-                               cg->fgfs[Axx0->sgfn], cg->fgfs[Axy0->sgfn], cg->fgfs[Axz0->sgfn], 
-                               cg->fgfs[Ayy0->sgfn], cg->fgfs[Ayz0->sgfn], cg->fgfs[Azz0->sgfn],
-                               cg->fgfs[Gmx0->sgfn], cg->fgfs[Gmy0->sgfn], cg->fgfs[Gmz0->sgfn],
-                               cg->fgfs[Lap0->sgfn], 
-                               cg->fgfs[Sfx0->sgfn], cg->fgfs[Sfy0->sgfn], cg->fgfs[Sfz0->sgfn],
-                               cg->fgfs[dtSfx0->sgfn], cg->fgfs[dtSfy0->sgfn], cg->fgfs[dtSfz0->sgfn],
-                               cg->fgfs[phi_rhs->sgfn], cg->fgfs[trK_rhs->sgfn],
-                               cg->fgfs[gxx_rhs->sgfn], cg->fgfs[gxy_rhs->sgfn], cg->fgfs[gxz_rhs->sgfn],
-                               cg->fgfs[gyy_rhs->sgfn], cg->fgfs[gyz_rhs->sgfn], cg->fgfs[gzz_rhs->sgfn],
-                               cg->fgfs[Axx_rhs->sgfn], cg->fgfs[Axy_rhs->sgfn], cg->fgfs[Axz_rhs->sgfn],
-                               cg->fgfs[Ayy_rhs->sgfn], cg->fgfs[Ayz_rhs->sgfn], cg->fgfs[Azz_rhs->sgfn],
-                               cg->fgfs[Gmx_rhs->sgfn], cg->fgfs[Gmy_rhs->sgfn], cg->fgfs[Gmz_rhs->sgfn],
-                               cg->fgfs[Lap_rhs->sgfn], 
-                               cg->fgfs[Sfx_rhs->sgfn], cg->fgfs[Sfy_rhs->sgfn], cg->fgfs[Sfz_rhs->sgfn],
-                               cg->fgfs[dtSfx_rhs->sgfn], cg->fgfs[dtSfy_rhs->sgfn], cg->fgfs[dtSfz_rhs->sgfn],
-                               cg->fgfs[rho->sgfn], cg->fgfs[Sx->sgfn], cg->fgfs[Sy->sgfn], cg->fgfs[Sz->sgfn],
-                               cg->fgfs[Sxx->sgfn], cg->fgfs[Sxy->sgfn], cg->fgfs[Sxz->sgfn], 
-                               cg->fgfs[Syy->sgfn], cg->fgfs[Syz->sgfn], cg->fgfs[Szz->sgfn],
-                               cg->fgfs[Gamxxx->sgfn], cg->fgfs[Gamxxy->sgfn], cg->fgfs[Gamxxz->sgfn],
-                               cg->fgfs[Gamxyy->sgfn], cg->fgfs[Gamxyz->sgfn], cg->fgfs[Gamxzz->sgfn],
-                               cg->fgfs[Gamyxx->sgfn], cg->fgfs[Gamyxy->sgfn], cg->fgfs[Gamyxz->sgfn],
-                               cg->fgfs[Gamyyy->sgfn], cg->fgfs[Gamyyz->sgfn], cg->fgfs[Gamyzz->sgfn],
-                               cg->fgfs[Gamzxx->sgfn], cg->fgfs[Gamzxy->sgfn], cg->fgfs[Gamzxz->sgfn],
-                               cg->fgfs[Gamzyy->sgfn], cg->fgfs[Gamzyz->sgfn], cg->fgfs[Gamzzz->sgfn],
-                               cg->fgfs[Rxx->sgfn], cg->fgfs[Rxy->sgfn], cg->fgfs[Rxz->sgfn], 
-                               cg->fgfs[Ryy->sgfn], cg->fgfs[Ryz->sgfn], cg->fgfs[Rzz->sgfn],
-                               cg->fgfs[Cons_Ham->sgfn],
-                               cg->fgfs[Cons_Px->sgfn], cg->fgfs[Cons_Py->sgfn], cg->fgfs[Cons_Pz->sgfn],
-                               cg->fgfs[Cons_Gx->sgfn], cg->fgfs[Cons_Gy->sgfn], cg->fgfs[Cons_Gz->sgfn],
-                               Symmetry, lev, ndeps, pre))
-        {
-          cout << "find NaN in domain: (" 
-               << cg->bbox[0] << ":" << cg->bbox[3] << "," 
-               << cg->bbox[1] << ":" << cg->bbox[4] << ","
-               << cg->bbox[2] << ":" << cg->bbox[5] << ")" << endl;
-          ERROR = 1;
-        }
-
-        // rk4 substep and boundary
-        {
-          MyList<var> *varl0 = StateList, *varl = SynchList_pre, *varlrhs = RHSList; 
-          // we do not check the correspondence here
-          
-          while (varl0)
-          {
-#ifndef WithShell
-            if (lev == 0) // sommerfeld indeed
-              f_sommerfeld_routbam(cg->shape, cg->X[0], cg->X[1], cg->X[2],
-                                   Pp->data->bbox[0], Pp->data->bbox[1], Pp->data->bbox[2], 
-                                   Pp->data->bbox[3], Pp->data->bbox[4], Pp->data->bbox[5],
-                                   cg->fgfs[varlrhs->data->sgfn],
-                                   cg->fgfs[varl0->data->sgfn], 
-                                   varl0->data->propspeed, varl0->data->SoA,
-                                   Symmetry);
-
-#endif
-            f_icn_rout(cg->shape, dT_lev, 
-                       cg->fgfs[varl0->data->sgfn], 
-                       cg->fgfs[varl->data->sgfn], 
-                       cg->fgfs[varlrhs->data->sgfn],
-                       iter_count);
-#ifndef WithShell
-            if (lev > 0) // fix BD point
-#endif
-              f_sommerfeld_rout(cg->shape, cg->X[0], cg->X[1], cg->X[2],
-                                Pp->data->bbox[0], Pp->data->bbox[1], Pp->data->bbox[2], 
-                                Pp->data->bbox[3], Pp->data->bbox[4], Pp->data->bbox[5],
-                                dT_lev, cg->fgfs[phi0->sgfn],
-                                cg->fgfs[Lap0->sgfn], 
-                                cg->fgfs[varl0->data->sgfn], cg->fgfs[varl->data->sgfn], 
-                                varl0->data->SoA,
-                                Symmetry, cor);
-
-            varl0 = varl0->next;
-            varl = varl->next;
-            varlrhs = varlrhs->next;
-          }
-        }
-        f_lowerboundset(cg->shape, cg->fgfs[phi->sgfn], chitiny);
-      }
-      if (BP == Pp->data->ble)
-        break;
-      BP = BP->next;
-    }
-    Pp = Pp->next;
-  }
-  // check error information
-  {
-    int erh = ERROR;
-    MPI_Allreduce(&erh, &ERROR, 1, MPI_INT, MPI_SUM, MPI_COMM_WORLD);
-  }
-  if (ERROR)
-  {
-    Parallel::Dump_Data(GH->PatL[lev], StateList, 0, PhysTime, dT_lev);
-    if (myrank == 0)
-    {
-      if (ErrorMonitor->outfile)
-        ErrorMonitor->outfile << "find NaN in state variables at t = " << PhysTime 
-                              << ", lev = " << lev << endl;
-      MPI_Abort(MPI_COMM_WORLD, 1);
-    }
-  }
-
-#ifdef WithShell
-  // evolve Shell Patches
-  if (lev == 0)
-  {
-    sPp = SH->PatL;
-    while (sPp)
-    {
-      MyList<Block> *BP = sPp->data->blb;
-      int fngfs = sPp->data->fngfs;
-      while (BP)
-      {
-        Block *cg = BP->data;
-        if (myrank == cg->rank)
-        {
-#if (AGM == 0)
-          f_enforce_ga(cg->shape,
-                       cg->fgfs[gxx0->sgfn], cg->fgfs[gxy0->sgfn], cg->fgfs[gxz0->sgfn], 
-                       cg->fgfs[gyy0->sgfn], cg->fgfs[gyz0->sgfn], cg->fgfs[gzz0->sgfn],
-                       cg->fgfs[Axx0->sgfn], cg->fgfs[Axy0->sgfn], cg->fgfs[Axz0->sgfn], 
-                       cg->fgfs[Ayy0->sgfn], cg->fgfs[Ayz0->sgfn], cg->fgfs[Azz0->sgfn]);
-#endif
-
-          if (f_compute_rhs_bssn_ss(cg->shape, TRK4, cg->X[0], cg->X[1], cg->X[2],
-                                    cg->fgfs[fngfs + ShellPatch::gx], 
-                                    cg->fgfs[fngfs + ShellPatch::gy], 
-                                    cg->fgfs[fngfs + ShellPatch::gz],
-                                    cg->fgfs[fngfs + ShellPatch::drhodx], 
-                                    cg->fgfs[fngfs + ShellPatch::drhody], 
-                                    cg->fgfs[fngfs + ShellPatch::drhodz],
-                                    cg->fgfs[fngfs + ShellPatch::dsigmadx], 
-                                    cg->fgfs[fngfs + ShellPatch::dsigmady], 
-                                    cg->fgfs[fngfs + ShellPatch::dsigmadz],
-                                    cg->fgfs[fngfs + ShellPatch::dRdx], 
-                                    cg->fgfs[fngfs + ShellPatch::dRdy], 
-                                    cg->fgfs[fngfs + ShellPatch::dRdz],
-                                    cg->fgfs[fngfs + ShellPatch::drhodxx], 
-                                    cg->fgfs[fngfs + ShellPatch::drhodxy], 
-                                    cg->fgfs[fngfs + ShellPatch::drhodxz],
-                                    cg->fgfs[fngfs + ShellPatch::drhodyy], 
-                                    cg->fgfs[fngfs + ShellPatch::drhodyz], 
-                                    cg->fgfs[fngfs + ShellPatch::drhodzz],
-                                    cg->fgfs[fngfs + ShellPatch::dsigmadxx], 
-                                    cg->fgfs[fngfs + ShellPatch::dsigmadxy], 
-                                    cg->fgfs[fngfs + ShellPatch::dsigmadxz],
-                                    cg->fgfs[fngfs + ShellPatch::dsigmadyy], 
-                                    cg->fgfs[fngfs + ShellPatch::dsigmadyz], 
-                                    cg->fgfs[fngfs + ShellPatch::dsigmadzz],
-                                    cg->fgfs[fngfs + ShellPatch::dRdxx], 
-                                    cg->fgfs[fngfs + ShellPatch::dRdxy], 
-                                    cg->fgfs[fngfs + ShellPatch::dRdxz],
-                                    cg->fgfs[fngfs + ShellPatch::dRdyy], 
-                                    cg->fgfs[fngfs + ShellPatch::dRdyz], 
-                                    cg->fgfs[fngfs + ShellPatch::dRdzz],
-                                    cg->fgfs[phi0->sgfn], cg->fgfs[trK0->sgfn],
-                                    cg->fgfs[gxx0->sgfn], cg->fgfs[gxy0->sgfn], cg->fgfs[gxz0->sgfn], 
-                                    cg->fgfs[gyy0->sgfn], cg->fgfs[gyz0->sgfn], cg->fgfs[gzz0->sgfn],
-                                    cg->fgfs[Axx0->sgfn], cg->fgfs[Axy0->sgfn], cg->fgfs[Axz0->sgfn], 
-                                    cg->fgfs[Ayy0->sgfn], cg->fgfs[Ayz0->sgfn], cg->fgfs[Azz0->sgfn],
-                                    cg->fgfs[Gmx0->sgfn], cg->fgfs[Gmy0->sgfn], cg->fgfs[Gmz0->sgfn],
-                                    cg->fgfs[Lap0->sgfn], 
-                                    cg->fgfs[Sfx0->sgfn], cg->fgfs[Sfy0->sgfn], cg->fgfs[Sfz0->sgfn],
-                                    cg->fgfs[dtSfx0->sgfn], cg->fgfs[dtSfy0->sgfn], cg->fgfs[dtSfz0->sgfn],
-                                    cg->fgfs[phi_rhs->sgfn], cg->fgfs[trK_rhs->sgfn],
-                                    cg->fgfs[gxx_rhs->sgfn], cg->fgfs[gxy_rhs->sgfn], cg->fgfs[gxz_rhs->sgfn],
-                                    cg->fgfs[gyy_rhs->sgfn], cg->fgfs[gyz_rhs->sgfn], cg->fgfs[gzz_rhs->sgfn],
-                                    cg->fgfs[Axx_rhs->sgfn], cg->fgfs[Axy_rhs->sgfn], cg->fgfs[Axz_rhs->sgfn],
-                                    cg->fgfs[Ayy_rhs->sgfn], cg->fgfs[Ayz_rhs->sgfn], cg->fgfs[Azz_rhs->sgfn],
-                                    cg->fgfs[Gmx_rhs->sgfn], cg->fgfs[Gmy_rhs->sgfn], cg->fgfs[Gmz_rhs->sgfn],
-                                    cg->fgfs[Lap_rhs->sgfn], 
-                                    cg->fgfs[Sfx_rhs->sgfn], cg->fgfs[Sfy_rhs->sgfn], cg->fgfs[Sfz_rhs->sgfn],
-                                    cg->fgfs[dtSfx_rhs->sgfn], cg->fgfs[dtSfy_rhs->sgfn], cg->fgfs[dtSfz_rhs->sgfn],
-                                    cg->fgfs[rho->sgfn], cg->fgfs[Sx->sgfn], cg->fgfs[Sy->sgfn], cg->fgfs[Sz->sgfn],
-                                    cg->fgfs[Sxx->sgfn], cg->fgfs[Sxy->sgfn], cg->fgfs[Sxz->sgfn], 
-                                    cg->fgfs[Syy->sgfn], cg->fgfs[Syz->sgfn], cg->fgfs[Szz->sgfn],
-                                    cg->fgfs[Gamxxx->sgfn], cg->fgfs[Gamxxy->sgfn], cg->fgfs[Gamxxz->sgfn],
-                                    cg->fgfs[Gamxyy->sgfn], cg->fgfs[Gamxyz->sgfn], cg->fgfs[Gamxzz->sgfn],
-                                    cg->fgfs[Gamyxx->sgfn], cg->fgfs[Gamyxy->sgfn], cg->fgfs[Gamyxz->sgfn],
-                                    cg->fgfs[Gamyyy->sgfn], cg->fgfs[Gamyyz->sgfn], cg->fgfs[Gamyzz->sgfn],
-                                    cg->fgfs[Gamzxx->sgfn], cg->fgfs[Gamzxy->sgfn], cg->fgfs[Gamzxz->sgfn],
-                                    cg->fgfs[Gamzyy->sgfn], cg->fgfs[Gamzyz->sgfn], cg->fgfs[Gamzzz->sgfn],
-                                    cg->fgfs[Rxx->sgfn], cg->fgfs[Rxy->sgfn], cg->fgfs[Rxz->sgfn], 
-                                    cg->fgfs[Ryy->sgfn], cg->fgfs[Ryz->sgfn], cg->fgfs[Rzz->sgfn],
-                                    cg->fgfs[Cons_Ham->sgfn],
-                                    cg->fgfs[Cons_Px->sgfn], cg->fgfs[Cons_Py->sgfn], cg->fgfs[Cons_Pz->sgfn],
-                                    cg->fgfs[Cons_Gx->sgfn], cg->fgfs[Cons_Gy->sgfn], cg->fgfs[Cons_Gz->sgfn],
-                                    Symmetry, lev, numepsh, sPp->data->sst, pre))
-          {
-            cout << "find NaN in Shell domain: sst = " << sPp->data->sst << ", (" 
-                 << cg->bbox[0] << ":" << cg->bbox[3] << ","
-                 << cg->bbox[1] << ":" << cg->bbox[4] << "," 
-                 << cg->bbox[2] << ":" << cg->bbox[5] << ")" << endl;
-            ERROR = 1;
-          }
-
-          // rk4 substep and boundary
-          {
-            MyList<var> *varl0 = StateList, *varl = SynchList_pre, *varlrhs = RHSList; 
-            // we do not check the correspondence here
-            
-            while (varl0)
-            {
-              // sommerfeld indeed for outter boudary while fix BD for inner boundary
-              f_sommerfeld_routbam_ss(cg->shape, cg->X[0], cg->X[1], cg->X[2],
-                                      sPp->data->bbox[0], sPp->data->bbox[1], sPp->data->bbox[2], 
-                                      sPp->data->bbox[3], sPp->data->bbox[4], sPp->data->bbox[5],
-                                      cg->fgfs[varlrhs->data->sgfn],
-                                      cg->fgfs[varl0->data->sgfn], 
-                                      varl0->data->propspeed, varl0->data->SoA,
-                                      Symmetry);
-
-              f_icn_rout(cg->shape, dT_lev, 
-                         cg->fgfs[varl0->data->sgfn], 
-                         cg->fgfs[varl->data->sgfn], 
-                         cg->fgfs[varlrhs->data->sgfn],
-                         iter_count);
-
-              varl0 = varl0->next;
-              varl = varl->next;
-              varlrhs = varlrhs->next;
-            }
-          }
-          f_lowerboundset(cg->shape, cg->fgfs[phi->sgfn], chitiny);
-        }
-        if (BP == sPp->data->ble)
-          break;
-        BP = BP->next;
-      }
-      sPp = sPp->next;
-    }
-#if 0 
-// check rhs    
-  {
-         SH->Dump_Data(RHSList,0,PhysTime,dT_lev);
-         if(myrank == 0)
-	 {
-            cout<<"check rhs"<<endl;
-	    MPI_Abort(MPI_COMM_WORLD,1);
-	 }
-  }
-#endif
-  }
-  // check error information
-  {
-    int erh = ERROR;
-    MPI_Allreduce(&erh, &ERROR, 1, MPI_INT, MPI_SUM, MPI_COMM_WORLD);
-  }
-  if (ERROR)
-  {
-    SH->Dump_Data(StateList, 0, PhysTime, dT_lev);
-    if (myrank == 0)
-    {
-      if (ErrorMonitor->outfile)
-        ErrorMonitor->outfile << "find NaN in state variables on Shell Patches at t = " << PhysTime << endl;
-      MPI_Abort(MPI_COMM_WORLD, 1);
-    }
-  }
-#endif
-
-  Parallel::Sync(GH->PatL[lev], SynchList_pre, Symmetry);
-
-#ifdef WithShell
-  if (lev == 0)
-  {
-    clock_t prev_clock, curr_clock;
-    if (myrank == 0)
-      curr_clock = clock();
-    SH->Synch(SynchList_pre, Symmetry);
-    if (myrank == 0)
-    {
-      prev_clock = curr_clock;
-      curr_clock = clock();
-      cout << "Shell stuff synchronization used " 
-           << (double)(curr_clock - prev_clock) / ((double)CLOCKS_PER_SEC) 
-           << " seconds!" << endl;
-    }
-  }
-#endif
-
-  // for black hole position
-  if (BH_num > 0 && lev == GH->levels - 1)
-  {
-    compute_Porg_rhs(Porg0, Porg_rhs, Sfx0, Sfy0, Sfz0, lev);
-    for (int ithBH = 0; ithBH < BH_num; ithBH++)
-    {
-      f_icn_scalar(dT_lev, Porg0[ithBH][0], Porg[ithBH][0], Porg_rhs[ithBH][0], iter_count);
-      f_icn_scalar(dT_lev, Porg0[ithBH][1], Porg[ithBH][1], Porg_rhs[ithBH][1], iter_count);
-      f_icn_scalar(dT_lev, Porg0[ithBH][2], Porg[ithBH][2], Porg_rhs[ithBH][2], iter_count);
-      if (Symmetry > 0)
-        Porg[ithBH][2] = fabs(Porg[ithBH][2]);
-      if (Symmetry == 2)
-      {
-        Porg[ithBH][0] = fabs(Porg[ithBH][0]);
-        Porg[ithBH][1] = fabs(Porg[ithBH][1]);
-      }
-      if (!finite(Porg[ithBH][0]) || !finite(Porg[ithBH][1]) || !finite(Porg[ithBH][2]))
-      {
-        if (ErrorMonitor->outfile)
-          ErrorMonitor->outfile << "predictor step finds NaN for BH's position from ("
-                                << Porg0[ithBH][0] << "," << Porg0[ithBH][1] << "," << Porg0[ithBH][2] 
-                                << ")" << endl;
-
-        MyList<var> *DG_List = new MyList<var>(Sfx0);
-        DG_List->insert(Sfx0);
-        DG_List->insert(Sfy0);
-        DG_List->insert(Sfz0);
-        Parallel::Dump_Data(GH->PatL[lev], DG_List, 0, PhysTime, dT_lev);
-        DG_List->clearList();
-      }
-    }
-  }
-  // data analysis part
-  // Warning NOTE: the variables1 are used as temp storege room
-  if (lev == a_lev)
-  {
-    AnalysisStuff(lev, dT_lev);
-  }
-  // corrector
-  for (iter_count = 1; iter_count < 3; iter_count++)
-  {
-    Pp = GH->PatL[lev];
-    while (Pp)
-    {
-      MyList<Block> *BP = Pp->data->blb;
-      while (BP)
-      {
-        Block *cg = BP->data;
-        if (myrank == cg->rank)
-        {
-#if (AGM == 0)
-          f_enforce_ga(cg->shape,
-                       cg->fgfs[gxx->sgfn], cg->fgfs[gxy->sgfn], cg->fgfs[gxz->sgfn], 
-                       cg->fgfs[gyy->sgfn], cg->fgfs[gyz->sgfn], cg->fgfs[gzz->sgfn],
-                       cg->fgfs[Axx->sgfn], cg->fgfs[Axy->sgfn], cg->fgfs[Axz->sgfn], 
-                       cg->fgfs[Ayy->sgfn], cg->fgfs[Ayz->sgfn], cg->fgfs[Azz->sgfn]);
-#elif (AGM == 1)
-          if (iter_count == 3)
-            f_enforce_ga(cg->shape,
-                         cg->fgfs[gxx->sgfn], cg->fgfs[gxy->sgfn], cg->fgfs[gxz->sgfn], 
-                         cg->fgfs[gyy->sgfn], cg->fgfs[gyz->sgfn], cg->fgfs[gzz->sgfn],
-                         cg->fgfs[Axx->sgfn], cg->fgfs[Axy->sgfn], cg->fgfs[Axz->sgfn], 
-                         cg->fgfs[Ayy->sgfn], cg->fgfs[Ayz->sgfn], cg->fgfs[Azz->sgfn]);
-#endif
-
-          if (f_compute_rhs_bssn(cg->shape, TRK4, cg->X[0], cg->X[1], cg->X[2],
-                                 cg->fgfs[phi->sgfn], cg->fgfs[trK->sgfn],
-                                 cg->fgfs[gxx->sgfn], cg->fgfs[gxy->sgfn], cg->fgfs[gxz->sgfn], 
-                                 cg->fgfs[gyy->sgfn], cg->fgfs[gyz->sgfn], cg->fgfs[gzz->sgfn],
-                                 cg->fgfs[Axx->sgfn], cg->fgfs[Axy->sgfn], cg->fgfs[Axz->sgfn], 
-                                 cg->fgfs[Ayy->sgfn], cg->fgfs[Ayz->sgfn], cg->fgfs[Azz->sgfn],
-                                 cg->fgfs[Gmx->sgfn], cg->fgfs[Gmy->sgfn], cg->fgfs[Gmz->sgfn],
-                                 cg->fgfs[Lap->sgfn], 
-                                 cg->fgfs[Sfx->sgfn], cg->fgfs[Sfy->sgfn], cg->fgfs[Sfz->sgfn],
-                                 cg->fgfs[dtSfx->sgfn], cg->fgfs[dtSfy->sgfn], cg->fgfs[dtSfz->sgfn],
-                                 cg->fgfs[phi1->sgfn], cg->fgfs[trK1->sgfn],
-                                 cg->fgfs[gxx1->sgfn], cg->fgfs[gxy1->sgfn], cg->fgfs[gxz1->sgfn],
-                                 cg->fgfs[gyy1->sgfn], cg->fgfs[gyz1->sgfn], cg->fgfs[gzz1->sgfn],
-                                 cg->fgfs[Axx1->sgfn], cg->fgfs[Axy1->sgfn], cg->fgfs[Axz1->sgfn],
-                                 cg->fgfs[Ayy1->sgfn], cg->fgfs[Ayz1->sgfn], cg->fgfs[Azz1->sgfn],
-                                 cg->fgfs[Gmx1->sgfn], cg->fgfs[Gmy1->sgfn], cg->fgfs[Gmz1->sgfn],
-                                 cg->fgfs[Lap1->sgfn], 
-                                 cg->fgfs[Sfx1->sgfn], cg->fgfs[Sfy1->sgfn], cg->fgfs[Sfz1->sgfn],
-                                 cg->fgfs[dtSfx1->sgfn], cg->fgfs[dtSfy1->sgfn], cg->fgfs[dtSfz1->sgfn],
-                                 cg->fgfs[rho->sgfn], cg->fgfs[Sx->sgfn], cg->fgfs[Sy->sgfn], cg->fgfs[Sz->sgfn],
-                                 cg->fgfs[Sxx->sgfn], cg->fgfs[Sxy->sgfn], cg->fgfs[Sxz->sgfn], 
-                                 cg->fgfs[Syy->sgfn], cg->fgfs[Syz->sgfn], cg->fgfs[Szz->sgfn],
-                                 cg->fgfs[Gamxxx->sgfn], cg->fgfs[Gamxxy->sgfn], cg->fgfs[Gamxxz->sgfn],
-                                 cg->fgfs[Gamxyy->sgfn], cg->fgfs[Gamxyz->sgfn], cg->fgfs[Gamxzz->sgfn],
-                                 cg->fgfs[Gamyxx->sgfn], cg->fgfs[Gamyxy->sgfn], cg->fgfs[Gamyxz->sgfn],
-                                 cg->fgfs[Gamyyy->sgfn], cg->fgfs[Gamyyz->sgfn], cg->fgfs[Gamyzz->sgfn],
-                                 cg->fgfs[Gamzxx->sgfn], cg->fgfs[Gamzxy->sgfn], cg->fgfs[Gamzxz->sgfn],
-                                 cg->fgfs[Gamzyy->sgfn], cg->fgfs[Gamzyz->sgfn], cg->fgfs[Gamzzz->sgfn],
-                                 cg->fgfs[Rxx->sgfn], cg->fgfs[Rxy->sgfn], cg->fgfs[Rxz->sgfn], 
-                                 cg->fgfs[Ryy->sgfn], cg->fgfs[Ryz->sgfn], cg->fgfs[Rzz->sgfn],
-                                 cg->fgfs[Cons_Ham->sgfn],
-                                 cg->fgfs[Cons_Px->sgfn], cg->fgfs[Cons_Py->sgfn], cg->fgfs[Cons_Pz->sgfn],
-                                 cg->fgfs[Cons_Gx->sgfn], cg->fgfs[Cons_Gy->sgfn], cg->fgfs[Cons_Gz->sgfn],
-                                 Symmetry, lev, ndeps, cor))
-          {
-            cout << "find NaN in domain: (" 
-                 << cg->bbox[0] << ":" << cg->bbox[3] << "," 
-                 << cg->bbox[1] << ":" << cg->bbox[4] << ","
-                 << cg->bbox[2] << ":" << cg->bbox[5] << ")" << endl;
-            ERROR = 1;
-          }
-          // rk4 substep and boundary
-          {
-            MyList<var> *varl0 = StateList, *varl = SynchList_pre, *varl1 = SynchList_cor, *varlrhs = RHSList; 
-            // we do not check the correspondence here
-            
-            while (varl0)
-            {
-#ifndef WithShell
-              if (lev == 0) // sommerfeld indeed
-                f_sommerfeld_routbam(cg->shape, cg->X[0], cg->X[1], cg->X[2],
-                                     Pp->data->bbox[0], Pp->data->bbox[1], Pp->data->bbox[2], 
-                                     Pp->data->bbox[3], Pp->data->bbox[4], Pp->data->bbox[5],
-                                     cg->fgfs[varl1->data->sgfn],
-                                     cg->fgfs[varl->data->sgfn], 
-                                     varl0->data->propspeed, varl0->data->SoA,
-                                     Symmetry);
-#endif
-              f_icn_rout(cg->shape, dT_lev, 
-                         cg->fgfs[varl0->data->sgfn], 
-                         cg->fgfs[varl1->data->sgfn], 
-                         cg->fgfs[varlrhs->data->sgfn],
-                         iter_count);
-
-#ifndef WithShell
-              if (lev > 0) // fix BD point
-#endif
-                f_sommerfeld_rout(cg->shape, cg->X[0], cg->X[1], cg->X[2],
-                                  Pp->data->bbox[0], Pp->data->bbox[1], Pp->data->bbox[2], 
-                                  Pp->data->bbox[3], Pp->data->bbox[4], Pp->data->bbox[5],
-                                  dT_lev, 
-                                  cg->fgfs[phi0->sgfn],
-                                  cg->fgfs[Lap0->sgfn], 
-                                  cg->fgfs[varl0->data->sgfn], cg->fgfs[varl1->data->sgfn], 
-                                  varl0->data->SoA,
-                                  Symmetry, cor);
-
-              varl0 = varl0->next;
-              varl = varl->next;
-              varl1 = varl1->next;
-              varlrhs = varlrhs->next;
-            }
-          }
-          f_lowerboundset(cg->shape, cg->fgfs[phi1->sgfn], chitiny);
-        }
-        if (BP == Pp->data->ble)
-          break;
-        BP = BP->next;
-      }
-      Pp = Pp->next;
-    }
-
-    // check error information
-    {
-      int erh = ERROR;
-      MPI_Allreduce(&erh, &ERROR, 1, MPI_INT, MPI_SUM, MPI_COMM_WORLD);
-    }
-    if (ERROR)
-    {
-      Parallel::Dump_Data(GH->PatL[lev], SynchList_pre, 0, PhysTime, dT_lev);
-      if (myrank == 0)
-      {
-        if (ErrorMonitor->outfile)
-          ErrorMonitor->outfile << "find NaN in RK4 substep#" << iter_count 
-                                << " variables at t = " << PhysTime 
-                                << ", lev = " << lev << endl;
-        MPI_Abort(MPI_COMM_WORLD, 1);
-      }
-    }
-
-#ifdef WithShell
-    // evolve Shell Patches
-    if (lev == 0)
-    {
-      sPp = SH->PatL;
-      while (sPp)
-      {
-        MyList<Block> *BP = sPp->data->blb;
-        int fngfs = sPp->data->fngfs;
-        while (BP)
-        {
-          Block *cg = BP->data;
-          if (myrank == cg->rank)
-          {
-#if (AGM == 0)
-            f_enforce_ga(cg->shape,
-                         cg->fgfs[gxx->sgfn], cg->fgfs[gxy->sgfn], cg->fgfs[gxz->sgfn], 
-                         cg->fgfs[gyy->sgfn], cg->fgfs[gyz->sgfn], cg->fgfs[gzz->sgfn],
-                         cg->fgfs[Axx->sgfn], cg->fgfs[Axy->sgfn], cg->fgfs[Axz->sgfn], 
-                         cg->fgfs[Ayy->sgfn], cg->fgfs[Ayz->sgfn], cg->fgfs[Azz->sgfn]);
-#elif (AGM == 1)
-            if (iter_count == 3)
-              f_enforce_ga(cg->shape,
-                           cg->fgfs[gxx->sgfn], cg->fgfs[gxy->sgfn], cg->fgfs[gxz->sgfn], 
-                           cg->fgfs[gyy->sgfn], cg->fgfs[gyz->sgfn], cg->fgfs[gzz->sgfn],
-                           cg->fgfs[Axx->sgfn], cg->fgfs[Axy->sgfn], cg->fgfs[Axz->sgfn], 
-                           cg->fgfs[Ayy->sgfn], cg->fgfs[Ayz->sgfn], cg->fgfs[Azz->sgfn]);
-#endif
-
-            if (f_compute_rhs_bssn_ss(cg->shape, TRK4, cg->X[0], cg->X[1], cg->X[2],
-                                      cg->fgfs[fngfs + ShellPatch::gx], 
-                                      cg->fgfs[fngfs + ShellPatch::gy], 
-                                      cg->fgfs[fngfs + ShellPatch::gz],
-                                      cg->fgfs[fngfs + ShellPatch::drhodx], 
-                                      cg->fgfs[fngfs + ShellPatch::drhody], 
-                                      cg->fgfs[fngfs + ShellPatch::drhodz],
-                                      cg->fgfs[fngfs + ShellPatch::dsigmadx], 
-                                      cg->fgfs[fngfs + ShellPatch::dsigmady], 
-                                      cg->fgfs[fngfs + ShellPatch::dsigmadz],
-                                      cg->fgfs[fngfs + ShellPatch::dRdx], 
-                                      cg->fgfs[fngfs + ShellPatch::dRdy], 
-                                      cg->fgfs[fngfs + ShellPatch::dRdz],
-                                      cg->fgfs[fngfs + ShellPatch::drhodxx], 
-                                      cg->fgfs[fngfs + ShellPatch::drhodxy], 
-                                      cg->fgfs[fngfs + ShellPatch::drhodxz],
-                                      cg->fgfs[fngfs + ShellPatch::drhodyy], 
-                                      cg->fgfs[fngfs + ShellPatch::drhodyz], 
-                                      cg->fgfs[fngfs + ShellPatch::drhodzz],
-                                      cg->fgfs[fngfs + ShellPatch::dsigmadxx], 
-                                      cg->fgfs[fngfs + ShellPatch::dsigmadxy], 
-                                      cg->fgfs[fngfs + ShellPatch::dsigmadxz],
-                                      cg->fgfs[fngfs + ShellPatch::dsigmadyy], 
-                                      cg->fgfs[fngfs + ShellPatch::dsigmadyz], 
-                                      cg->fgfs[fngfs + ShellPatch::dsigmadzz],
-                                      cg->fgfs[fngfs + ShellPatch::dRdxx], 
-                                      cg->fgfs[fngfs + ShellPatch::dRdxy], 
-                                      cg->fgfs[fngfs + ShellPatch::dRdxz],
-                                      cg->fgfs[fngfs + ShellPatch::dRdyy], 
-                                      cg->fgfs[fngfs + ShellPatch::dRdyz], 
-                                      cg->fgfs[fngfs + ShellPatch::dRdzz],
-                                      cg->fgfs[phi->sgfn], cg->fgfs[trK->sgfn],
-                                      cg->fgfs[gxx->sgfn], cg->fgfs[gxy->sgfn], cg->fgfs[gxz->sgfn], 
-                                      cg->fgfs[gyy->sgfn], cg->fgfs[gyz->sgfn], cg->fgfs[gzz->sgfn],
-                                      cg->fgfs[Axx->sgfn], cg->fgfs[Axy->sgfn], cg->fgfs[Axz->sgfn], 
-                                      cg->fgfs[Ayy->sgfn], cg->fgfs[Ayz->sgfn], cg->fgfs[Azz->sgfn],
-                                      cg->fgfs[Gmx->sgfn], cg->fgfs[Gmy->sgfn], cg->fgfs[Gmz->sgfn],
-                                      cg->fgfs[Lap->sgfn], 
-                                      cg->fgfs[Sfx->sgfn], cg->fgfs[Sfy->sgfn], cg->fgfs[Sfz->sgfn],
-                                      cg->fgfs[dtSfx->sgfn], cg->fgfs[dtSfy->sgfn], cg->fgfs[dtSfz->sgfn],
-                                      cg->fgfs[phi1->sgfn], cg->fgfs[trK1->sgfn],
-                                      cg->fgfs[gxx1->sgfn], cg->fgfs[gxy1->sgfn], cg->fgfs[gxz1->sgfn],
-                                      cg->fgfs[gyy1->sgfn], cg->fgfs[gyz1->sgfn], cg->fgfs[gzz1->sgfn],
-                                      cg->fgfs[Axx1->sgfn], cg->fgfs[Axy1->sgfn], cg->fgfs[Axz1->sgfn],
-                                      cg->fgfs[Ayy1->sgfn], cg->fgfs[Ayz1->sgfn], cg->fgfs[Azz1->sgfn],
-                                      cg->fgfs[Gmx1->sgfn], cg->fgfs[Gmy1->sgfn], cg->fgfs[Gmz1->sgfn],
-                                      cg->fgfs[Lap1->sgfn], 
-                                      cg->fgfs[Sfx1->sgfn], cg->fgfs[Sfy1->sgfn], cg->fgfs[Sfz1->sgfn],
-                                      cg->fgfs[dtSfx1->sgfn], cg->fgfs[dtSfy1->sgfn], cg->fgfs[dtSfz1->sgfn],
-                                      cg->fgfs[rho->sgfn], 
-                                      cg->fgfs[Sx->sgfn], cg->fgfs[Sy->sgfn], cg->fgfs[Sz->sgfn],
-                                      cg->fgfs[Sxx->sgfn], cg->fgfs[Sxy->sgfn], cg->fgfs[Sxz->sgfn], 
-                                      cg->fgfs[Syy->sgfn], cg->fgfs[Syz->sgfn], cg->fgfs[Szz->sgfn],
-                                      cg->fgfs[Gamxxx->sgfn], cg->fgfs[Gamxxy->sgfn], cg->fgfs[Gamxxz->sgfn],
-                                      cg->fgfs[Gamxyy->sgfn], cg->fgfs[Gamxyz->sgfn], cg->fgfs[Gamxzz->sgfn],
-                                      cg->fgfs[Gamyxx->sgfn], cg->fgfs[Gamyxy->sgfn], cg->fgfs[Gamyxz->sgfn],
-                                      cg->fgfs[Gamyyy->sgfn], cg->fgfs[Gamyyz->sgfn], cg->fgfs[Gamyzz->sgfn],
-                                      cg->fgfs[Gamzxx->sgfn], cg->fgfs[Gamzxy->sgfn], cg->fgfs[Gamzxz->sgfn],
-                                      cg->fgfs[Gamzyy->sgfn], cg->fgfs[Gamzyz->sgfn], cg->fgfs[Gamzzz->sgfn],
-                                      cg->fgfs[Rxx->sgfn], cg->fgfs[Rxy->sgfn], cg->fgfs[Rxz->sgfn], 
-                                      cg->fgfs[Ryy->sgfn], cg->fgfs[Ryz->sgfn], cg->fgfs[Rzz->sgfn],
-                                      cg->fgfs[Cons_Ham->sgfn],
-                                      cg->fgfs[Cons_Px->sgfn], cg->fgfs[Cons_Py->sgfn], cg->fgfs[Cons_Pz->sgfn],
-                                      cg->fgfs[Cons_Gx->sgfn], cg->fgfs[Cons_Gy->sgfn], cg->fgfs[Cons_Gz->sgfn],
-                                      Symmetry, lev, numepsh, sPp->data->sst, cor))
-            {
-              cout << "find NaN in Shell domain: sst = " << sPp->data->sst << ", (" 
-                   << cg->bbox[0] << ":" << cg->bbox[3] << ","
-                   << cg->bbox[1] << ":" << cg->bbox[4] << "," 
-                   << cg->bbox[2] << ":" << cg->bbox[5] << ")" << endl;
-              ERROR = 1;
-            }
-            // rk4 substep and boundary
-            {
-              MyList<var> *varl0 = StateList, *varl = SynchList_pre, *varl1 = SynchList_cor, *varlrhs = RHSList; 
-              // we do not check the correspondence here
-              
-              while (varl0)
-              {
-                // sommerfeld indeed for outter boudary while fix BD for inner boundary
-                f_sommerfeld_routbam_ss(cg->shape, cg->X[0], cg->X[1], cg->X[2],
-                                        sPp->data->bbox[0], sPp->data->bbox[1], sPp->data->bbox[2], 
-                                        sPp->data->bbox[3], sPp->data->bbox[4], sPp->data->bbox[5],
-                                        cg->fgfs[varl1->data->sgfn],
-                                        cg->fgfs[varl->data->sgfn], 
-                                        varl0->data->propspeed, varl0->data->SoA,
-                                        Symmetry);
-
-                f_rungekutta4_rout(cg->shape, dT_lev, 
-                                   cg->fgfs[varl0->data->sgfn], 
-                                   cg->fgfs[varl1->data->sgfn], 
-                                   cg->fgfs[varlrhs->data->sgfn],
-                                   iter_count);
-
-                varl0 = varl0->next;
-                varl = varl->next;
-                varl1 = varl1->next;
-                varlrhs = varlrhs->next;
-              }
-            }
-            f_lowerboundset(cg->shape, cg->fgfs[phi1->sgfn], chitiny);
-          }
-          if (BP == sPp->data->ble)
-            break;
-          BP = BP->next;
-        }
-        sPp = sPp->next;
-      }
-    }
-    // check error information
-    {
-      int erh = ERROR;
-      MPI_Allreduce(&erh, &ERROR, 1, MPI_INT, MPI_SUM, MPI_COMM_WORLD);
-    }
-    if (ERROR)
-    {
-      SH->Dump_Data(SynchList_pre, 0, PhysTime, dT_lev);
-      if (myrank == 0)
-      {
-        if (ErrorMonitor->outfile)
-          ErrorMonitor->outfile << "find NaN on Shell Patches in RK4 substep#" << iter_count 
-                                << " variables at t = " << PhysTime << endl;
-        MPI_Abort(MPI_COMM_WORLD, 1);
-      }
-    }
-#endif
-
-    Parallel::Sync(GH->PatL[lev], SynchList_cor, Symmetry);
-
-#ifdef WithShell
-    if (lev == 0)
-    {
-      clock_t prev_clock, curr_clock;
-      if (myrank == 0)
-        curr_clock = clock();
-      SH->Synch(SynchList_cor, Symmetry);
-      if (myrank == 0)
-      {
-        prev_clock = curr_clock;
-        curr_clock = clock();
-        cout << "Shell stuff synchronization used " 
-             << (double)(curr_clock - prev_clock) / ((double)CLOCKS_PER_SEC) 
-             << " seconds!" << endl;
-      }
-    }
-#endif
-    // for black hole position
-    if (BH_num > 0 && lev == GH->levels - 1)
-    {
-      compute_Porg_rhs(Porg, Porg1, Sfx, Sfy, Sfz, lev);
-      for (int ithBH = 0; ithBH < BH_num; ithBH++)
-      {
-        f_icn_scalar(dT_lev, Porg0[ithBH][0], Porg1[ithBH][0], Porg_rhs[ithBH][0], iter_count);
-        f_icn_scalar(dT_lev, Porg0[ithBH][1], Porg1[ithBH][1], Porg_rhs[ithBH][1], iter_count);
-        f_icn_scalar(dT_lev, Porg0[ithBH][2], Porg1[ithBH][2], Porg_rhs[ithBH][2], iter_count);
-        if (Symmetry > 0)
-          Porg1[ithBH][2] = fabs(Porg1[ithBH][2]);
-        if (Symmetry == 2)
-        {
-          Porg1[ithBH][0] = fabs(Porg1[ithBH][0]);
-          Porg1[ithBH][1] = fabs(Porg1[ithBH][1]);
-        }
-        if (!finite(Porg1[ithBH][0]) || !finite(Porg1[ithBH][1]) || !finite(Porg1[ithBH][2]))
-        {
-          if (ErrorMonitor->outfile)
-            ErrorMonitor->outfile << iter_count << " corrector step finds NaN for BH's position from ("
-                                  << Porg[ithBH][0] << "," << Porg[ithBH][1] << "," << Porg[ithBH][2] 
-                                  << ")" << endl;
-
-          MyList<var> *DG_List = new MyList<var>(Sfx0);
-          DG_List->insert(Sfx0);
-          DG_List->insert(Sfy0);
-          DG_List->insert(Sfz0);
-          Parallel::Dump_Data(GH->PatL[lev], DG_List, 0, PhysTime, dT_lev);
-          DG_List->clearList();
-        }
-      }
-    }
-    // swap time level
-    if (iter_count < 3)
-    {
-      Pp = GH->PatL[lev];
-      while (Pp)
-      {
-        MyList<Block> *BP = Pp->data->blb;
-        while (BP)
-        {
-          Block *cg = BP->data;
-          cg->swapList(SynchList_pre, SynchList_cor, myrank);
-          if (BP == Pp->data->ble)
-            break;
-          BP = BP->next;
-        }
-        Pp = Pp->next;
-      }
-#ifdef WithShell
-      if (lev == 0)
-      {
-        sPp = SH->PatL;
-        while (sPp)
-        {
-          MyList<Block> *BP = sPp->data->blb;
-          while (BP)
-          {
-            Block *cg = BP->data;
-            cg->swapList(SynchList_pre, SynchList_cor, myrank);
-            if (BP == sPp->data->ble)
-              break;
-            BP = BP->next;
-          }
-          sPp = sPp->next;
-        }
-      }
-#endif
-      // for black hole position
-      if (BH_num > 0 && lev == GH->levels - 1)
-      {
-        for (int ithBH = 0; ithBH < BH_num; ithBH++)
-        {
-          Porg[ithBH][0] = Porg1[ithBH][0];
-          Porg[ithBH][1] = Porg1[ithBH][1];
-          Porg[ithBH][2] = Porg1[ithBH][2];
-        }
-      }
-    }
-  }
-#if (RPS == 0)
-  // mesh refinement boundary part
-  RestrictProlong(lev, YN, BB);
-
-#ifdef WithShell
-  if (lev == 0)
-  {
-    clock_t prev_clock, curr_clock;
-    if (myrank == 0)
-      curr_clock = clock();
-    SH->CS_Inter(SynchList_cor, Symmetry);
-    if (myrank == 0)
-    {
-      prev_clock = curr_clock;
-      curr_clock = clock();
-      cout << "CS_Inter used " << (double)(curr_clock - prev_clock) / ((double)CLOCKS_PER_SEC) 
-           << " seconds!" << endl;
-    }
-  }
-#endif
-
-#endif
-  // note the data structure before update
-  // SynchList_cor 1   -----------
-  //
-  // StateList     0   -----------
-  //
-  // OldStateList  old -----------
-  // update
-  Pp = GH->PatL[lev];
-  while (Pp)
-  {
-    MyList<Block> *BP = Pp->data->blb;
-    while (BP)
-    {
-      Block *cg = BP->data;
-      cg->swapList(StateList, SynchList_cor, myrank);
-      cg->swapList(OldStateList, SynchList_cor, myrank);
-      if (BP == Pp->data->ble)
-        break;
-      BP = BP->next;
-    }
-    Pp = Pp->next;
-  }
-#ifdef WithShell
-  if (lev == 0)
-  {
-    sPp = SH->PatL;
-    while (sPp)
-    {
-      MyList<Block> *BP = sPp->data->blb;
-      while (BP)
-      {
-        Block *cg = BP->data;
-        cg->swapList(StateList, SynchList_cor, myrank);
-        cg->swapList(OldStateList, SynchList_cor, myrank);
-        if (BP == sPp->data->ble)
-          break;
-        BP = BP->next;
-      }
-      sPp = sPp->next;
-    }
-#if 0
-// check StateList   
-  {
-         SH->Dump_Data(StateList,0,PhysTime,dT_lev);
-         if(myrank == 0)
-	 {
-            cout<<"check StateList"<<endl;
-	    MPI_Abort(MPI_COMM_WORLD,1);
-	 }
-  }
-#endif
-  }
-#endif
-  // for black hole position
-  if (BH_num > 0 && lev == GH->levels - 1)
-  {
-    for (int ithBH = 0; ithBH < BH_num; ithBH++)
-    {
-      Porg0[ithBH][0] = Porg1[ithBH][0];
-      Porg0[ithBH][1] = Porg1[ithBH][1];
-      Porg0[ithBH][2] = Porg1[ithBH][2];
-    }
-  }
-}
-#endif
 
 //================================================================================================
 
@@ -4293,906 +2434,7 @@ void bssn_class::Step(int lev, int YN)
 
 //================================================================================================
 
-#elif (PSTR == 1)
-void bssn_class::Step(int lev, int YN)
-{
-  //   misc::tillherecheck(GH->Commlev[lev],GH->start_rank[lev],"start Step");
 
-  setpbh(BH_num, Porg0, Mass, BH_num_input);
-
-  double dT_lev = dT * pow(0.5, Mymax(lev, trfls));
-
-// new code 2013-2-15, zjcao
-#if (MAPBH == 1)
-  // for black hole position
-  if (BH_num > 0 && lev == GH->levels - 1)
-  {
-    compute_Porg_rhs(Porg0, Porg_rhs, Sfx0, Sfy0, Sfz0, lev);
-    for (int ithBH = 0; ithBH < BH_num; ithBH++)
-    {
-      for (int ith = 0; ith < 3; ith++)
-        Porg1[ithBH][ith] = Porg0[ithBH][ith] + Porg_rhs[ithBH][ith] * dT_lev;
-      if (Symmetry > 0)
-        Porg1[ithBH][2] = fabs(Porg1[ithBH][2]);
-      if (Symmetry == 2)
-      {
-        Porg1[ithBH][0] = fabs(Porg1[ithBH][0]);
-        Porg1[ithBH][1] = fabs(Porg1[ithBH][1]);
-      }
-      if (!finite(Porg1[ithBH][0]) || !finite(Porg1[ithBH][1]) || !finite(Porg1[ithBH][2]))
-      {
-        if (ErrorMonitor->outfile)
-          ErrorMonitor->outfile << "predictor step finds NaN for BH's position from ("
-                                << Porg0[ithBH][0] << "," << Porg0[ithBH][1] << "," << Porg0[ithBH][2] 
-                                << ")" << endl;
-
-        MyList<var> *DG_List = new MyList<var>(Sfx0);
-        DG_List->insert(Sfx0);
-        DG_List->insert(Sfy0);
-        DG_List->insert(Sfz0);
-        Parallel::Dump_Data(GH->PatL[lev], DG_List, 0, PhysTime, dT_lev);
-        DG_List->clearList();
-      }
-    }
-  }
-#endif //(MAPBH == 1)
-
-  //   misc::tillherecheck(GH->Commlev[lev],GH->start_rank[lev],"before Predictor");
-
-#ifdef With_AHF
-  AH_Step_Find(lev, dT_lev);
-#endif
-  bool BB = fgt(PhysTime, StartTime, dT_lev / 2);
-  double ndeps = numepss;
-  if (lev < GH->movls)
-    ndeps = numepsb;
-  double TRK4 = PhysTime;
-  int iter_count = 0; // count RK4 substeps
-  int pre = 0, cor = 1;
-  int ERROR = 0;
-
-  MyList<ss_patch> *sPp;
-  // Predictor
-  MyList<Patch> *Pp = GH->PatL[lev];
-  while (Pp)
-  {
-    MyList<Block> *BP = Pp->data->blb;
-    while (BP)
-    {
-      Block *cg = BP->data;
-      if (myrank == cg->rank)
-      {
-#if (AGM == 0)
-        f_enforce_ga(cg->shape,
-                     cg->fgfs[gxx0->sgfn], cg->fgfs[gxy0->sgfn], cg->fgfs[gxz0->sgfn], 
-                     cg->fgfs[gyy0->sgfn], cg->fgfs[gyz0->sgfn], cg->fgfs[gzz0->sgfn],
-                     cg->fgfs[Axx0->sgfn], cg->fgfs[Axy0->sgfn], cg->fgfs[Axz0->sgfn], 
-                     cg->fgfs[Ayy0->sgfn], cg->fgfs[Ayz0->sgfn], cg->fgfs[Azz0->sgfn]);
-#endif
-
-        if (f_compute_rhs_bssn(cg->shape, TRK4, cg->X[0], cg->X[1], cg->X[2],
-                               cg->fgfs[phi0->sgfn], cg->fgfs[trK0->sgfn],
-                               cg->fgfs[gxx0->sgfn], cg->fgfs[gxy0->sgfn], cg->fgfs[gxz0->sgfn], 
-                               cg->fgfs[gyy0->sgfn], cg->fgfs[gyz0->sgfn], cg->fgfs[gzz0->sgfn],
-                               cg->fgfs[Axx0->sgfn], cg->fgfs[Axy0->sgfn], cg->fgfs[Axz0->sgfn], 
-                               cg->fgfs[Ayy0->sgfn], cg->fgfs[Ayz0->sgfn], cg->fgfs[Azz0->sgfn],
-                               cg->fgfs[Gmx0->sgfn], cg->fgfs[Gmy0->sgfn], cg->fgfs[Gmz0->sgfn],
-                               cg->fgfs[Lap0->sgfn], 
-                               cg->fgfs[Sfx0->sgfn], cg->fgfs[Sfy0->sgfn], cg->fgfs[Sfz0->sgfn],
-                               cg->fgfs[dtSfx0->sgfn], cg->fgfs[dtSfy0->sgfn], cg->fgfs[dtSfz0->sgfn],
-                               cg->fgfs[phi_rhs->sgfn], cg->fgfs[trK_rhs->sgfn],
-                               cg->fgfs[gxx_rhs->sgfn], cg->fgfs[gxy_rhs->sgfn], cg->fgfs[gxz_rhs->sgfn],
-                               cg->fgfs[gyy_rhs->sgfn], cg->fgfs[gyz_rhs->sgfn], cg->fgfs[gzz_rhs->sgfn],
-                               cg->fgfs[Axx_rhs->sgfn], cg->fgfs[Axy_rhs->sgfn], cg->fgfs[Axz_rhs->sgfn],
-                               cg->fgfs[Ayy_rhs->sgfn], cg->fgfs[Ayz_rhs->sgfn], cg->fgfs[Azz_rhs->sgfn],
-                               cg->fgfs[Gmx_rhs->sgfn], cg->fgfs[Gmy_rhs->sgfn], cg->fgfs[Gmz_rhs->sgfn],
-                               cg->fgfs[Lap_rhs->sgfn], 
-                               cg->fgfs[Sfx_rhs->sgfn], cg->fgfs[Sfy_rhs->sgfn], cg->fgfs[Sfz_rhs->sgfn],
-                               cg->fgfs[dtSfx_rhs->sgfn], cg->fgfs[dtSfy_rhs->sgfn], cg->fgfs[dtSfz_rhs->sgfn],
-                               cg->fgfs[rho->sgfn], cg->fgfs[Sx->sgfn], cg->fgfs[Sy->sgfn], cg->fgfs[Sz->sgfn],
-                               cg->fgfs[Sxx->sgfn], cg->fgfs[Sxy->sgfn], cg->fgfs[Sxz->sgfn], 
-                               cg->fgfs[Syy->sgfn], cg->fgfs[Syz->sgfn], cg->fgfs[Szz->sgfn],
-                               cg->fgfs[Gamxxx->sgfn], cg->fgfs[Gamxxy->sgfn], cg->fgfs[Gamxxz->sgfn],
-                               cg->fgfs[Gamxyy->sgfn], cg->fgfs[Gamxyz->sgfn], cg->fgfs[Gamxzz->sgfn],
-                               cg->fgfs[Gamyxx->sgfn], cg->fgfs[Gamyxy->sgfn], cg->fgfs[Gamyxz->sgfn],
-                               cg->fgfs[Gamyyy->sgfn], cg->fgfs[Gamyyz->sgfn], cg->fgfs[Gamyzz->sgfn],
-                               cg->fgfs[Gamzxx->sgfn], cg->fgfs[Gamzxy->sgfn], cg->fgfs[Gamzxz->sgfn],
-                               cg->fgfs[Gamzyy->sgfn], cg->fgfs[Gamzyz->sgfn], cg->fgfs[Gamzzz->sgfn],
-                               cg->fgfs[Rxx->sgfn], cg->fgfs[Rxy->sgfn], cg->fgfs[Rxz->sgfn], 
-                               cg->fgfs[Ryy->sgfn], cg->fgfs[Ryz->sgfn], cg->fgfs[Rzz->sgfn],
-                               cg->fgfs[Cons_Ham->sgfn],
-                               cg->fgfs[Cons_Px->sgfn], cg->fgfs[Cons_Py->sgfn], cg->fgfs[Cons_Pz->sgfn],
-                               cg->fgfs[Cons_Gx->sgfn], cg->fgfs[Cons_Gy->sgfn], cg->fgfs[Cons_Gz->sgfn],
-                               Symmetry, lev, ndeps, pre))
-        {
-          cout << "find NaN in domain: (" 
-               << cg->bbox[0] << ":" << cg->bbox[3] << "," 
-               << cg->bbox[1] << ":" << cg->bbox[4] << ","
-               << cg->bbox[2] << ":" << cg->bbox[5] << ")" << endl;
-          ERROR = 1;
-        }
-
-        // rk4 substep and boundary
-        {
-          MyList<var> *varl0 = StateList, *varl = SynchList_pre, *varlrhs = RHSList; 
-          // we do not check the correspondence here
-          
-          while (varl0)
-          {
-#if (SommerType == 0)
-#ifndef WithShell
-            if (lev == 0) // sommerfeld indeed
-              f_sommerfeld_routbam(cg->shape, cg->X[0], cg->X[1], cg->X[2],
-                                   Pp->data->bbox[0], Pp->data->bbox[1], Pp->data->bbox[2], 
-                                   Pp->data->bbox[3], Pp->data->bbox[4], Pp->data->bbox[5],
-                                   cg->fgfs[varlrhs->data->sgfn],
-                                   cg->fgfs[varl0->data->sgfn], 
-                                   varl0->data->propspeed, varl0->data->SoA,
-                                   Symmetry);
-
-#endif
-#endif
-            f_rungekutta4_rout(cg->shape, dT_lev, 
-                               cg->fgfs[varl0->data->sgfn], 
-                               cg->fgfs[varl->data->sgfn], 
-                               cg->fgfs[varlrhs->data->sgfn],
-                               iter_count);
-#ifndef WithShell
-            if (lev > 0) // fix BD point
-#endif
-              f_sommerfeld_rout(cg->shape, cg->X[0], cg->X[1], cg->X[2],
-                                Pp->data->bbox[0], Pp->data->bbox[1], Pp->data->bbox[2], 
-                                Pp->data->bbox[3], Pp->data->bbox[4], Pp->data->bbox[5],
-                                dT_lev, 
-                                cg->fgfs[phi0->sgfn],
-                                cg->fgfs[Lap0->sgfn], 
-                                cg->fgfs[varl0->data->sgfn], cg->fgfs[varl->data->sgfn], 
-                                varl0->data->SoA,
-                                Symmetry, cor);
-
-#if (SommerType == 1)
-#warning "shell part still bam type"
-            if (lev == 0) // Shibata type sommerfeld
-              f_sommerfeld_rout(cg->shape, cg->X[0], cg->X[1], cg->X[2],
-                                Pp->data->bbox[0], Pp->data->bbox[1], Pp->data->bbox[2], 
-                                Pp->data->bbox[3], Pp->data->bbox[4], Pp->data->bbox[5],
-                                dT_lev, 
-                                cg->fgfs[phi0->sgfn],
-                                cg->fgfs[Lap0->sgfn], 
-                                cg->fgfs[varl0->data->sgfn], cg->fgfs[varl->data->sgfn], 
-                                varl0->data->SoA,
-                                Symmetry, pre);
-#endif
-
-            varl0 = varl0->next;
-            varl = varl->next;
-            varlrhs = varlrhs->next;
-          }
-        }
-        f_lowerboundset(cg->shape, cg->fgfs[phi->sgfn], chitiny);
-      }
-      if (BP == Pp->data->ble)
-        break;
-      BP = BP->next;
-    }
-    Pp = Pp->next;
-  }
-
-  //   misc::tillherecheck(GH->Commlev[lev],GH->start_rank[lev],"after Predictor rhs calculation");
-
-  // check error information
-  {
-    int erh = ERROR;
-    MPI_Allreduce(&erh, &ERROR, 1, MPI_INT, MPI_SUM, GH->Commlev[lev]);
-  }
-  if (ERROR)
-  {
-    Parallel::Dump_Data(GH->PatL[lev], StateList, 0, PhysTime, dT_lev);
-    if (myrank == 0)
-    {
-      if (ErrorMonitor->outfile)
-        ErrorMonitor->outfile << "find NaN in state variables at t = " << PhysTime 
-                              << ", lev = " << lev << endl;
-      MPI_Abort(MPI_COMM_WORLD, 1);
-    }
-  }
-
-  //   misc::tillherecheck(GH->Commlev[lev],GH->start_rank[lev],"before Predictor sync");
-
-  Parallel::Sync(GH->PatL[lev], SynchList_pre, Symmetry);
-
-#if (MAPBH == 0)
-  // for black hole position
-  if (BH_num > 0 && lev == GH->levels - 1)
-  {
-    compute_Porg_rhs(Porg0, Porg_rhs, Sfx0, Sfy0, Sfz0, lev);
-    for (int ithBH = 0; ithBH < BH_num; ithBH++)
-    {
-      f_rungekutta4_scalar(dT_lev, Porg0[ithBH][0], Porg[ithBH][0], Porg_rhs[ithBH][0], iter_count);
-      f_rungekutta4_scalar(dT_lev, Porg0[ithBH][1], Porg[ithBH][1], Porg_rhs[ithBH][1], iter_count);
-      f_rungekutta4_scalar(dT_lev, Porg0[ithBH][2], Porg[ithBH][2], Porg_rhs[ithBH][2], iter_count);
-      if (Symmetry > 0)
-        Porg[ithBH][2] = fabs(Porg[ithBH][2]);
-      if (Symmetry == 2)
-      {
-        Porg[ithBH][0] = fabs(Porg[ithBH][0]);
-        Porg[ithBH][1] = fabs(Porg[ithBH][1]);
-      }
-      if (!finite(Porg[ithBH][0]) || !finite(Porg[ithBH][1]) || !finite(Porg[ithBH][2]))
-      {
-        if (ErrorMonitor->outfile)
-          ErrorMonitor->outfile << "predictor step finds NaN for BH's position from ("
-                                << Porg0[ithBH][0] << "," << Porg0[ithBH][1] << "," << Porg0[ithBH][2] 
-                                << ")" << endl;
-
-        MyList<var> *DG_List = new MyList<var>(Sfx0);
-        DG_List->insert(Sfx0);
-        DG_List->insert(Sfy0);
-        DG_List->insert(Sfz0);
-        Parallel::Dump_Data(GH->PatL[lev], DG_List, 0, PhysTime, dT_lev);
-        DG_List->clearList();
-      }
-    }
-  }
-#endif
-
-  //   misc::tillherecheck(GH->Commlev[lev],GH->start_rank[lev],"before Corrector");
-
-  // corrector
-  for (iter_count = 1; iter_count < 4; iter_count++)
-  {
-    //   misc::tillherecheck(GH->Commlev[lev],GH->start_rank[lev],"head of Corrector");
-
-    // for RK4: t0, t0+dt/2, t0+dt/2, t0+dt;
-    if (iter_count == 1 || iter_count == 3)
-      TRK4 += dT_lev / 2;
-    Pp = GH->PatL[lev];
-    while (Pp)
-    {
-      MyList<Block> *BP = Pp->data->blb;
-      while (BP)
-      {
-        Block *cg = BP->data;
-        if (myrank == cg->rank)
-        {
-#if (AGM == 0)
-          f_enforce_ga(cg->shape,
-                       cg->fgfs[gxx->sgfn], cg->fgfs[gxy->sgfn], cg->fgfs[gxz->sgfn], 
-                       cg->fgfs[gyy->sgfn], cg->fgfs[gyz->sgfn], cg->fgfs[gzz->sgfn],
-                       cg->fgfs[Axx->sgfn], cg->fgfs[Axy->sgfn], cg->fgfs[Axz->sgfn], 
-                       cg->fgfs[Ayy->sgfn], cg->fgfs[Ayz->sgfn], cg->fgfs[Azz->sgfn]);
-#elif (AGM == 1)
-          if (iter_count == 3)
-            f_enforce_ga(cg->shape,
-                         cg->fgfs[gxx->sgfn], cg->fgfs[gxy->sgfn], cg->fgfs[gxz->sgfn], 
-                         cg->fgfs[gyy->sgfn], cg->fgfs[gyz->sgfn], cg->fgfs[gzz->sgfn],
-                         cg->fgfs[Axx->sgfn], cg->fgfs[Axy->sgfn], cg->fgfs[Axz->sgfn], 
-                         cg->fgfs[Ayy->sgfn], cg->fgfs[Ayz->sgfn], cg->fgfs[Azz->sgfn]);
-#endif
-
-          if (f_compute_rhs_bssn(cg->shape, TRK4, cg->X[0], cg->X[1], cg->X[2],
-                                 cg->fgfs[phi->sgfn], cg->fgfs[trK->sgfn],
-                                 cg->fgfs[gxx->sgfn], cg->fgfs[gxy->sgfn], cg->fgfs[gxz->sgfn], 
-                                 cg->fgfs[gyy->sgfn], cg->fgfs[gyz->sgfn], cg->fgfs[gzz->sgfn],
-                                 cg->fgfs[Axx->sgfn], cg->fgfs[Axy->sgfn], cg->fgfs[Axz->sgfn], 
-                                 cg->fgfs[Ayy->sgfn], cg->fgfs[Ayz->sgfn], cg->fgfs[Azz->sgfn],
-                                 cg->fgfs[Gmx->sgfn], cg->fgfs[Gmy->sgfn], cg->fgfs[Gmz->sgfn],
-                                 cg->fgfs[Lap->sgfn], 
-                                 cg->fgfs[Sfx->sgfn], cg->fgfs[Sfy->sgfn], cg->fgfs[Sfz->sgfn],
-                                 cg->fgfs[dtSfx->sgfn], cg->fgfs[dtSfy->sgfn], cg->fgfs[dtSfz->sgfn],
-                                 cg->fgfs[phi1->sgfn], cg->fgfs[trK1->sgfn],
-                                 cg->fgfs[gxx1->sgfn], cg->fgfs[gxy1->sgfn], cg->fgfs[gxz1->sgfn],
-                                 cg->fgfs[gyy1->sgfn], cg->fgfs[gyz1->sgfn], cg->fgfs[gzz1->sgfn],
-                                 cg->fgfs[Axx1->sgfn], cg->fgfs[Axy1->sgfn], cg->fgfs[Axz1->sgfn],
-                                 cg->fgfs[Ayy1->sgfn], cg->fgfs[Ayz1->sgfn], cg->fgfs[Azz1->sgfn],
-                                 cg->fgfs[Gmx1->sgfn], cg->fgfs[Gmy1->sgfn], cg->fgfs[Gmz1->sgfn],
-                                 cg->fgfs[Lap1->sgfn], 
-                                 cg->fgfs[Sfx1->sgfn], cg->fgfs[Sfy1->sgfn], cg->fgfs[Sfz1->sgfn],
-                                 cg->fgfs[dtSfx1->sgfn], cg->fgfs[dtSfy1->sgfn], cg->fgfs[dtSfz1->sgfn],
-                                 cg->fgfs[rho->sgfn], 
-                                 cg->fgfs[Sx->sgfn], cg->fgfs[Sy->sgfn], cg->fgfs[Sz->sgfn],
-                                 cg->fgfs[Sxx->sgfn], cg->fgfs[Sxy->sgfn], cg->fgfs[Sxz->sgfn], 
-                                 cg->fgfs[Syy->sgfn], cg->fgfs[Syz->sgfn], cg->fgfs[Szz->sgfn],
-                                 cg->fgfs[Gamxxx->sgfn], cg->fgfs[Gamxxy->sgfn], cg->fgfs[Gamxxz->sgfn],
-                                 cg->fgfs[Gamxyy->sgfn], cg->fgfs[Gamxyz->sgfn], cg->fgfs[Gamxzz->sgfn],
-                                 cg->fgfs[Gamyxx->sgfn], cg->fgfs[Gamyxy->sgfn], cg->fgfs[Gamyxz->sgfn],
-                                 cg->fgfs[Gamyyy->sgfn], cg->fgfs[Gamyyz->sgfn], cg->fgfs[Gamyzz->sgfn],
-                                 cg->fgfs[Gamzxx->sgfn], cg->fgfs[Gamzxy->sgfn], cg->fgfs[Gamzxz->sgfn],
-                                 cg->fgfs[Gamzyy->sgfn], cg->fgfs[Gamzyz->sgfn], cg->fgfs[Gamzzz->sgfn],
-                                 cg->fgfs[Rxx->sgfn], cg->fgfs[Rxy->sgfn], cg->fgfs[Rxz->sgfn], 
-                                 cg->fgfs[Ryy->sgfn], cg->fgfs[Ryz->sgfn], cg->fgfs[Rzz->sgfn],
-                                 cg->fgfs[Cons_Ham->sgfn],
-                                 cg->fgfs[Cons_Px->sgfn], cg->fgfs[Cons_Py->sgfn], cg->fgfs[Cons_Pz->sgfn],
-                                 cg->fgfs[Cons_Gx->sgfn], cg->fgfs[Cons_Gy->sgfn], cg->fgfs[Cons_Gz->sgfn],
-                                 Symmetry, lev, ndeps, cor))
-          {
-            cout << "find NaN in domain: (" 
-                 << cg->bbox[0] << ":" << cg->bbox[3] << "," 
-                 << cg->bbox[1] << ":" << cg->bbox[4] << ","
-                 << cg->bbox[2] << ":" << cg->bbox[5] << ")" << endl;
-            ERROR = 1;
-          }
-          // rk4 substep and boundary
-          {
-            MyList<var> *varl0 = StateList, *varl = SynchList_pre, *varl1 = SynchList_cor, *varlrhs = RHSList; 
-            // we do not check the correspondence here
-            
-            while (varl0)
-            {
-#if (SommerType == 0)
-#ifndef WithShell
-              if (lev == 0) // sommerfeld indeed
-                f_sommerfeld_routbam(cg->shape, cg->X[0], cg->X[1], cg->X[2],
-                                     Pp->data->bbox[0], Pp->data->bbox[1], Pp->data->bbox[2], 
-                                     Pp->data->bbox[3], Pp->data->bbox[4], Pp->data->bbox[5],
-                                     cg->fgfs[varl1->data->sgfn],
-                                     cg->fgfs[varl->data->sgfn], 
-                                     varl0->data->propspeed, varl0->data->SoA,
-                                     Symmetry);
-#endif
-#endif
-              f_rungekutta4_rout(cg->shape, dT_lev, 
-                                 cg->fgfs[varl0->data->sgfn], 
-                                 cg->fgfs[varl1->data->sgfn], 
-                                 cg->fgfs[varlrhs->data->sgfn],
-                                 iter_count);
-
-#ifndef WithShell
-              if (lev > 0) // fix BD point
-#endif
-                f_sommerfeld_rout(cg->shape, cg->X[0], cg->X[1], cg->X[2],
-                                  Pp->data->bbox[0], Pp->data->bbox[1], Pp->data->bbox[2], 
-                                  Pp->data->bbox[3], Pp->data->bbox[4], Pp->data->bbox[5],
-                                  dT_lev, 
-                                  cg->fgfs[phi0->sgfn],
-                                  cg->fgfs[Lap0->sgfn], 
-                                  cg->fgfs[varl0->data->sgfn], cg->fgfs[varl1->data->sgfn], 
-                                  varl0->data->SoA,
-                                  Symmetry, cor);
-
-#if (SommerType == 1)
-              if (lev == 1) // shibata type sommerfeld
-                f_sommerfeld_rout(cg->shape, cg->X[0], cg->X[1], cg->X[2],
-                                  Pp->data->bbox[0], Pp->data->bbox[1], Pp->data->bbox[2], 
-                                  Pp->data->bbox[3], Pp->data->bbox[4], Pp->data->bbox[5],
-                                  dT_lev, 
-                                  cg->fgfs[phi0->sgfn],
-                                  cg->fgfs[Lap0->sgfn], 
-                                  cg->fgfs[varl->data->sgfn], cg->fgfs[varl1->data->sgfn], 
-                                  varl0->data->SoA,
-                                  Symmetry, cor);
-#endif
-
-              varl0 = varl0->next;
-              varl = varl->next;
-              varl1 = varl1->next;
-              varlrhs = varlrhs->next;
-            }
-          }
-          f_lowerboundset(cg->shape, cg->fgfs[phi1->sgfn], chitiny);
-        }
-        if (BP == Pp->data->ble)
-          break;
-        BP = BP->next;
-      }
-      Pp = Pp->next;
-    }
-
-    //   misc::tillherecheck(GH->Commlev[lev],GH->start_rank[lev],"before Corrector error check");
-
-    // check error information
-    {
-      int erh = ERROR;
-      MPI_Allreduce(&erh, &ERROR, 1, MPI_INT, MPI_SUM, GH->Commlev[lev]);
-    }
-    if (ERROR)
-    {
-      Parallel::Dump_Data(GH->PatL[lev], SynchList_pre, 0, PhysTime, dT_lev);
-      if (myrank == 0)
-      {
-        if (ErrorMonitor->outfile)
-          ErrorMonitor->outfile << "find NaN in RK4 substep#" << iter_count 
-                                << " variables at t = " << PhysTime << ", lev = " << lev << endl;
-        MPI_Abort(MPI_COMM_WORLD, 1);
-      }
-    }
-
-    //    misc::tillherecheck(GH->Commlev[lev],GH->start_rank[lev],"before Corrector sync");
-
-    Parallel::Sync(GH->PatL[lev], SynchList_cor, Symmetry);
-
-    //    misc::tillherecheck(GH->Commlev[lev],GH->start_rank[lev],"after Corrector sync");
-
-#if (MAPBH == 0)
-    // for black hole position
-    if (BH_num > 0 && lev == GH->levels - 1)
-    {
-      compute_Porg_rhs(Porg, Porg1, Sfx, Sfy, Sfz, lev);
-      for (int ithBH = 0; ithBH < BH_num; ithBH++)
-      {
-        f_rungekutta4_scalar(dT_lev, Porg0[ithBH][0], Porg1[ithBH][0], Porg_rhs[ithBH][0], iter_count);
-        f_rungekutta4_scalar(dT_lev, Porg0[ithBH][1], Porg1[ithBH][1], Porg_rhs[ithBH][1], iter_count);
-        f_rungekutta4_scalar(dT_lev, Porg0[ithBH][2], Porg1[ithBH][2], Porg_rhs[ithBH][2], iter_count);
-        if (Symmetry > 0)
-          Porg1[ithBH][2] = fabs(Porg1[ithBH][2]);
-        if (Symmetry == 2)
-        {
-          Porg1[ithBH][0] = fabs(Porg1[ithBH][0]);
-          Porg1[ithBH][1] = fabs(Porg1[ithBH][1]);
-        }
-        if (!finite(Porg1[ithBH][0]) || !finite(Porg1[ithBH][1]) || !finite(Porg1[ithBH][2]))
-        {
-          if (ErrorMonitor->outfile)
-            ErrorMonitor->outfile << iter_count << " corrector step finds NaN for BH's position from ("
-                                  << Porg[ithBH][0] << "," << Porg[ithBH][1] << "," << Porg[ithBH][2] 
-                                  << ")" << endl;
-
-          MyList<var> *DG_List = new MyList<var>(Sfx0);
-          DG_List->insert(Sfx0);
-          DG_List->insert(Sfy0);
-          DG_List->insert(Sfz0);
-          Parallel::Dump_Data(GH->PatL[lev], DG_List, 0, PhysTime, dT_lev);
-          DG_List->clearList();
-        }
-      }
-    }
-//    misc::tillherecheck(GH->Commlev[lev],GH->start_rank[lev],"after Corrector of black hole position");
-#endif
-
-    // swap time level
-    if (iter_count < 3)
-    {
-      Pp = GH->PatL[lev];
-      while (Pp)
-      {
-        MyList<Block> *BP = Pp->data->blb;
-        while (BP)
-        {
-          Block *cg = BP->data;
-          cg->swapList(SynchList_pre, SynchList_cor, myrank);
-          if (BP == Pp->data->ble)
-            break;
-          BP = BP->next;
-        }
-        Pp = Pp->next;
-      }
-      //    misc::tillherecheck(GH->Commlev[lev],GH->start_rank[lev],"after pre cor swap");
-
-#if (MAPBH == 0)
-      // for black hole position
-      if (BH_num > 0 && lev == GH->levels - 1)
-      {
-        for (int ithBH = 0; ithBH < BH_num; ithBH++)
-        {
-          Porg[ithBH][0] = Porg1[ithBH][0];
-          Porg[ithBH][1] = Porg1[ithBH][1];
-          Porg[ithBH][2] = Porg1[ithBH][2];
-        }
-      }
-#endif
-    }
-    //    misc::tillherecheck(GH->Commlev[lev],GH->start_rank[lev],"tail of corrector");
-  }
-#if (RPS == 0)
-  // mesh refinement boundary part
-  //   misc::tillherecheck(GH->Commlev[lev],GH->start_rank[lev],"before RestrictProlong");
-  RestrictProlong(lev, YN, BB);
-#endif
-  // note the data structure before update
-  // SynchList_cor 1   -----------
-  //
-  // StateList     0   -----------
-  //
-  // OldStateList  old -----------
-  // update
-  Pp = GH->PatL[lev];
-  while (Pp)
-  {
-    MyList<Block> *BP = Pp->data->blb;
-    while (BP)
-    {
-      Block *cg = BP->data;
-      cg->swapList(StateList, SynchList_cor, myrank);
-      cg->swapList(OldStateList, SynchList_cor, myrank);
-      if (BP == Pp->data->ble)
-        break;
-      BP = BP->next;
-    }
-    Pp = Pp->next;
-  }
-  // for black hole position
-  if (BH_num > 0 && lev == GH->levels - 1)
-  {
-    for (int ithBH = 0; ithBH < BH_num; ithBH++)
-    {
-      Porg0[ithBH][0] = Porg1[ithBH][0];
-      Porg0[ithBH][1] = Porg1[ithBH][1];
-      Porg0[ithBH][2] = Porg1[ithBH][2];
-      // if(myrank==GH->start_rank[lev]) 
-      //     cout<<Porg0[ithBH][0]<<","<<Porg0[ithBH][1]<<","<<Porg0[ithBH][2]<<endl;
-    }
-  }
-
-  //     if(myrank==GH->start_rank[lev]) cout<<GH->mylev<<endl;
-  //     misc::tillherecheck(GH->Commlev[lev],GH->start_rank[lev],"complet GH Step");
-}
-
-//================================================================================================
-
-
-
-//================================================================================================
-
-// This member function sets up the single-step time evolution for the spherical shell
-// grid part during the time evolution process
-
-//================================================================================================
-
-#ifdef WithShell
-void bssn_class::SHStep()
-{
-  int lev = 0;
-  // #if (PSTR == 1)
-  //    misc::tillherecheck(GH->Commlev[lev],GH->start_rank[lev],"start Step");
-  // #endif
-
-  setpbh(BH_num, Porg0, Mass, BH_num_input);
-
-  double dT_lev = dT * pow(0.5, Mymax(lev, trfls));
-
-  // #if (PSTR == 1)
-  //    misc::tillherecheck(GH->Commlev[lev],GH->start_rank[lev],"before Predictor");
-  // #endif
-
-#ifdef With_AHF
-  AH_Step_Find(lev, dT_lev);
-#endif
-  bool BB = fgt(PhysTime, StartTime, dT_lev / 2);
-  double ndeps = numepss;
-  if (lev < GH->movls)
-    ndeps = numepsb;
-  double TRK4 = PhysTime;
-  int iter_count = 0; // count RK4 substeps
-  int pre = 0, cor = 1;
-  int ERROR = 0;
-
-  MyList<ss_patch> *sPp;
-  // Predictor
-  sPp = SH->PatL;
-  while (sPp)
-  {
-    MyList<Block> *BP = sPp->data->blb;
-    int fngfs = sPp->data->fngfs;
-    while (BP)
-    {
-      Block *cg = BP->data;
-      if (myrank == cg->rank)
-      {
-#if (AGM == 0)
-        f_enforce_ga(cg->shape,
-                     cg->fgfs[gxx0->sgfn], cg->fgfs[gxy0->sgfn], cg->fgfs[gxz0->sgfn], 
-                     cg->fgfs[gyy0->sgfn], cg->fgfs[gyz0->sgfn], cg->fgfs[gzz0->sgfn],
-                     cg->fgfs[Axx0->sgfn], cg->fgfs[Axy0->sgfn], cg->fgfs[Axz0->sgfn], 
-                     cg->fgfs[Ayy0->sgfn], cg->fgfs[Ayz0->sgfn], cg->fgfs[Azz0->sgfn]);
-#endif
-
-#ifdef USE_GPU
-        if (use_gpu == 1)
-        {
-
-          if (gpu_rhs_ss(CALLED_BY_STEP, myrank, RHS_PARA_CALLED_FIRST_TIME))
-
-          {
-
-            cout << "find NaN in Shell domain: sst = " << sPp->data->sst << ", (" 
-                 << cg->bbox[0] << ":" << cg->bbox[3] << ","
-                 << cg->bbox[1] << ":" << cg->bbox[4] << "," 
-                 << cg->bbox[2] << ":" << cg->bbox[5] << ")" << endl;
-
-            ERROR = 1;
-          }
-        }
-        else
-        {
-          if (f_compute_rhs_bssn_ss(RHS_PARA_CALLED_FIRST_TIME))
-
-          {
-
-            cout << "find NaN in Shell domain: sst = " << sPp->data->sst << ", (" 
-                 << cg->bbox[0] << ":" << cg->bbox[3] << ","
-                 << cg->bbox[1] << ":" << cg->bbox[4] << "," 
-                 << cg->bbox[2] << ":" << cg->bbox[5] << ")" << endl;
-
-            ERROR = 1;
-          }
-        }
-
-#else
-        if (f_compute_rhs_bssn_ss(RHS_PARA_CALLED_FIRST_TIME))
-
-        {
-
-          cout << "find NaN in Shell domain: sst = " << sPp->data->sst << ", (" 
-               << cg->bbox[0] << ":" << cg->bbox[3] << ","
-               << cg->bbox[1] << ":" << cg->bbox[4] << "," 
-               << cg->bbox[2] << ":" << cg->bbox[5] << ")" << endl;
-
-          ERROR = 1;
-        }
-#endif // USE_GPU
-
-        // rk4 substep and boundary
-        {
-          MyList<var> *varl0 = StateList, *varl = SynchList_pre, *varlrhs = RHSList; 
-          // we do not check the correspondence here
-          
-          while (varl0)
-          {
-            // sommerfeld indeed for outter boudary while fix BD for inner boundary
-            f_sommerfeld_routbam_ss(cg->shape, cg->X[0], cg->X[1], cg->X[2],
-                                    sPp->data->bbox[0], sPp->data->bbox[1], sPp->data->bbox[2], 
-                                    sPp->data->bbox[3], sPp->data->bbox[4], sPp->data->bbox[5],
-                                    cg->fgfs[varlrhs->data->sgfn],
-                                    cg->fgfs[varl0->data->sgfn], 
-                                    varl0->data->propspeed, varl0->data->SoA,
-                                    Symmetry);
-
-            f_rungekutta4_rout(cg->shape, dT_lev, 
-                               cg->fgfs[varl0->data->sgfn], 
-                               cg->fgfs[varl->data->sgfn], 
-                               cg->fgfs[varlrhs->data->sgfn],
-                               iter_count);
-
-            varl0 = varl0->next;
-            varl = varl->next;
-            varlrhs = varlrhs->next;
-          }
-        }
-        f_lowerboundset(cg->shape, cg->fgfs[phi->sgfn], chitiny);
-      }
-      if (BP == sPp->data->ble)
-        break;
-      BP = BP->next;
-    }
-    sPp = sPp->next;
-  }
-
-#if (PSTR == 1)
-//   misc::tillherecheck(GH->Commlev[lev],GH->start_rank[lev],"before Predictor's error check");
-#endif
-  // check error information
-  {
-    int erh = ERROR;
-    MPI_Allreduce(&erh, &ERROR, 1, MPI_INT, MPI_SUM, MPI_COMM_WORLD);
-  }
-
-  if (ERROR)
-  {
-    SH->Dump_Data(StateList, 0, PhysTime, dT_lev);
-    if (myrank == 0)
-    {
-      if (ErrorMonitor->outfile)
-        ErrorMonitor->outfile << "find NaN in state variables on Shell Patches at t = " << PhysTime << endl;
-      MPI_Abort(MPI_COMM_WORLD, 1);
-    }
-  }
-
-  {
-    clock_t prev_clock, curr_clock;
-    if (myrank == 0)
-      curr_clock = clock();
-    SH->Synch(SynchList_pre, Symmetry);
-    if (myrank == 0)
-    {
-      prev_clock = curr_clock;
-      curr_clock = clock();
-      cout << "Shell stuff synchronization used " 
-           << (double)(curr_clock - prev_clock) / ((double)CLOCKS_PER_SEC) 
-           << " seconds!" << endl;
-    }
-  }
-
-  // corrector
-  for (iter_count = 1; iter_count < 4; iter_count++)
-  {
-    // for RK4: t0, t0+dt/2, t0+dt/2, t0+dt;
-    if (iter_count == 1 || iter_count == 3)
-      TRK4 += dT_lev / 2;
-
-    {
-      sPp = SH->PatL;
-      while (sPp)
-      {
-        MyList<Block> *BP = sPp->data->blb;
-        int fngfs = sPp->data->fngfs;
-        while (BP)
-        {
-          Block *cg = BP->data;
-          if (myrank == cg->rank)
-          {
-#if (AGM == 0)
-            f_enforce_ga(cg->shape,
-                         cg->fgfs[gxx->sgfn], cg->fgfs[gxy->sgfn], cg->fgfs[gxz->sgfn], 
-                         cg->fgfs[gyy->sgfn], cg->fgfs[gyz->sgfn], cg->fgfs[gzz->sgfn],
-                         cg->fgfs[Axx->sgfn], cg->fgfs[Axy->sgfn], cg->fgfs[Axz->sgfn], 
-                         cg->fgfs[Ayy->sgfn], cg->fgfs[Ayz->sgfn], cg->fgfs[Azz->sgfn]);
-#elif (AGM == 1)
-            if (iter_count == 3)
-              f_enforce_ga(cg->shape,
-                           cg->fgfs[gxx->sgfn], cg->fgfs[gxy->sgfn], cg->fgfs[gxz->sgfn], 
-                           cg->fgfs[gyy->sgfn], cg->fgfs[gyz->sgfn], cg->fgfs[gzz->sgfn],
-                           cg->fgfs[Axx->sgfn], cg->fgfs[Axy->sgfn], cg->fgfs[Axz->sgfn], 
-                           cg->fgfs[Ayy->sgfn], cg->fgfs[Ayz->sgfn], cg->fgfs[Azz->sgfn]);
-#endif
-
-#ifdef USE_GPU
-            if (use_gpu == 1)
-            {
-
-             if(gpu_rhs_ss(CALLED_BY_STEP,myrank,RHS_PARA_CALLED_THEN)
-
-		     {
-                cout << "find NaN in Shell domain: sst = " << sPp->data->sst << ", (" 
-                     << cg->bbox[0] << ":" << cg->bbox[3] << ","
-                     << cg->bbox[1] << ":" << cg->bbox[4] << "," 
-                     << cg->bbox[2] << ":" << cg->bbox[5] << ")" << endl;
-
-                ERROR = 1;
-
-		     }
-            }
-            else
-            {
-              if (f_compute_rhs_bssn_ss(RHS_PARA_CALLED_THEN))
-
-              {
-
-                cout << "find NaN in Shell domain: sst = " << sPp->data->sst << ", (" 
-                     << cg->bbox[0] << ":" << cg->bbox[3] << ","
-                     << cg->bbox[1] << ":" << cg->bbox[4] << "," 
-                     << cg->bbox[2] << ":" << cg->bbox[5] << ")" << endl;
-
-                ERROR = 1;
-              }
-            }
-
-#else
-            if (f_compute_rhs_bssn_ss(RHS_PARA_CALLED_THEN))
-
-            {
-
-              cout << "find NaN in Shell domain: sst = " << sPp->data->sst << ", (" 
-                   << cg->bbox[0] << ":" << cg->bbox[3] << ","
-                   << cg->bbox[1] << ":" << cg->bbox[4] << "," 
-                   << cg->bbox[2] << ":" << cg->bbox[5] << ")" << endl;
-
-              ERROR = 1;
-            }
-#endif // USE_GPU
-       // rk4 substep and boundary
-            {
-              MyList<var> *varl0 = StateList, *varl = SynchList_pre, *varl1 = SynchList_cor, *varlrhs = RHSList; 
-              // we do not check the correspondence here
-              
-              while (varl0)
-              {
-                // sommerfeld indeed for outter boudary while fix BD for inner boundary
-                f_sommerfeld_routbam_ss(cg->shape, cg->X[0], cg->X[1], cg->X[2],
-                                        sPp->data->bbox[0], sPp->data->bbox[1], sPp->data->bbox[2], 
-                                        sPp->data->bbox[3], sPp->data->bbox[4], sPp->data->bbox[5],
-                                        cg->fgfs[varl1->data->sgfn],
-                                        cg->fgfs[varl->data->sgfn], 
-                                        varl0->data->propspeed, varl0->data->SoA,
-                                        Symmetry);
-
-                f_rungekutta4_rout(cg->shape, dT_lev, 
-                                   cg->fgfs[varl0->data->sgfn], 
-                                   cg->fgfs[varl1->data->sgfn], 
-                                   cg->fgfs[varlrhs->data->sgfn],
-                                   iter_count);
-
-                varl0 = varl0->next;
-                varl = varl->next;
-                varl1 = varl1->next;
-                varlrhs = varlrhs->next;
-              }
-            }
-            f_lowerboundset(cg->shape, cg->fgfs[phi1->sgfn], chitiny);
-          }
-          if (BP == sPp->data->ble)
-            break;
-          BP = BP->next;
-        }
-        sPp = sPp->next;
-      }
-    }
-    // check error information
-    {
-      int erh = ERROR;
-      MPI_Allreduce(&erh, &ERROR, 1, MPI_INT, MPI_SUM, MPI_COMM_WORLD);
-    }
-    if (ERROR)
-    {
-      SH->Dump_Data(SynchList_pre, 0, PhysTime, dT_lev);
-      if (myrank == 0)
-      {
-        if (ErrorMonitor->outfile)
-          ErrorMonitor->outfile << "find NaN on Shell Patches in RK4 substep#" << iter_count 
-                                << " variables at t = " << PhysTime << endl;
-        MPI_Abort(MPI_COMM_WORLD, 1);
-      }
-    }
-
-    {
-      clock_t prev_clock, curr_clock;
-      if (myrank == 0)
-        curr_clock = clock();
-      SH->Synch(SynchList_cor, Symmetry);
-      if (myrank == 0)
-      {
-        prev_clock = curr_clock;
-        curr_clock = clock();
-        cout << "Shell stuff synchronization used " 
-             << (double)(curr_clock - prev_clock) / ((double)CLOCKS_PER_SEC) 
-             << " seconds!" << endl;
-      }
-    }
-
-    sPp = SH->PatL;
-    while (sPp)
-    {
-      MyList<Block> *BP = sPp->data->blb;
-      while (BP)
-      {
-        Block *cg = BP->data;
-        cg->swapList(SynchList_pre, SynchList_cor, myrank);
-        if (BP == sPp->data->ble)
-          break;
-        BP = BP->next;
-      }
-      sPp = sPp->next;
-    }
-  }
-#if (RPS == 0)
-  {
-    clock_t prev_clock, curr_clock;
-    if (myrank == 0)
-      curr_clock = clock();
-    SH->CS_Inter(SynchList_cor, Symmetry);
-    if (myrank == 0)
-    {
-      prev_clock = curr_clock;
-      curr_clock = clock();
-      cout << "CS_Inter used " << (double)(curr_clock - prev_clock) / ((double)CLOCKS_PER_SEC) 
-           << " seconds!" << endl;
-    }
-  }
-#endif
-  // note the data structure before update
-  // SynchList_cor 1   -----------
-  //
-  // StateList     0   -----------
-  //
-  // OldStateList  old -----------
-  // update
-  sPp = SH->PatL;
-  while (sPp)
-  {
-    MyList<Block> *BP = sPp->data->blb;
-    while (BP)
-    {
-      Block *cg = BP->data;
-      cg->swapList(StateList, SynchList_cor, myrank);
-      cg->swapList(OldStateList, SynchList_cor, myrank);
-      if (BP == sPp->data->ble)
-        break;
-      BP = BP->next;
-    }
-    sPp = sPp->next;
-  }
-}
-#endif
-#endif // withshell
 
 //================================================================================================
 
@@ -5212,11 +2454,6 @@ void bssn_class::RestrictProlong(int lev, int YN, bool BB,
 //
 // SynchList_cor  old -----------
 {
-#if (PSTR == 1)
-//  stringstream a_stream;
-//  a_stream.setf(ios::left);
-#endif
-
   if (lev > 0)
   {
     MyList<Patch> *Pp, *Ppc;
@@ -5231,148 +2468,44 @@ void bssn_class::RestrictProlong(int lev, int YN, bool BB,
         else
           Parallel::prepare_inter_time_level(Pp->data, SL, OL,
                                              SynchList_pre, 0); // use SynchList_pre as temporal storage space
-
-#if (PSTR == 1)
-//	 Pp->data->checkPatch(0,GH->start_rank[GH->mylev]);
-#endif
         Pp = Pp->next;
       }
 
-#if (PSTR == 1)
-//       Pp=GH->PatL[lev];
-//       while(Pp)
-//       {
-//	 Pp->data->checkPatch(0,GH->start_rank[GH->mylev]);
-//	 Pp=Pp->next;
-//       }
-
-//       a_stream.clear();
-//       a_stream.str("");
-//       a_stream<<GH->mylev<<": 0 before Restrict";
-//       misc::tillherecheck(GH->Commlev[GH->mylev],GH->start_rank[GH->mylev],a_stream.str());
-#endif
-
-#if (RPB == 0)
       Parallel::Restrict(GH->PatL[lev - 1], GH->PatL[lev], SL, SynchList_pre, Symmetry);
-#elif (RPB == 1)
-      //       Parallel::Restrict_bam(GH->PatL[lev-1],GH->PatL[lev],SL,SynchList_pre,Symmetry);
-      Parallel::Restrict_bam(GH->PatL[lev - 1], GH->PatL[lev], SL, SynchList_pre, GH->rsul[lev], Symmetry);
-#endif
-
-#if (PSTR == 1)
-//       a_stream.clear();
-//       a_stream.str("");
-//       a_stream<<GH->mylev<<": 0 after Restrict";
-//       misc::tillherecheck(GH->Commlev[GH->mylev],GH->start_rank[GH->mylev],a_stream.str());
-#endif
 
       Parallel::Sync(GH->PatL[lev - 1], SynchList_pre, Symmetry);
-
-#if (PSTR == 1)
-//       a_stream.clear();
-//       a_stream.str("");
-//       a_stream<<GH->mylev<<": 0 after Sync";
-//       misc::tillherecheck(GH->Commlev[GH->mylev],GH->start_rank[GH->mylev],a_stream.str());
-#endif
-
-#if (RPB == 0)
       Ppc = GH->PatL[lev - 1];
       while (Ppc)
       {
         Pp = GH->PatL[lev];
         while (Pp)
         {
-#if (MIXOUTB == 0)
           Parallel::OutBdLow2Hi(Ppc->data, Pp->data, SynchList_pre, SL, Symmetry);
-#elif (MIXOUTB == 1)
-          Parallel::OutBdLow2Himix(Ppc->data, Pp->data, SynchList_pre, SL, Symmetry);
-#endif
           Pp = Pp->next;
         }
         Ppc = Ppc->next;
       }
-#elif (RPB == 1)
-      //       Parallel::OutBdLow2Hi_bam(GH->PatL[lev-1],GH->PatL[lev],SynchList_pre,SL,Symmetry);
-      Parallel::OutBdLow2Hi_bam(GH->PatL[lev - 1], GH->PatL[lev], SynchList_pre, SL, GH->bdsul[lev], Symmetry);
-#endif
-
-#if (PSTR == 1)
-//       a_stream.clear();
-//       a_stream.str("");
-//       a_stream<<GH->mylev<<": 0 after OutBdLow2Hi";
-//       misc::tillherecheck(GH->Commlev[GH->mylev],GH->start_rank[GH->mylev],a_stream.str());
-#endif
     }
     else // no time refinement levels and for all same time levels
     {
-
-#if (PSTR == 1)
-//       a_stream.clear();
-//       a_stream.str("");
-//       a_stream<<GH->mylev<<": 1 before Restrict";
-//       misc::tillherecheck(GH->Commlev[GH->mylev],GH->start_rank[GH->mylev],a_stream.str());
-#endif
-
-#if (RPB == 0)
       Parallel::Restrict(GH->PatL[lev - 1], GH->PatL[lev], SL, SL, Symmetry);
-#elif (RPB == 1)
-      //       Parallel::Restrict_bam(GH->PatL[lev-1],GH->PatL[lev],SL,SL,Symmetry);
-      Parallel::Restrict_bam(GH->PatL[lev - 1], GH->PatL[lev], SL, SL, GH->rsul[lev], Symmetry);
-#endif
-
-#if (PSTR == 1)
-//       a_stream.clear();
-//       a_stream.str("");
-//       a_stream<<GH->mylev<<": 1 before Sync";
-//       misc::tillherecheck(GH->Commlev[GH->mylev],GH->start_rank[GH->mylev],a_stream.str());
-#endif
 
       Parallel::Sync(GH->PatL[lev - 1], SL, Symmetry);
 
-#if (PSTR == 1)
-//       a_stream.clear();
-//       a_stream.str("");
-//       a_stream<<GH->mylev<<": 1 after Sync";
-//       misc::tillherecheck(GH->Commlev[GH->mylev],GH->start_rank[GH->mylev],a_stream.str());
-#endif
-
-#if (RPB == 0)
       Ppc = GH->PatL[lev - 1];
       while (Ppc)
       {
         Pp = GH->PatL[lev];
         while (Pp)
         {
-#if (MIXOUTB == 0)
           Parallel::OutBdLow2Hi(Ppc->data, Pp->data, SL, SL, Symmetry);
-#elif (MIXOUTB == 1)
-          Parallel::OutBdLow2Himix(Ppc->data, Pp->data, SL, SL, Symmetry);
-#endif
           Pp = Pp->next;
         }
         Ppc = Ppc->next;
       }
-#elif (RPB == 1)
-      //       Parallel::OutBdLow2Hi_bam(GH->PatL[lev-1],GH->PatL[lev],SL,SL,Symmetry);
-      Parallel::OutBdLow2Hi_bam(GH->PatL[lev - 1], GH->PatL[lev], SL, SL, GH->bdsul[lev], Symmetry);
-#endif
-
-#if (PSTR == 1)
-//       a_stream.clear();
-//       a_stream.str("");
-//       a_stream<<GH->mylev<<": 1 after OutBdLow2Hi";
-//       misc::tillherecheck(GH->Commlev[GH->mylev],GH->start_rank[GH->mylev],a_stream.str());
-#endif
     }
 
     Parallel::Sync(GH->PatL[lev], SL, Symmetry);
-
-#if (PSTR == 1)
-//    a_stream.clear();
-//    a_stream.str("");
-//    a_stream<<GH->mylev<<": after Sync";
-//    misc::tillherecheck(GH->Commlev[GH->mylev],GH->start_rank[GH->mylev],a_stream.str());
-#endif
   }
 }
 
@@ -6325,7 +3458,7 @@ void bssn_class::compute_Porg_rhs(double **BH_PS,double **BH_RHS,var *forx,var *
 
   if(!Parallel::PatList_Interp_Points(GH->PatL[lev],DG_List,BH_num,pox,shellf,Symmetry))
   {
-	  ErrorMonitor->outfile<<"fail to find black holes at t = "<<PhysTime<<endl;
+    ErrorMonitor->outfile<<"fail to find black holes at t = "<<PhysTime<<endl;
           for( n = 0; n < BH_num; n++) 
               ErrorMonitor->outfile<<"(x,y,z) = ("<<pox[0][n]<<","<<pox[1][n]<<","<<pox[2][n]<<")"<<endl;
   }
@@ -6416,200 +3549,7 @@ void bssn_class::AnalysisStuff(int lev, double dT_lev)
 
   if (LastAnas >= AnasTime)
   {
-#ifdef Point_Psi4
-#error "not support parallel levels yet"
-    // Gam_ijk and R_ij have been calculated in Interp_Constraint()
-    double SYM = 1, ANT = -1;
-    for (int levh = lev; levh < GH->levels; levh++)
-    {
-      MyList<Patch> *Pp = GH->PatL[levh];
-      while (Pp)
-      {
-        MyList<Block> *BP = Pp->data->blb;
-        while (BP)
-        {
-          Block *cg = BP->data;
-          if (myrank == cg->rank)
-          {
-            f_fderivs(cg->shape, cg->fgfs[phi0->sgfn], 
-                      cg->fgfs[phix->sgfn], cg->fgfs[phiy->sgfn], cg->fgfs[phiz->sgfn],
-                      cg->X[0], cg->X[1], cg->X[2], 
-                      SYM, SYM, SYM, Symmetry, levh);
-            f_fderivs(cg->shape, cg->fgfs[trK0->sgfn], 
-                      cg->fgfs[trKx->sgfn], cg->fgfs[trKy->sgfn], cg->fgfs[trKz->sgfn],
-                      cg->X[0], cg->X[1], cg->X[2], 
-                      SYM, SYM, SYM, Symmetry, levh);
-            f_fderivs(cg->shape, cg->fgfs[Axx0->sgfn], 
-                      cg->fgfs[Axxx->sgfn], cg->fgfs[Axxy->sgfn], cg->fgfs[Axxz->sgfn],
-                      cg->X[0], cg->X[1], cg->X[2], 
-                      SYM, SYM, SYM, Symmetry, levh);
-            f_fderivs(cg->shape, cg->fgfs[Axy0->sgfn], 
-                      cg->fgfs[Axyx->sgfn], cg->fgfs[Axyy->sgfn], cg->fgfs[Axyz->sgfn],
-                      cg->X[0], cg->X[1], cg->X[2], 
-                      ANT, ANT, SYM, Symmetry, levh);
-            f_fderivs(cg->shape, cg->fgfs[Axz0->sgfn], 
-                      cg->fgfs[Axzx->sgfn], cg->fgfs[Axzy->sgfn], cg->fgfs[Axzz->sgfn],
-                      cg->X[0], cg->X[1], cg->X[2], 
-                      ANT, SYM, ANT, Symmetry, levh);
-            f_fderivs(cg->shape, cg->fgfs[Ayy0->sgfn], 
-                      cg->fgfs[Ayyx->sgfn], cg->fgfs[Ayyy->sgfn], cg->fgfs[Ayyz->sgfn],
-                      cg->X[0], cg->X[1], cg->X[2], 
-                      SYM, SYM, SYM, Symmetry, levh);
-            f_fderivs(cg->shape, cg->fgfs[Ayz0->sgfn], 
-                      cg->fgfs[Ayzx->sgfn], cg->fgfs[Ayzy->sgfn], cg->fgfs[Ayzz->sgfn],
-                      cg->X[0], cg->X[1], cg->X[2], 
-                      SYM, ANT, ANT, Symmetry, levh);
-            f_fderivs(cg->shape, cg->fgfs[Azz0->sgfn], 
-                      cg->fgfs[Azzx->sgfn], cg->fgfs[Azzy->sgfn], cg->fgfs[Azzz->sgfn],
-                      cg->X[0], cg->X[1], cg->X[2], 
-                      SYM, SYM, SYM, Symmetry, levh);
-          }
-          if (BP == Pp->data->ble)
-            break;
-          BP = BP->next;
-        }
-        Pp = Pp->next;
-      }
-
-#ifdef WithShell
-      // ShellPatch part
-      if (lev == 0)
-      {
-        MyList<ss_patch> *Pp = SH->PatL;
-        while (Pp)
-        {
-          MyList<Block> *BL = Pp->data->blb;
-          int fngfs = Pp->data->fngfs;
-          while (BL)
-          {
-            Block *cg = BL->data;
-            if (myrank == cg->rank)
-            {
-              f_fderivs_shc(cg->shape, cg->fgfs[phi0->sgfn], 
-                            cg->fgfs[phix->sgfn], cg->fgfs[phiy->sgfn], cg->fgfs[phiz->sgfn],
-                            cg->X[0], cg->X[1], cg->X[2],
-                            phi0->SoA[0], phi0->SoA[1], phi0->SoA[2], 
-                            Symmetry, levh, Pp->data->sst,
-                            cg->fgfs[fngfs + ShellPatch::drhodx], 
-                            cg->fgfs[fngfs + ShellPatch::drhody], 
-                            cg->fgfs[fngfs + ShellPatch::drhodz],
-                            cg->fgfs[fngfs + ShellPatch::dsigmadx], 
-                            cg->fgfs[fngfs + ShellPatch::dsigmady], 
-                            cg->fgfs[fngfs + ShellPatch::dsigmadz],
-                            cg->fgfs[fngfs + ShellPatch::dRdx], 
-                            cg->fgfs[fngfs + ShellPatch::dRdy], 
-                            cg->fgfs[fngfs + ShellPatch::dRdz]);
-              f_fderivs_shc(cg->shape, cg->fgfs[trK0->sgfn], 
-                            cg->fgfs[trKx->sgfn], cg->fgfs[trKy->sgfn], cg->fgfs[trKz->sgfn],
-                            cg->X[0], cg->X[1], cg->X[2],
-                            trK0->SoA[0], trK0->SoA[1], trK0->SoA[2], 
-                            Symmetry, levh, Pp->data->sst,
-                            cg->fgfs[fngfs + ShellPatch::drhodx], 
-                            cg->fgfs[fngfs + ShellPatch::drhody], 
-                            cg->fgfs[fngfs + ShellPatch::drhodz],
-                            cg->fgfs[fngfs + ShellPatch::dsigmadx], 
-                            cg->fgfs[fngfs + ShellPatch::dsigmady], 
-                            cg->fgfs[fngfs + ShellPatch::dsigmadz],
-                            cg->fgfs[fngfs + ShellPatch::dRdx], 
-                            cg->fgfs[fngfs + ShellPatch::dRdy], 
-                            cg->fgfs[fngfs + ShellPatch::dRdz]);
-              f_fderivs_shc(cg->shape, cg->fgfs[Axx0->sgfn], 
-                            cg->fgfs[Axxx->sgfn], cg->fgfs[Axxy->sgfn], cg->fgfs[Axxz->sgfn],
-                            cg->X[0], cg->X[1], cg->X[2],
-                            Axx0->SoA[0], Axx0->SoA[1], Axx0->SoA[2], 
-                            Symmetry, levh, Pp->data->sst,
-                            cg->fgfs[fngfs + ShellPatch::drhodx], 
-                            cg->fgfs[fngfs + ShellPatch::drhody], 
-                            cg->fgfs[fngfs + ShellPatch::drhodz],
-                            cg->fgfs[fngfs + ShellPatch::dsigmadx], 
-                            cg->fgfs[fngfs + ShellPatch::dsigmady], 
-                            cg->fgfs[fngfs + ShellPatch::dsigmadz],
-                            cg->fgfs[fngfs + ShellPatch::dRdx], 
-                            cg->fgfs[fngfs + ShellPatch::dRdy], 
-                            cg->fgfs[fngfs + ShellPatch::dRdz]);
-              f_fderivs_shc(cg->shape, cg->fgfs[Axy0->sgfn], 
-                            cg->fgfs[Axyx->sgfn], cg->fgfs[Axyy->sgfn], cg->fgfs[Axyz->sgfn],
-                            cg->X[0], cg->X[1], cg->X[2],
-                            Axy0->SoA[0], Axy0->SoA[1], Axy0->SoA[2], 
-                            Symmetry, levh, Pp->data->sst,
-                            cg->fgfs[fngfs + ShellPatch::drhodx], 
-                            cg->fgfs[fngfs + ShellPatch::drhody], 
-                            cg->fgfs[fngfs + ShellPatch::drhodz],
-                            cg->fgfs[fngfs + ShellPatch::dsigmadx], 
-                            cg->fgfs[fngfs + ShellPatch::dsigmady], 
-                            cg->fgfs[fngfs + ShellPatch::dsigmadz],
-                            cg->fgfs[fngfs + ShellPatch::dRdx], 
-                            cg->fgfs[fngfs + ShellPatch::dRdy], 
-                            cg->fgfs[fngfs + ShellPatch::dRdz]);
-              f_fderivs_shc(cg->shape, cg->fgfs[Axz0->sgfn], 
-                            cg->fgfs[Axzx->sgfn], cg->fgfs[Axzy->sgfn], cg->fgfs[Axzz->sgfn],
-                            cg->X[0], cg->X[1], cg->X[2],
-                            Axz0->SoA[0], Axz0->SoA[1], Axz0->SoA[2], 
-                            Symmetry, levh, Pp->data->sst,
-                            cg->fgfs[fngfs + ShellPatch::drhodx], 
-                            cg->fgfs[fngfs + ShellPatch::drhody], 
-                            cg->fgfs[fngfs + ShellPatch::drhodz],
-                            cg->fgfs[fngfs + ShellPatch::dsigmadx], 
-                            cg->fgfs[fngfs + ShellPatch::dsigmady], 
-                            cg->fgfs[fngfs + ShellPatch::dsigmadz],
-                            cg->fgfs[fngfs + ShellPatch::dRdx], 
-                            cg->fgfs[fngfs + ShellPatch::dRdy], 
-                            cg->fgfs[fngfs + ShellPatch::dRdz]);
-              f_fderivs_shc(cg->shape, cg->fgfs[Ayy0->sgfn], 
-                            cg->fgfs[Ayyx->sgfn], cg->fgfs[Ayyy->sgfn], cg->fgfs[Ayyz->sgfn],
-                            cg->X[0], cg->X[1], cg->X[2],
-                            Ayy0->SoA[0], Ayy0->SoA[1], Ayy0->SoA[2], 
-                            Symmetry, levh, Pp->data->sst,
-                            cg->fgfs[fngfs + ShellPatch::drhodx], 
-                            cg->fgfs[fngfs + ShellPatch::drhody], 
-                            cg->fgfs[fngfs + ShellPatch::drhodz],
-                            cg->fgfs[fngfs + ShellPatch::dsigmadx], 
-                            cg->fgfs[fngfs + ShellPatch::dsigmady], 
-                            cg->fgfs[fngfs + ShellPatch::dsigmadz],
-                            cg->fgfs[fngfs + ShellPatch::dRdx], 
-                            cg->fgfs[fngfs + ShellPatch::dRdy], 
-                            cg->fgfs[fngfs + ShellPatch::dRdz]);
-              f_fderivs_shc(cg->shape, cg->fgfs[Ayz0->sgfn], 
-                            cg->fgfs[Ayzx->sgfn], cg->fgfs[Ayzy->sgfn], cg->fgfs[Ayzz->sgfn],
-                            cg->X[0], cg->X[1], cg->X[2],
-                            Ayz0->SoA[0], Ayz0->SoA[1], Ayz0->SoA[2], 
-                            Symmetry, levh, Pp->data->sst,
-                            cg->fgfs[fngfs + ShellPatch::drhodx], 
-                            cg->fgfs[fngfs + ShellPatch::drhody], 
-                            cg->fgfs[fngfs + ShellPatch::drhodz],
-                            cg->fgfs[fngfs + ShellPatch::dsigmadx], 
-                            cg->fgfs[fngfs + ShellPatch::dsigmady], 
-                            cg->fgfs[fngfs + ShellPatch::dsigmadz],
-                            cg->fgfs[fngfs + ShellPatch::dRdx], 
-                            cg->fgfs[fngfs + ShellPatch::dRdy], 
-                            cg->fgfs[fngfs + ShellPatch::dRdz]);
-              f_fderivs_shc(cg->shape, cg->fgfs[Azz0->sgfn], 
-                            cg->fgfs[Azzx->sgfn], cg->fgfs[Azzy->sgfn], cg->fgfs[Azzz->sgfn],
-                            cg->X[0], cg->X[1], cg->X[2],
-                            Azz0->SoA[0], Azz0->SoA[1], Azz0->SoA[2], 
-                            Symmetry, levh, Pp->data->sst,
-                            cg->fgfs[fngfs + ShellPatch::drhodx], 
-                            cg->fgfs[fngfs + ShellPatch::drhody], 
-                            cg->fgfs[fngfs + ShellPatch::drhodz],
-                            cg->fgfs[fngfs + ShellPatch::dsigmadx], 
-                            cg->fgfs[fngfs + ShellPatch::dsigmady], 
-                            cg->fgfs[fngfs + ShellPatch::dsigmadz],
-                            cg->fgfs[fngfs + ShellPatch::dRdx], 
-                            cg->fgfs[fngfs + ShellPatch::dRdy], 
-                            cg->fgfs[fngfs + ShellPatch::dRdz]);
-            }
-            if (BL == Pp->data->ble)
-              break;
-            BL = BL->next;
-          }
-          Pp = Pp->next;
-        }
-      }
-#endif
-    }
-#else
     Compute_Psi4(lev);
-#endif
     double *RP, *IP, *RoutMAP;
     int NN = 0;
     for (int pl = 2; pl < maxl + 1; pl++)
@@ -6621,113 +3561,16 @@ void bssn_class::AnalysisStuff(int lev, double dT_lev)
     double Rex = maxrex;
     for (int i = 0; i < decn; i++)
     {
-#ifdef Point_Psi4
-      Waveshell->surf_Wave(Rex, GH, SH,
-                           phi, trK,
-                           gxx0, gxy0, gxz0, gyy0, gyz0, gzz0,
-                           Axx0, Axy0, Axz0, Ayy0, Ayz0, Azz0,
-                           phix, phiy, phiz,
-                           trKx, trKy, trKz,
-                           Axxx, Axxy, Axxz,
-                           Axyx, Axyy, Axyz,
-                           Axzx, Axzy, Axzz,
-                           Ayyx, Ayyy, Ayyz,
-                           Ayzx, Ayzy, Ayzz,
-                           Azzx, Azzy, Azzz,
-                           Gamxxx, Gamxxy, Gamxxz, Gamxyy, Gamxyz, Gamxzz,
-                           Gamyxx, Gamyxy, Gamyxz, Gamyyy, Gamyyz, Gamyzz,
-                           Gamzxx, Gamzxy, Gamzxz, Gamzyy, Gamzyz, Gamzzz,
-                           Rxx, Rxy, Rxz, Ryy, Ryz, Rzz,
-                           2, maxl, NN, RP, IP, ErrorMonitor);
-#ifdef WithShell
-      if (lev > 0 || Rex < GH->bbox[0][0][3])
-      {
-        Waveshell->surf_MassPAng(Rex, lev, GH, phi0, trK0,
-                                 gxx0, gxy0, gxz0, gyy0, gyz0, gzz0,
-                                 Axx0, Axy0, Axz0, Ayy0, Ayz0, Azz0,
-                                 Gmx0, Gmy0, Gmz0, Sfx1, Sfy1, Sfz1, // here we can not touch rhs variables, but 1 variables
-                                 RoutMAP, ErrorMonitor);
-      }
-      else
-      {
-        Waveshell->surf_MassPAng(Rex, lev, SH, phi0, trK0,
-                                 gxx0, gxy0, gxz0, gyy0, gyz0, gzz0,
-                                 Axx0, Axy0, Axz0, Ayy0, Ayz0, Azz0,
-                                 Gmx0, Gmy0, Gmz0, Sfx1, Sfy1, Sfz1, // here we can not touch rhs variables, but 1 variables
-                                 RoutMAP, ErrorMonitor);
-      }
-#else
-      Waveshell->surf_MassPAng(Rex, lev, GH, phi0, trK0,
-                               gxx0, gxy0, gxz0, gyy0, gyz0, gzz0,
-                               Axx0, Axy0, Axz0, Ayy0, Ayz0, Azz0,
-                               Gmx0, Gmy0, Gmz0, Sfx1, Sfy1, Sfz1, // here we can not touch rhs variables, but 1 variables
-                               RoutMAP, ErrorMonitor);
-#endif
-#else
-//        misc::tillherecheck(GH->Commlev[lev],GH->start_rank[lev],"before surface integral");
-#ifdef WithShell
-      if (lev > 0 || Rex < GH->bbox[0][0][3])
-      {
-        Waveshell->surf_Wave(Rex, lev, GH, Rpsi4, Ipsi4, 2, maxl, NN, RP, IP, ErrorMonitor);
-        Waveshell->surf_MassPAng(Rex, lev, GH, phi0, trK0,
-                                 gxx0, gxy0, gxz0, gyy0, gyz0, gzz0,
-                                 Axx0, Axy0, Axz0, Ayy0, Ayz0, Azz0,
-                                 Gmx0, Gmy0, Gmz0, Sfx1, Sfy1, Sfz1, // here we can not touch rhs variables, but 1 variables
-                                 RoutMAP, ErrorMonitor);
-      }
-      else
-      {
-        Waveshell->surf_Wave(Rex, lev, SH, Rpsi4, Ipsi4, 2, maxl, NN, RP, IP, ErrorMonitor);
-        Waveshell->surf_MassPAng(Rex, lev, SH, phi0, trK0,
-                                 gxx0, gxy0, gxz0, gyy0, gyz0, gzz0,
-                                 Axx0, Axy0, Axz0, Ayy0, Ayz0, Azz0,
-                                 Gmx0, Gmy0, Gmz0, Sfx1, Sfy1, Sfz1, // here we can not touch rhs variables, but 1 variables
-                                 RoutMAP, ErrorMonitor);
-      }
-#else
-#if (PSTR == 0)
       Waveshell->surf_Wave(Rex, lev, GH, Rpsi4, Ipsi4, 2, maxl, NN, RP, IP, ErrorMonitor);
       Waveshell->surf_MassPAng(Rex, lev, GH, phi0, trK0,
                                gxx0, gxy0, gxz0, gyy0, gyz0, gzz0,
                                Axx0, Axy0, Axz0, Ayy0, Ayz0, Azz0,
                                Gmx0, Gmy0, Gmz0, Sfx1, Sfy1, Sfz1, // here we can not touch rhs variables, but 1 variables
                                RoutMAP, ErrorMonitor);
-#elif (PSTR == 1)
-      Waveshell->surf_Wave(Rex, lev, GH, Rpsi4, Ipsi4, 2, maxl, NN, RP, IP, ErrorMonitor, GH->Commlev[lev]);
-      //        misc::tillherecheck(GH->Commlev[lev],GH->start_rank[lev],"after surf_Wave");
-      Waveshell->surf_MassPAng(Rex, lev, GH, phi0, trK0,
-                               gxx0, gxy0, gxz0, gyy0, gyz0, gzz0,
-                               Axx0, Axy0, Axz0, Ayy0, Ayz0, Azz0,
-                               Gmx0, Gmy0, Gmz0, Sfx1, Sfy1, Sfz1, // here we can not touch rhs variables, but 1 variables
-                               RoutMAP, ErrorMonitor, GH->Commlev[lev]);
-#endif
-#endif
-//        misc::tillherecheck(GH->Commlev[lev],GH->start_rank[lev],"end surface integral");
-#endif
       if (i == 0)
       {
         ADMMass = RoutMAP[0];
       }
-#if (PSTR == 1)
-      if (GH->start_rank[a_lev] > 0)
-      {
-        MPI_Status status;
-        // receive
-        if (myrank == 0)
-        {
-          MPI_Recv(RP, NN, MPI_DOUBLE, GH->start_rank[a_lev], 1, MPI_COMM_WORLD, &status);
-          MPI_Recv(IP, NN, MPI_DOUBLE, GH->start_rank[a_lev], 2, MPI_COMM_WORLD, &status);
-          MPI_Recv(RoutMAP, 7, MPI_DOUBLE, GH->start_rank[a_lev], 3, MPI_COMM_WORLD, &status);
-        }
-        // send
-        if (myrank == GH->start_rank[a_lev])
-        {
-          MPI_Send(RP, NN, MPI_DOUBLE, 0, 1, MPI_COMM_WORLD);
-          MPI_Send(IP, NN, MPI_DOUBLE, 0, 2, MPI_COMM_WORLD);
-          MPI_Send(RoutMAP, 7, MPI_DOUBLE, 0, 3, MPI_COMM_WORLD);
-        }
-      }
-#endif
       Psi4Monitor->writefile(PhysTime, NN, RP, IP);
       MAPMonitor->writefile(PhysTime, 7, RoutMAP);
       Rex = Rex - drex;
@@ -6786,16 +3629,11 @@ void bssn_class::Constraint_Out()
             Block *cg = BP->data;
             if (myrank == cg->rank)
             {
-// added by yangquan
-#ifdef USE_GPU
               if (use_gpu == 1)
                 gpu_rhs(CALLED_BY_CONSTRAINT, myrank, RHS_PARA_CALLED_Constraint_Out);
 
               else
                 f_compute_rhs_bssn(RHS_PARA_CALLED_Constraint_Out);
-#else
-              f_compute_rhs_bssn(RHS_PARA_CALLED_Constraint_Out);
-#endif
             }
             if (BP == Pp->data->ble)
               break;
@@ -6806,62 +3644,10 @@ void bssn_class::Constraint_Out()
       }
       Parallel::Sync(GH->PatL[lev], ConstraintList, Symmetry);
     }
-#ifdef WithShell
-    if (0) // if the constrait quantities can be reused from the step rhs calculation
-    {
-      MyList<ss_patch> *sPp;
-      sPp = SH->PatL;
-      while (sPp)
-      {
-        double TRK4 = PhysTime;
-        int pre = 0;
-        int lev = 0;
-        MyList<Block> *BP = sPp->data->blb;
-        int fngfs = sPp->data->fngfs;
-        while (BP)
-        {
-          Block *cg = BP->data;
-          if (myrank == cg->rank)
-          {
-#ifdef USE_GPU
-            if (use_gpu == 1)
-
-              gpu_rhs_ss(CALLED_BY_CONSTRAINT, myrank, RHS_PARA_CALLED_Constraint_Out_SS);
-            else
-              f_compute_rhs_bssn_ss(RHS_PARA_CALLED_Constraint_Out_SS);
-#else
-            f_compute_rhs_bssn_ss(RHS_PARA_CALLED_Constraint_Out_SS);
-
-#endif // USE_GPU
-          }
-          if (BP == sPp->data->ble)
-            break;
-          BP = BP->next;
-        }
-        sPp = sPp->next;
-      }
-    }
-    SH->Synch(ConstraintList, Symmetry);
-#endif
 
     double ConV[7];
-#if (PSTR == 1)
-    double ConV_h[7];
-#endif
-
-#ifdef WithShell
-    ConV[0] = SH->L2Norm(Cons_Ham);
-    ConV[1] = SH->L2Norm(Cons_Px);
-    ConV[2] = SH->L2Norm(Cons_Py);
-    ConV[3] = SH->L2Norm(Cons_Pz);
-    ConV[4] = SH->L2Norm(Cons_Gx);
-    ConV[5] = SH->L2Norm(Cons_Gy);
-    ConV[6] = SH->L2Norm(Cons_Gz);
-    ConVMonitor->writefile(PhysTime, 7, ConV);
-#endif
     for (int levi = 0; levi < GH->levels; levi++)
     {
-#if (PSTR == 0)
       ConV[0] = Parallel::L2Norm(GH->PatL[levi]->data, Cons_Ham);
       ConV[1] = Parallel::L2Norm(GH->PatL[levi]->data, Cons_Px);
       ConV[2] = Parallel::L2Norm(GH->PatL[levi]->data, Cons_Py);
@@ -6869,39 +3655,7 @@ void bssn_class::Constraint_Out()
       ConV[4] = Parallel::L2Norm(GH->PatL[levi]->data, Cons_Gx);
       ConV[5] = Parallel::L2Norm(GH->PatL[levi]->data, Cons_Gy);
       ConV[6] = Parallel::L2Norm(GH->PatL[levi]->data, Cons_Gz);
-#elif (PSTR == 1)
-      ConV[0] = Parallel::L2Norm(GH->PatL[levi]->data, Cons_Ham, GH->Commlev[levi]);
-      ConV[1] = Parallel::L2Norm(GH->PatL[levi]->data, Cons_Px, GH->Commlev[levi]);
-      ConV[2] = Parallel::L2Norm(GH->PatL[levi]->data, Cons_Py, GH->Commlev[levi]);
-      ConV[3] = Parallel::L2Norm(GH->PatL[levi]->data, Cons_Pz, GH->Commlev[levi]);
-      ConV[4] = Parallel::L2Norm(GH->PatL[levi]->data, Cons_Gx, GH->Commlev[levi]);
-      ConV[5] = Parallel::L2Norm(GH->PatL[levi]->data, Cons_Gy, GH->Commlev[levi]);
-      ConV[6] = Parallel::L2Norm(GH->PatL[levi]->data, Cons_Gz, GH->Commlev[levi]);
-      //        misc::tillherecheck("before collect data to cpu0");
-      // MPI_ALLREDUCE( sendbuf, recvbuf, count, datatype, op, comm), sendbu and recvbuf must be different
-      if (levi > 0)
-      {
-        if (GH->mylev == levi && myrank == GH->start_rank[levi])
-          for (int i = 0; i < 7; i++)
-            ConV_h[i] = ConV[i];
-        else
-          for (int i = 0; i < 7; i++)
-            ConV_h[i] = 0;
-        MPI_Allreduce(ConV_h, ConV, 7, MPI_DOUBLE, MPI_SUM, MPI_COMM_WORLD);
-      }
-#endif
       ConVMonitor->writefile(PhysTime, 7, ConV);
-      /*
-        if(fabs(ConV[0])<0.00001)
-        {
-          MyList<var> * DG_List=new MyList<var>(Cons_Ham);
-                DG_List->insert(Cons_Px); DG_List->insert(Cons_Py); DG_List->insert(Cons_Px);
-                DG_List->insert(Cons_Gx); DG_List->insert(Cons_Gy); DG_List->insert(Cons_Gx);
-          Parallel::Dump_Data(GH->PatL[levi],DG_List,"jiu",0,1);
-          DG_List->clearList();
-          if(myrank==0) MPI_Abort(MPI_COMM_WORLD,1);
-        }
-      */
     }
 
     Interp_Constraint(false);
@@ -7196,15 +3950,10 @@ void bssn_class::Interp_Constraint(bool infg)
             Block *cg = BP->data;
             if (myrank == cg->rank)
             {
-// added by yangquan
-#ifdef USE_GPU
               if (use_gpu == 1)
                 gpu_rhs(CALLED_BY_CONSTRAINT, myrank, RHS_PARA_CALLED_Interp_Constraint);
               else
                 f_compute_rhs_bssn(RHS_PARA_CALLED_Interp_Constraint);
-#else
-              f_compute_rhs_bssn(RHS_PARA_CALLED_Interp_Constraint);
-#endif
             }
             if (BP == Pp->data->ble)
               break;
@@ -7215,84 +3964,21 @@ void bssn_class::Interp_Constraint(bool infg)
       }
       Parallel::Sync(GH->PatL[lev], ConstraintList, Symmetry);
     }
-#ifdef WithShell
-    if (0) // if the constrait quantities can be reused from the step rhs calculation
-    {
-      MyList<ss_patch> *sPp;
-      sPp = SH->PatL;
-      while (sPp)
-      {
-        double TRK4 = PhysTime;
-        int pre = 0;
-        int lev = 0;
-        MyList<Block> *BP = sPp->data->blb;
-        int fngfs = sPp->data->fngfs;
-        while (BP)
-        {
-          Block *cg = BP->data;
-          if (myrank == cg->rank)
-          {
-#ifdef USE_GPU
-            if (use_gpu == 1)
-
-              gpu_rhs_ss(CALLED_BY_CONSTRAINT, myrank, RHS_PARA_CALLED_Intrp_Constraint_Out_SS);
-            else
-              f_compute_rhs_bssn_ss(RHS_PARA_CALLED_Intrp_Constraint_Out_SS);
-#else
-            f_compute_rhs_bssn_ss(RHS_PARA_CALLED_Intrp_Constraint_Out_SS);
-
-#endif // USE_GPU
-          }
-          if (BP == sPp->data->ble)
-            break;
-          BP = BP->next;
-        }
-        sPp = sPp->next;
-      }
-    }
-    SH->Synch(ConstraintList, Symmetry);
-#endif
   }
   //    interpolate
   double *x1, *y1, *z1;
   const int n = 1000;
   double lmax, lmin, dd;
   lmin = 0;
-#ifdef WithShell
-  lmax = SH->Rrange[1];
-#else
   lmax = GH->bbox[0][0][4];
-#endif
-#ifdef Vertex
-#ifdef Cell
-#error Both Cell and Vertex are defined
-#endif
-  dd = (lmax - lmin) / (n - 1);
-#else
-#ifdef Cell
   dd = (lmax - lmin) / n;
-#else
-#error Not define Vertex nor Cell
-#endif
-#endif
   x1 = new double[n];
   y1 = new double[n];
   z1 = new double[n];
   for (int i = 0; i < n; i++)
   {
     x1[i] = 0;
-#ifdef Vertex
-#ifdef Cell
-#error Both Cell and Vertex are defined
-#endif
-    y1[i] = lmin + i * dd;
-#else
-#ifdef Cell
     y1[i] = lmin + (i + 0.5) * dd;
-#else
-#error Not define Vertex nor Cell
-#endif
-#endif
     z1[i] = 0;
   }
 
@@ -7313,10 +3999,6 @@ void bssn_class::Interp_Constraint(bool infg)
     XX[1] = y1[i];
     XX[2] = z1[i];
     bool fg = GH->Interp_One_Point(ConstraintList, XX, shellf + i * InList, Symmetry);
-#ifdef WithShell
-    if (!fg)
-      fg = SH->Interp_One_Point(ConstraintList, XX, shellf + i * InList, Symmetry);
-#endif
     if (!fg && myrank == 0)
     {
       cout << "bssn_class::Interp_Constraint meets wrong" << endl;

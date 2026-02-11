@@ -1286,13 +1286,8 @@ bool cgh::Interp_One_Point(MyList<var> *VarList,
     MyList<Patch> *Pp = PatL[lev];
     while (Pp)
     {
-#if (PSTR == 0)
       if (Pp->data->Interp_ONE_Point(VarList, XX, Shellf, Symmetry))
         return true;
-#elif (PSTR == 1 || PSTR == 2 || PSTR == 3)
-      if (Pp->data->Interp_ONE_Point(VarList, XX, Shellf, Symmetry, Commlev[lev]))
-        return true;
-#endif
       Pp = Pp->next;
     }
     lev--;
