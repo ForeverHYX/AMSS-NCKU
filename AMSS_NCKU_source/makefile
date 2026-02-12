@@ -54,7 +54,7 @@ initial_guess.o Newton.o Jacobian.o ilucg.o IntPnts0.o IntPnts.o
 
 TwoPunctureFILES = TwoPunctureABE.o TwoPunctures.o 
 
-CUDAFILES = bssn_gpu.o bssn_gpu_rhs_ss.o
+CUDAFILES = bssn_gpu.o bssn_gpu_rhs_ss.o bssn_gpu_manager.o gpu_constant.o
 
 # file dependences
 $(C++FILES) $(C++FILESGPU) $(F90FILES) $(AHFDOBJS) $(CUDAFILES): macrodef.fh
@@ -84,19 +84,22 @@ $(C++FILES) $(C++FILES_GPU) $(AHFDOBJS) $(CUDAFILES): macrodef.h
 
 TwoPunctureFILES: TwoPunctures.h
 
-$(CUDAFILES): bssn_gpu.h gpu_mem.h gpu_rhsSS_mem.h
+$(CUDAFILES): bssn_gpu.h gpu_mem.h gpu_rhsSS_mem.h bssn_gpu_manager.h gpu_constant.h
 
 misc.o : zbesh.o
+
+gpu_link.o: $(CUDAFILES)
+	$(Cu) -arch=sm_$(CUDA_COMPUTE_CAPABILITY) -dlink $(CUDAFILES) -o $@
 
 # projects
 ABE: $(C++FILES) $(F90FILES) $(F77FILES) $(AHFDOBJS) 
 	$(CLINKER) $(CXXAPPFLAGS) -o $@ $(C++FILES) $(F90FILES) $(F77FILES) $(AHFDOBJS) $(LDLIBS)
 	
-ABEGPU: $(C++FILES_GPU) $(F90FILES) $(F77FILES) $(AHFDOBJS) $(CUDAFILES)
-	$(CLINKER) $(CXXAPPFLAGS) -o $@ $(C++FILES_GPU) $(F90FILES) $(F77FILES) $(AHFDOBJS) $(CUDAFILES) $(LDLIBS)
+ABEGPU: $(C++FILES_GPU) $(F90FILES) $(F77FILES) $(AHFDOBJS) $(CUDAFILES) gpu_link.o
+	$(CLINKER) $(CXXAPPFLAGS) -o $@ $(C++FILES_GPU) $(F90FILES) $(F77FILES) $(AHFDOBJS) $(CUDAFILES) gpu_link.o $(LDLIBS)
 
 TwoPunctureABE: $(TwoPunctureFILES)
 	$(CLINKER) $(CXXAPPFLAGS) -o $@ $(TwoPunctureFILES) $(LDLIBS)
 
 clean:
-	rm *.o ABE ABEGPU TwoPunctureABE make.log -f
+	rm *.o gpu_link.o ABE ABEGPU TwoPunctureABE make.log -f

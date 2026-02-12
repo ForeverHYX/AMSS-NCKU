@@ -24,5 +24,4 @@ CLINKER      = mpiicpx
 
 Cu = $(CUDA_DIR)/bin/nvcc
 CUDA_LIB_PATH = -L/usr/lib/cuda/lib64 -I/usr/include -I/usr/lib/cuda/include
-#CUDA_APP_FLAGS = -c -g -O3 --ptxas-options=-v -arch compute_13 -code compute_13,sm_13 -Dfortran3 -Dnewc
-CUDA_APP_FLAGS = -c -g -O3 --ptxas-options=-v -Dfortran3 -Dnewc  -arch=sm_$(CUDA_COMPUTE_CAPABILITY)
+CUDA_APP_FLAGS = -g -O3 --ptxas-options=-v -Dfortran3 -Dnewc  -arch=sm_$(CUDA_COMPUTE_CAPABILITY) -rdc=true
