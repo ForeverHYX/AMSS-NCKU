@@ -3629,11 +3629,18 @@ void bssn_class::Constraint_Out()
             Block *cg = BP->data;
             if (myrank == cg->rank)
             {
-              if (use_gpu == 1)
-                gpu_rhs(CALLED_BY_CONSTRAINT, myrank, RHS_PARA_CALLED_Constraint_Out);
-
-              else
-                f_compute_rhs_bssn(RHS_PARA_CALLED_Constraint_Out);
+                if (use_gpu == 1) {
+                    GPU_CALL_CONTEXT ctx = {CALLED_BY_CONSTRAINT, myrank, RHS_PARA_CALLED_Constraint_Out};
+                    gpu_init_meta(ctx);
+                    gpu_to_device(ctx);
+                    gpu_init_constant(ctx);
+                    gpu_rhs(ctx);
+                    gpu_back_to_host(ctx);
+                    gpu_destroy_meta();
+                    //   gpu_rhs(CALLED_BY_CONSTRAINT, myrank, RHS_PARA_CALLED_Constraint_Out);
+                }
+                else
+                    f_compute_rhs_bssn(RHS_PARA_CALLED_Constraint_Out);
             }
             if (BP == Pp->data->ble)
               break;
@@ -3950,10 +3957,18 @@ void bssn_class::Interp_Constraint(bool infg)
             Block *cg = BP->data;
             if (myrank == cg->rank)
             {
-              if (use_gpu == 1)
-                gpu_rhs(CALLED_BY_CONSTRAINT, myrank, RHS_PARA_CALLED_Interp_Constraint);
-              else
-                f_compute_rhs_bssn(RHS_PARA_CALLED_Interp_Constraint);
+                if (use_gpu == 1) {
+                    GPU_CALL_CONTEXT ctx = {CALLED_BY_CONSTRAINT, myrank, RHS_PARA_CALLED_Interp_Constraint};
+                    gpu_init_meta(ctx);
+                    gpu_to_device(ctx);
+                    gpu_init_constant(ctx);
+                    gpu_rhs(ctx);
+                    gpu_back_to_host(ctx);
+                    gpu_destroy_meta();
+                    // gpu_rhs(CALLED_BY_CONSTRAINT, myrank, RHS_PARA_CALLED_Interp_Constraint);
+                }
+                else
+                    f_compute_rhs_bssn(RHS_PARA_CALLED_Interp_Constraint);
             }
             if (BP == Pp->data->ble)
               break;

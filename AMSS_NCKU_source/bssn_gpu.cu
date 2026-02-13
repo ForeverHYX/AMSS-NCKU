@@ -1575,49 +1575,27 @@ __global__ void device_test(double * result, double * Xt){
 	if(Mh_ gzz_rhs) cudaFree(Mh_ gzz_rhs);
 } */
 
-int gpu_rhs(int calledby, int mpi_rank, int *ex, double &T,double *X, double *Y, double *Z,                                     
-               double *chi, double *  trK ,                                             
-               double *dxx , double *  gxy    ,double *gxz ,double * dyy,double *gyz,double *dzz,     
-               double *Axx ,   double *Axy ,  double * Axz ,  double * Ayy ,  double * Ayz , double * Azz,     
-               double *Gamx ,  double *Gamy ,  double *Gamz ,                                  
-               double *Lap ,  double *betax ,  double *betay ,  double *betaz ,                       
-               double *dtSfx,  double *dtSfy ,  double *dtSfz ,                                  
-               double *chi_rhs, double *  trK_rhs,                                             
-               double *gxx_rhs,  double * gxy_rhs,  double * gxz_rhs,  double * gyy_rhs,   double *gyz_rhs,  double * gzz_rhs, 
-               double *Axx_rhs, double *  Axy_rhs,  double * Axz_rhs,  double * Ayy_rhs,   double *Ayz_rhs,   double *Azz_rhs, 
-           	   double *Gamx_rhs, double * Gamy_rhs, double * Gamz_rhs,                                 
-               double *Lap_rhs,  double *betax_rhs, double * betay_rhs, double * betaz_rhs,                    
-               double *dtSfx_rhs, double * dtSfy_rhs, double * dtSfz_rhs,                              
-               double *rho,double *Sx,double *Sy,double *Sz,double *Sxx,
-               double *Sxy,double *Sxz,double *Syy,double *Syz,double *Szz,                           
-               double *Gamxxx,double *Gamxxy,double *Gamxxz,double *Gamxyy,double *Gamxyz,double *Gamxzz,                      
-               double *Gamyxx,double *Gamyxy,double *Gamyxz,double *Gamyyy,double *Gamyyz,double *Gamyzz,                      
-               double *Gamzxx,double *Gamzxy,double *Gamzxz,double *Gamzyy,double *Gamzyz,double *Gamzzz,                      
-               double *Rxx,double *Rxy,double *Rxz,double *Ryy,double *Ryz,double *Rzz,                                        
-               double *ham_Res, double *movx_Res, double *movy_Res,double * movz_Res, 
-               double * Gmx_Res, double *Gmy_Res,double * Gmz_Res ,
-               int & Symmetry,int &Lev, double &eps, int &co)
-{
+int gpu_rhs(GPU_CALL_CONTEXT &ctx) {
 	cudaSetDevice(DEVICE_ID);
-	int matrix_size = ex[0] * ex[1] * ex[2];
+	int matrix_size = ctx.ex[0] * ctx.ex[1] * ctx.ex[2];
 	//#1------------init gpu meta data---------------------
 	//cout<<"init GPU meta data\n";
-	gpu_init_meta(ex);
+	// gpu_init_meta(ex);
 	Meta *meta = gpu_get_meta();
   	// which device to use
   	/* cudaSetDevice(DEVICE_ID);
 
 	//int dim = 3;
-	int matrix_size = ex[0] * ex[1] * ex[2];
+	int matrix_size = ctx.ex[0] * ctx.ex[1] * ctx.ex[2];
 	Meta met;
 	Meta * meta = &met; */
 	
 	//#1--------------------init_gpu_meta(meta,matrix_size)---------------------------
 
 	//1.1 inout
-	/* cudaMalloc((void**)&(Mh_ X), ex[0] * sizeof(double));
-	cudaMalloc((void**)&(Mh_ Y), ex[1] * sizeof(double));
-	cudaMalloc((void**)&(Mh_ Z), ex[2] * sizeof(double));
+	/* cudaMalloc((void**)&(Mh_ X), ctx.ex[0] * sizeof(double));
+	cudaMalloc((void**)&(Mh_ Y), ctx.ex[1] * sizeof(double));
+	cudaMalloc((void**)&(Mh_ Z), ctx.ex[2] * sizeof(double));
 	cudaMalloc((void**)&(Mh_ chi), matrix_size * sizeof(double));
 	cudaMalloc((void**)&(Mh_ dxx), matrix_size * sizeof(double));
 	cudaMalloc((void**)&(Mh_ dyy), matrix_size * sizeof(double));
@@ -1787,13 +1765,13 @@ int gpu_rhs(int calledby, int mpi_rank, int *ex, double &T,double *X, double *Y,
 	cudaMalloc((void**)&(Mh_ Gamza), matrix_size * sizeof(double));
 	cudaMalloc((void**)&(Mh_ alpn1), matrix_size * sizeof(double));
 	cudaMalloc((void**)&(Mh_ chin1), matrix_size * sizeof(double));
-	cudaMalloc((void**)&(Mh_ fh), (ex[0]+2)*(ex[1]+2)*(ex[2]+2) * sizeof(double));
-	cudaMalloc((void**)&(Mh_ fh2), (ex[0]+3)*(ex[1]+3)*(ex[2]+3) * sizeof(double)); */
+	cudaMalloc((void**)&(Mh_ fh), (ctx.ex[0]+2)*(ctx.ex[1]+2)*(ctx.ex[2]+2) * sizeof(double));
+	cudaMalloc((void**)&(Mh_ fh2), (ctx.ex[0]+3)*(ctx.ex[1]+3)*(ctx.ex[2]+3) * sizeof(double)); */
 	  
 //2 ----------------Copy Data to Device------------------
-	/* cudaMemcpy(Mh_ X, X, ex[0] * sizeof(double), cudaMemcpyHostToDevice);
-	cudaMemcpy(Mh_ Y, Y, ex[1] * sizeof(double), cudaMemcpyHostToDevice);
-	cudaMemcpy(Mh_ Z, Z, ex[2] * sizeof(double), cudaMemcpyHostToDevice);
+	/* cudaMemcpy(Mh_ X, X, ctx.ex[0] * sizeof(double), cudaMemcpyHostToDevice);
+	cudaMemcpy(Mh_ Y, Y, ctx.ex[1] * sizeof(double), cudaMemcpyHostToDevice);
+	cudaMemcpy(Mh_ Z, Z, ctx.ex[2] * sizeof(double), cudaMemcpyHostToDevice);
 	cudaMemcpy(Mh_ chi, chi, matrix_size * sizeof(double), cudaMemcpyHostToDevice);
 	cudaMemcpy(Mh_ dxx, dxx, matrix_size * sizeof(double), cudaMemcpyHostToDevice);
 	cudaMemcpy(Mh_ dyy, dyy, matrix_size * sizeof(double), cudaMemcpyHostToDevice);
@@ -1898,7 +1876,7 @@ int gpu_rhs(int calledby, int mpi_rank, int *ex, double &T,double *X, double *Y,
 	cudaMemset(Mh_ Gamza,0,matrix_size * sizeof(double));
 	cudaMemset(Mh_ alpn1,0,matrix_size * sizeof(double));
 	cudaMemset(Mh_ chin1,0,matrix_size * sizeof(double)); */
-	gpu_to_device(ex, X, Y, Z, chi, trK, dxx, gxy, gxz, dyy, gyz, dzz, Axx, Axy, Axz, Ayy, Ayz, Azz, Gamx, Gamy, Gamz, Lap, betax, betay, betaz, dtSfx, dtSfy, dtSfz);
+	// gpu_to_device(ex, X, Y, Z, chi, trK, dxx, gxy, gxz, dyy, gyz, dzz, Axx, Axy, Axz, Ayy, Ayz, Azz, Gamx, Gamy, Gamz, Lap, betax, betay, betaz, dtSfx, dtSfy, dtSfz);
 	
 	double sss[3] = {1,1,1};
 	double aas[3] = {-1,-1,1};
@@ -1940,9 +1918,9 @@ int gpu_rhs(int calledby, int mpi_rank, int *ex, double &T,double *X, double *Y,
 	int _2d_size[4];
 	int _3d_size[4];
 	for(int i = 0;i<4;++i){
-		_1d_size[i] = ex[0] + i;
-		_2d_size[i] = _1d_size[i] * (ex[1]+i);
-		_3d_size[i] = _2d_size[i] * (ex[2]+i);
+		_1d_size[i] = ctx.ex[0] + i;
+		_2d_size[i] = _1d_size[i] * (ctx.ex[1]+i);
+		_3d_size[i] = _2d_size[i] * (ctx.ex[2]+i);
 	}
 	cudaMemcpyToSymbol(_1D_SIZE,_1d_size, 4*sizeof(int));
 	cudaMemcpyToSymbol(_2D_SIZE,_2d_size, 4*sizeof(int));
@@ -1950,7 +1928,7 @@ int gpu_rhs(int calledby, int mpi_rank, int *ex, double &T,double *X, double *Y,
 
 	
 //3.2--------for fderivs------------
-	int ijkmax_h[3] = {ex[0]-1,ex[1]-1,ex[2]-1};
+	int ijkmax_h[3] = {ctx.ex[0]-1,ctx.ex[1]-1,ctx.ex[2]-1};
 	int ijkmin_h[3] = {0,0,0};
 	int ijkmin2_h[3] = {0,0,0};
 	int ijkmin3_h[3] = {0,0,0};
@@ -2007,7 +1985,7 @@ int gpu_rhs(int calledby, int mpi_rank, int *ex, double &T,double *X, double *Y,
 	cudaMemcpyToSymbol(Fdxdy,&Fdxdyh,sizeof(double));
 	cudaMemcpyToSymbol(Fdxdz,&Fdxdzh,sizeof(double));
 	cudaMemcpyToSymbol(Fdydz,&Fdydzh,sizeof(double)); */
-	gpu_init_constant(ex, T, X, Y, Z, Symmetry, Lev, eps, co);
+	// gpu_init_constant(ex, T, X, Y, Z, Symmetry, Lev, eps, co);
 //3.4---------for lopsided---------------------------
 
 	//cout<<"GPU meta data ready.\n";
@@ -2096,7 +2074,7 @@ int gpu_rhs(int calledby, int mpi_rank, int *ex, double &T,double *X, double *Y,
 	sub_lopsided(Mh_ dtSfy,Mh_ fh2,Mh_ dtSfy_rhs,Mh_ betax,Mh_ betay,Mh_ betaz,sas);
 	sub_lopsided(Mh_ dtSfz,Mh_ fh2,Mh_ dtSfz_rhs,Mh_ betax,Mh_ betay,Mh_ betaz,ssa);
 
-	if(eps > 0){
+	if(ctx.eps > 0){
 		sub_kodis(Mh_ chi,Mh_ fh2, Mh_ chi_rhs,sss);
 		sub_kodis(Mh_ trK,Mh_ fh2, Mh_ trK_rhs,sss);
 		sub_kodis(Mh_ dxx,Mh_ fh2, Mh_ gxx_rhs,sss);
@@ -2125,7 +2103,7 @@ int gpu_rhs(int calledby, int mpi_rank, int *ex, double &T,double *X, double *Y,
 		sub_kodis(Mh_ dtSfz,Mh_ fh2, Mh_ dtSfz_rhs,ssa);
 	}
 	
-	if(co == 0){
+	if(ctx.co == 0){
 		compute_rhs_bssn_part7<<<GRID_DIM,BLOCK_DIM>>>();
 		cudaThreadSynchronize();
 
@@ -2200,22 +2178,22 @@ int gpu_rhs(int calledby, int mpi_rank, int *ex, double &T,double *X, double *Y,
 		cudaMemcpy(Gmy_Res, Mh_ Gmy_Res, matrix_size * sizeof(double), cudaMemcpyDeviceToHost);
 		cudaMemcpy(Gmz_Res, Mh_ Gmz_Res, matrix_size * sizeof(double), cudaMemcpyDeviceToHost);
 	} */
-	gpu_back_to_host(
-		calledby, ex, 
-		chi_rhs,   trK_rhs,                                             
-		gxx_rhs,   gxy_rhs,   gxz_rhs,   gyy_rhs,   gyz_rhs,   gzz_rhs, 
-		Axx_rhs,   Axy_rhs,   Axz_rhs,   Ayy_rhs,   Ayz_rhs,   Azz_rhs, 
-		Gamx_rhs,  Gamy_rhs,  Gamz_rhs,                                 
-		Lap_rhs,  betax_rhs,  betay_rhs,  betaz_rhs,                    
-		dtSfx_rhs,  dtSfy_rhs,  dtSfz_rhs,                          
-		Gamxxx,Gamxxy,Gamxxz,Gamxyy,Gamxyz,Gamxzz,                      
-		Gamyxx,Gamyxy,Gamyxz,Gamyyy,Gamyyz,Gamyzz,                      
-		Gamzxx,Gamzxy,Gamzxz,Gamzyy,Gamzyz,Gamzzz,                      
-		Rxx,Rxy,Rxz,Ryy,Ryz,Rzz,                                        
-		ham_Res, movx_Res, movy_Res, movz_Res, 
-		Gmx_Res, Gmy_Res, Gmz_Res
-	);
-	gpu_destroy_meta();
+	// gpu_back_to_host(
+	// 	calledby, ex, 
+	// 	chi_rhs,   trK_rhs,                                             
+	// 	gxx_rhs,   gxy_rhs,   gxz_rhs,   gyy_rhs,   gyz_rhs,   gzz_rhs, 
+	// 	Axx_rhs,   Axy_rhs,   Axz_rhs,   Ayy_rhs,   Ayz_rhs,   Azz_rhs, 
+	// 	Gamx_rhs,  Gamy_rhs,  Gamz_rhs,                                 
+	// 	Lap_rhs,  betax_rhs,  betay_rhs,  betaz_rhs,                    
+	// 	dtSfx_rhs,  dtSfy_rhs,  dtSfz_rhs,                          
+	// 	Gamxxx,Gamxxy,Gamxxz,Gamxyy,Gamxyz,Gamxzz,                      
+	// 	Gamyxx,Gamyxy,Gamyxz,Gamyyy,Gamyyz,Gamyzz,                      
+	// 	Gamzxx,Gamzxy,Gamzxz,Gamzyy,Gamzyz,Gamzzz,                      
+	// 	Rxx,Rxy,Rxz,Ryy,Ryz,Rzz,                                        
+	// 	ham_Res, movx_Res, movy_Res, movz_Res, 
+	// 	Gmx_Res, Gmy_Res, Gmz_Res
+	// );
+	// gpu_destroy_meta();
 	// destroy_meta(meta);
 
 	

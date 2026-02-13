@@ -183,19 +183,19 @@ void gpu_destroy_meta() {
 	meta = NULL;
 }
 
-void gpu_init_meta(int * ex) {
+void gpu_init_meta(GPU_CALL_CONTEXT &ctx) {
 	cudaSetDevice(DEVICE_ID);
 
-	int matrix_size = ex[0] * ex[1] * ex[2];
+	int matrix_size = ctx.ex[0] * ctx.ex[1] * ctx.ex[2];
 	// Meta met;
 	// Meta * meta = &met;
 	if (!meta) {
 		meta = (Meta *)malloc(sizeof(Meta));
 	}
 
-	cudaMalloc((void**)&(Mh_ X), ex[0] * sizeof(double));
-	cudaMalloc((void**)&(Mh_ Y), ex[1] * sizeof(double));
-	cudaMalloc((void**)&(Mh_ Z), ex[2] * sizeof(double));
+	cudaMalloc((void**)&(Mh_ X), ctx.ex[0] * sizeof(double));
+	cudaMalloc((void**)&(Mh_ Y), ctx.ex[1] * sizeof(double));
+	cudaMalloc((void**)&(Mh_ Z), ctx.ex[2] * sizeof(double));
 	cudaMalloc((void**)&(Mh_ chi), matrix_size * sizeof(double));
 	cudaMalloc((void**)&(Mh_ dxx), matrix_size * sizeof(double));
 	cudaMalloc((void**)&(Mh_ dyy), matrix_size * sizeof(double));
@@ -365,8 +365,8 @@ void gpu_init_meta(int * ex) {
 	cudaMalloc((void**)&(Mh_ Gamza), matrix_size * sizeof(double));
 	cudaMalloc((void**)&(Mh_ alpn1), matrix_size * sizeof(double));
 	cudaMalloc((void**)&(Mh_ chin1), matrix_size * sizeof(double));
-	cudaMalloc((void**)&(Mh_ fh), (ex[0]+2)*(ex[1]+2)*(ex[2]+2) * sizeof(double));
-	cudaMalloc((void**)&(Mh_ fh2), (ex[0]+3)*(ex[1]+3)*(ex[2]+3) * sizeof(double));
+	cudaMalloc((void**)&(Mh_ fh), (ctx.ex[0]+2)*(ctx.ex[1]+2)*(ctx.ex[2]+2) * sizeof(double));
+	cudaMalloc((void**)&(Mh_ fh2), (ctx.ex[0]+3)*(ctx.ex[1]+3)*(ctx.ex[2]+3) * sizeof(double));
 
 	//init local var
 	cudaMemset(Mh_ gxx,0,matrix_size * sizeof(double));
@@ -439,42 +439,35 @@ void gpu_init_meta(int * ex) {
 	cudaMemset(Mh_ chin1,0,matrix_size * sizeof(double));
 }
 
-void gpu_to_device( 
-	int *ex, double *X, double *Y, double *Z, double *chi, double *  trK ,                                             
-	double *dxx , double *  gxy    ,double *gxz ,double * dyy,double *gyz,double *dzz,     
-	double *Axx ,   double *Axy ,  double * Axz ,  double * Ayy ,  double * Ayz , double * Azz,     
-	double *Gamx ,  double *Gamy ,  double *Gamz ,                                  
-	double *Lap ,  double *betax ,  double *betay ,  double *betaz ,                       
-	double *dtSfx,  double *dtSfy ,  double *dtSfz
-) {
-	int matrix_size = ex[0] * ex[1] * ex[2];
-	cudaMemcpy(Mh_ X, X, ex[0] * sizeof(double), cudaMemcpyHostToDevice);
-	cudaMemcpy(Mh_ Y, Y, ex[1] * sizeof(double), cudaMemcpyHostToDevice);
-	cudaMemcpy(Mh_ Z, Z, ex[2] * sizeof(double), cudaMemcpyHostToDevice);
-	cudaMemcpy(Mh_ chi, chi, matrix_size * sizeof(double), cudaMemcpyHostToDevice);
-	cudaMemcpy(Mh_ dxx, dxx, matrix_size * sizeof(double), cudaMemcpyHostToDevice);
-	cudaMemcpy(Mh_ dyy, dyy, matrix_size * sizeof(double), cudaMemcpyHostToDevice);
-	cudaMemcpy(Mh_ dzz, dzz, matrix_size * sizeof(double), cudaMemcpyHostToDevice);
-	cudaMemcpy(Mh_ trK, trK, matrix_size * sizeof(double), cudaMemcpyHostToDevice);
-	cudaMemcpy(Mh_ gxy, gxy, matrix_size * sizeof(double), cudaMemcpyHostToDevice);
-	cudaMemcpy(Mh_ gxz, gxz, matrix_size * sizeof(double), cudaMemcpyHostToDevice);
-	cudaMemcpy(Mh_ gyz, gyz, matrix_size * sizeof(double), cudaMemcpyHostToDevice);
-	cudaMemcpy(Mh_ Axx, Axx, matrix_size * sizeof(double), cudaMemcpyHostToDevice);
-	cudaMemcpy(Mh_ Axy, Axy, matrix_size * sizeof(double), cudaMemcpyHostToDevice);
-	cudaMemcpy(Mh_ Axz, Axz, matrix_size * sizeof(double), cudaMemcpyHostToDevice);
-	cudaMemcpy(Mh_ Ayz, Ayz, matrix_size * sizeof(double), cudaMemcpyHostToDevice);
-	cudaMemcpy(Mh_ Ayy, Ayy, matrix_size * sizeof(double), cudaMemcpyHostToDevice);
-	cudaMemcpy(Mh_ Azz, Azz, matrix_size * sizeof(double), cudaMemcpyHostToDevice);
-	cudaMemcpy(Mh_ Gamx, Gamx, matrix_size * sizeof(double), cudaMemcpyHostToDevice);
-	cudaMemcpy(Mh_ Gamy, Gamy, matrix_size * sizeof(double), cudaMemcpyHostToDevice);
-	cudaMemcpy(Mh_ Gamz, Gamz, matrix_size * sizeof(double), cudaMemcpyHostToDevice);
-	cudaMemcpy(Mh_ betax, betax, matrix_size * sizeof(double), cudaMemcpyHostToDevice);
-	cudaMemcpy(Mh_ betay, betay, matrix_size * sizeof(double), cudaMemcpyHostToDevice);
-	cudaMemcpy(Mh_ betaz, betaz, matrix_size * sizeof(double), cudaMemcpyHostToDevice);
-	cudaMemcpy(Mh_ Lap, Lap, matrix_size * sizeof(double), cudaMemcpyHostToDevice);
-	cudaMemcpy(Mh_ dtSfx, dtSfx, matrix_size * sizeof(double), cudaMemcpyHostToDevice);
-	cudaMemcpy(Mh_ dtSfy, dtSfy, matrix_size * sizeof(double), cudaMemcpyHostToDevice);
-	cudaMemcpy(Mh_ dtSfz, dtSfz, matrix_size * sizeof(double), cudaMemcpyHostToDevice);
+void gpu_to_device(GPU_CALL_CONTEXT &ctx) {
+	int matrix_size = ctx.ex[0] * ctx.ex[1] * ctx.ex[2];
+	cudaMemcpy(Mh_ X, ctx.X, ctx.ex[0] * sizeof(double), cudaMemcpyHostToDevice);
+	cudaMemcpy(Mh_ Y, ctx.Y, ctx.ex[1] * sizeof(double), cudaMemcpyHostToDevice);
+	cudaMemcpy(Mh_ Z, ctx.Z, ctx.ex[2] * sizeof(double), cudaMemcpyHostToDevice);
+	cudaMemcpy(Mh_ chi, ctx.chi, matrix_size * sizeof(double), cudaMemcpyHostToDevice);
+	cudaMemcpy(Mh_ dxx, ctx.dxx, matrix_size * sizeof(double), cudaMemcpyHostToDevice);
+	cudaMemcpy(Mh_ dyy, ctx.dyy, matrix_size * sizeof(double), cudaMemcpyHostToDevice);
+	cudaMemcpy(Mh_ dzz, ctx.dzz, matrix_size * sizeof(double), cudaMemcpyHostToDevice);
+	cudaMemcpy(Mh_ trK, ctx.trK, matrix_size * sizeof(double), cudaMemcpyHostToDevice);
+	cudaMemcpy(Mh_ gxy, ctx.gxy, matrix_size * sizeof(double), cudaMemcpyHostToDevice);
+	cudaMemcpy(Mh_ gxz, ctx.gxz, matrix_size * sizeof(double), cudaMemcpyHostToDevice);
+	cudaMemcpy(Mh_ gyz, ctx.gyz, matrix_size * sizeof(double), cudaMemcpyHostToDevice);
+	cudaMemcpy(Mh_ Axx, ctx.Axx, matrix_size * sizeof(double), cudaMemcpyHostToDevice);
+	cudaMemcpy(Mh_ Axy, ctx.Axy, matrix_size * sizeof(double), cudaMemcpyHostToDevice);
+	cudaMemcpy(Mh_ Axz, ctx.Axz, matrix_size * sizeof(double), cudaMemcpyHostToDevice);
+	cudaMemcpy(Mh_ Ayz, ctx.Ayz, matrix_size * sizeof(double), cudaMemcpyHostToDevice);
+	cudaMemcpy(Mh_ Ayy, ctx.Ayy, matrix_size * sizeof(double), cudaMemcpyHostToDevice);
+	cudaMemcpy(Mh_ Azz, ctx.Azz, matrix_size * sizeof(double), cudaMemcpyHostToDevice);
+	cudaMemcpy(Mh_ Gamx, ctx.Gamx, matrix_size * sizeof(double), cudaMemcpyHostToDevice);
+	cudaMemcpy(Mh_ Gamy, ctx.Gamy, matrix_size * sizeof(double), cudaMemcpyHostToDevice);
+	cudaMemcpy(Mh_ Gamz, ctx.Gamz, matrix_size * sizeof(double), cudaMemcpyHostToDevice);
+	cudaMemcpy(Mh_ betax, ctx.betax, matrix_size * sizeof(double), cudaMemcpyHostToDevice);
+	cudaMemcpy(Mh_ betay, ctx.betay, matrix_size * sizeof(double), cudaMemcpyHostToDevice);
+	cudaMemcpy(Mh_ betaz, ctx.betaz, matrix_size * sizeof(double), cudaMemcpyHostToDevice);
+	cudaMemcpy(Mh_ Lap, ctx.Lap, matrix_size * sizeof(double), cudaMemcpyHostToDevice);
+	cudaMemcpy(Mh_ dtSfx, ctx.dtSfx, matrix_size * sizeof(double), cudaMemcpyHostToDevice);
+	cudaMemcpy(Mh_ dtSfy, ctx.dtSfy, matrix_size * sizeof(double), cudaMemcpyHostToDevice);
+	cudaMemcpy(Mh_ dtSfz, ctx.dtSfz, matrix_size * sizeof(double), cudaMemcpyHostToDevice);
 	cudaMemset(Mh_ rho,0,matrix_size * sizeof(double));
 	cudaMemset(Mh_ Sxx,0,matrix_size * sizeof(double));
 	cudaMemset(Mh_ Sxy,0,matrix_size * sizeof(double));
@@ -487,26 +480,23 @@ void gpu_to_device(
 	cudaMemset(Mh_ Sz,0,matrix_size * sizeof(double));
 }
 
-void gpu_init_constant(
-	int *ex, double &T, double *X, double *Y, double *Z,                                     
-	int & Symmetry,int &Lev, double &eps, int &co
-) {
+void gpu_init_constant(GPU_CALL_CONTEXT &ctx) {
 	cudaMemcpyToSymbol(metac,meta, sizeof(Meta));
-	cudaMemcpyToSymbol(ex_c,ex, 3*sizeof(int));
-	cudaMemcpyToSymbol(T_c,&T, sizeof(double));
-	cudaMemcpyToSymbol(Symmetry_c,&Symmetry, sizeof(int));
-	cudaMemcpyToSymbol(Lev_c,&Lev, sizeof(int));
-	cudaMemcpyToSymbol(co_c,&co, sizeof(int));
-	cudaMemcpyToSymbol(eps_c,&eps, sizeof(double));
+	cudaMemcpyToSymbol(ex_c, ctx.ex, 3*sizeof(int));
+	cudaMemcpyToSymbol(T_c, &ctx.T, sizeof(double));
+	cudaMemcpyToSymbol(Symmetry_c, &ctx.Symmetry, sizeof(int));
+	cudaMemcpyToSymbol(Lev_c, &ctx.Lev, sizeof(int));
+	cudaMemcpyToSymbol(co_c, &ctx.co, sizeof(int));
+	cudaMemcpyToSymbol(eps_c, &ctx.eps, sizeof(double));
 	
 	double F1o3h  = 1.0;	F1o3h /= 3.0;
 	double F2o3h  = 2.0;	F2o3h /= 3.0;
 	double F1o6h  = 1.0;	F1o6h /= 6.0;
 	double PIh = M_PI;
 	int step = GRID_DIM * BLOCK_DIM;
-	double dXh = X[1] - X[0];
-	double dYh = Y[1] - Y[0];
-	double dZh = Z[1] - Z[0];
+	double dXh = ctx.X[1] - ctx.X[0];
+	double dYh = ctx.Y[1] - ctx.Y[0];
+	double dZh = ctx.Z[1] - ctx.Z[0];
 	
 	cudaMemcpyToSymbol(F1o3,&F1o3h, sizeof(double));
 	cudaMemcpyToSymbol(F2o3,&F2o3h, sizeof(double));
@@ -521,9 +511,9 @@ void gpu_init_constant(
 	int _2d_size[4];
 	int _3d_size[4];
 	for(int i = 0;i<4;++i){
-		_1d_size[i] = ex[0] + i;
-		_2d_size[i] = _1d_size[i] * (ex[1]+i);
-		_3d_size[i] = _2d_size[i] * (ex[2]+i);
+		_1d_size[i] = ctx.ex[0] + i;
+		_2d_size[i] = _1d_size[i] * (ctx.ex[1]+i);
+		_3d_size[i] = _2d_size[i] * (ctx.ex[2]+i);
 	}
 	cudaMemcpyToSymbol(_1D_SIZE,_1d_size, 4*sizeof(int));
 	cudaMemcpyToSymbol(_2D_SIZE,_2d_size, 4*sizeof(int));
@@ -531,22 +521,22 @@ void gpu_init_constant(
 
 	
 //3.2--------for fderivs------------
-	int ijkmax_h[3] = {ex[0]-1,ex[1]-1,ex[2]-1};
+	int ijkmax_h[3] = {ctx.ex[0]-1,ctx.ex[1]-1,ctx.ex[2]-1};
 	int ijkmin_h[3] = {0,0,0};
 	int ijkmin2_h[3] = {0,0,0};
 	int ijkmin3_h[3] = {0,0,0};
 	
-	double abs[3] = {X[0],Y[0],Z[0]};
+	double abs[3] = {ctx.X[0],ctx.Y[0],ctx.Z[0]};
 	for(int i = 0;i<3;++i){
 		if(abs[i] < 0) abs[i] = -abs[i]; 
 	}
-  	if(Symmetry > 1 && abs[0] < dXh) {ijkmin_h[0] = -2; ijkmin2_h[0] = -3;}
-  	if(Symmetry > 1 && abs[1] < dYh) {ijkmin_h[1] = -2; ijkmin2_h[1] = -3;}
-  	if(Symmetry > 0 && abs[2] < dZh) {ijkmin_h[2] = -2; ijkmin2_h[2] = -3;}
+  	if(ctx.Symmetry > 1 && abs[0] < dXh) {ijkmin_h[0] = -2; ijkmin2_h[0] = -3;}
+  	if(ctx.Symmetry > 1 && abs[1] < dYh) {ijkmin_h[1] = -2; ijkmin2_h[1] = -3;}
+  	if(ctx.Symmetry > 0 && abs[2] < dZh) {ijkmin_h[2] = -2; ijkmin2_h[2] = -3;}
   	
-  	if(Symmetry > 2 && abs[0] < dXh) {ijkmin3_h[0] = -3;}
-  	if(Symmetry > 2 && abs[1] < dYh) {ijkmin3_h[1] = -3;}
-  	if(Symmetry > 0 && abs[2] < dZh) {ijkmin3_h[2] = -3;}
+  	if(ctx.Symmetry > 2 && abs[0] < dXh) {ijkmin3_h[0] = -3;}
+  	if(ctx.Symmetry > 2 && abs[1] < dYh) {ijkmin3_h[1] = -3;}
+  	if(ctx.Symmetry > 0 && abs[2] < dZh) {ijkmin3_h[2] = -3;}
   	
   	cudaMemcpyToSymbol(ijk_max,ijkmax_h,3*sizeof(int));
   	cudaMemcpyToSymbol(ijk_min,ijkmin_h,3*sizeof(int));
@@ -590,80 +580,66 @@ void gpu_init_constant(
 	cudaMemcpyToSymbol(Fdydz,&Fdydzh,sizeof(double));
 }
 
-void gpu_back_to_host(
-	int calledby, int *ex, 
-	double *chi_rhs, double *  trK_rhs,                                             
-	double *gxx_rhs,  double * gxy_rhs,  double * gxz_rhs,  double * gyy_rhs,   double *gyz_rhs,  double * gzz_rhs, 
-	double *Axx_rhs, double *  Axy_rhs,  double * Axz_rhs,  double * Ayy_rhs,   double *Ayz_rhs,   double *Azz_rhs, 
-	double *Gamx_rhs, double * Gamy_rhs, double * Gamz_rhs,                                 
-	double *Lap_rhs,  double *betax_rhs, double * betay_rhs, double * betaz_rhs,                    
-	double *dtSfx_rhs, double * dtSfy_rhs, double * dtSfz_rhs,                          
-	double *Gamxxx,double *Gamxxy,double *Gamxxz,double *Gamxyy,double *Gamxyz,double *Gamxzz,                      
-	double *Gamyxx,double *Gamyxy,double *Gamyxz,double *Gamyyy,double *Gamyyz,double *Gamyzz,                      
-	double *Gamzxx,double *Gamzxy,double *Gamzxz,double *Gamzyy,double *Gamzyz,double *Gamzzz,                      
-	double *Rxx,double *Rxy,double *Rxz,double *Ryy,double *Ryz,double *Rzz,                                        
-	double *ham_Res, double *movx_Res, double *movy_Res,double * movz_Res, 
-	double * Gmx_Res, double *Gmy_Res,double * Gmz_Res
-) {
-	int matrix_size = ex[0] * ex[1] * ex[2];
-	if(calledby == CALLED_BY_STEP) {	
-		cudaMemcpy(chi_rhs, Mh_ chi_rhs, matrix_size * sizeof(double), cudaMemcpyDeviceToHost);
-		cudaMemcpy(trK_rhs, Mh_ trK_rhs, matrix_size * sizeof(double), cudaMemcpyDeviceToHost);
-		cudaMemcpy(gxx_rhs, Mh_ gxx_rhs, matrix_size * sizeof(double), cudaMemcpyDeviceToHost);
-		cudaMemcpy(gxy_rhs, Mh_ gxy_rhs, matrix_size * sizeof(double), cudaMemcpyDeviceToHost);
-		cudaMemcpy(gxz_rhs, Mh_ gxz_rhs, matrix_size * sizeof(double), cudaMemcpyDeviceToHost);
-		cudaMemcpy(gyy_rhs, Mh_ gyy_rhs, matrix_size * sizeof(double), cudaMemcpyDeviceToHost);
-		cudaMemcpy(gyz_rhs, Mh_ gyz_rhs, matrix_size * sizeof(double), cudaMemcpyDeviceToHost);
-		cudaMemcpy(gzz_rhs, Mh_ gzz_rhs, matrix_size * sizeof(double), cudaMemcpyDeviceToHost);
-		cudaMemcpy(Axx_rhs, Mh_ Axx_rhs, matrix_size * sizeof(double), cudaMemcpyDeviceToHost);
-		cudaMemcpy(Axy_rhs, Mh_ Axy_rhs, matrix_size * sizeof(double), cudaMemcpyDeviceToHost);
-		cudaMemcpy(Axz_rhs, Mh_ Axz_rhs, matrix_size * sizeof(double), cudaMemcpyDeviceToHost);
-		cudaMemcpy(Ayy_rhs, Mh_ Ayy_rhs, matrix_size * sizeof(double), cudaMemcpyDeviceToHost);
-		cudaMemcpy(Ayz_rhs, Mh_ Ayz_rhs, matrix_size * sizeof(double), cudaMemcpyDeviceToHost);
-		cudaMemcpy(Azz_rhs, Mh_ Azz_rhs, matrix_size * sizeof(double), cudaMemcpyDeviceToHost);
-		cudaMemcpy(Gamx_rhs, Mh_ Gamx_rhs, matrix_size * sizeof(double), cudaMemcpyDeviceToHost);
-		cudaMemcpy(Gamy_rhs, Mh_ Gamy_rhs, matrix_size * sizeof(double), cudaMemcpyDeviceToHost);
-		cudaMemcpy(Gamz_rhs, Mh_ Gamz_rhs, matrix_size * sizeof(double), cudaMemcpyDeviceToHost);
-		cudaMemcpy(Lap_rhs, Mh_ Lap_rhs, matrix_size * sizeof(double), cudaMemcpyDeviceToHost);
-		cudaMemcpy(betax_rhs, Mh_ betax_rhs, matrix_size * sizeof(double), cudaMemcpyDeviceToHost);
-		cudaMemcpy(betay_rhs, Mh_ betay_rhs, matrix_size * sizeof(double), cudaMemcpyDeviceToHost);
-		cudaMemcpy(betaz_rhs, Mh_ betaz_rhs, matrix_size * sizeof(double), cudaMemcpyDeviceToHost);
-		cudaMemcpy(dtSfx_rhs, Mh_ dtSfx_rhs, matrix_size * sizeof(double), cudaMemcpyDeviceToHost);
-		cudaMemcpy(dtSfy_rhs, Mh_ dtSfy_rhs, matrix_size * sizeof(double), cudaMemcpyDeviceToHost);
-		cudaMemcpy(dtSfz_rhs, Mh_ dtSfz_rhs, matrix_size * sizeof(double), cudaMemcpyDeviceToHost);
+void gpu_back_to_host(GPU_CALL_CONTEXT &ctx) {
+	int matrix_size = ctx.ex[0] * ctx.ex[1] * ctx.ex[2];
+	if(ctx.calledby == CALLED_BY_STEP) {	
+		cudaMemcpy(ctx.chi_rhs, Mh_ chi_rhs, matrix_size * sizeof(double), cudaMemcpyDeviceToHost);
+		cudaMemcpy(ctx.trK_rhs, Mh_ trK_rhs, matrix_size * sizeof(double), cudaMemcpyDeviceToHost);
+		cudaMemcpy(ctx.gxx_rhs, Mh_ gxx_rhs, matrix_size * sizeof(double), cudaMemcpyDeviceToHost);
+		cudaMemcpy(ctx.gxy_rhs, Mh_ gxy_rhs, matrix_size * sizeof(double), cudaMemcpyDeviceToHost);
+		cudaMemcpy(ctx.gxz_rhs, Mh_ gxz_rhs, matrix_size * sizeof(double), cudaMemcpyDeviceToHost);
+		cudaMemcpy(ctx.gyy_rhs, Mh_ gyy_rhs, matrix_size * sizeof(double), cudaMemcpyDeviceToHost);
+		cudaMemcpy(ctx.gyz_rhs, Mh_ gyz_rhs, matrix_size * sizeof(double), cudaMemcpyDeviceToHost);
+		cudaMemcpy(ctx.gzz_rhs, Mh_ gzz_rhs, matrix_size * sizeof(double), cudaMemcpyDeviceToHost);
+		cudaMemcpy(ctx.Axx_rhs, Mh_ Axx_rhs, matrix_size * sizeof(double), cudaMemcpyDeviceToHost);
+		cudaMemcpy(ctx.Axy_rhs, Mh_ Axy_rhs, matrix_size * sizeof(double), cudaMemcpyDeviceToHost);
+		cudaMemcpy(ctx.Axz_rhs, Mh_ Axz_rhs, matrix_size * sizeof(double), cudaMemcpyDeviceToHost);
+		cudaMemcpy(ctx.Ayy_rhs, Mh_ Ayy_rhs, matrix_size * sizeof(double), cudaMemcpyDeviceToHost);
+		cudaMemcpy(ctx.Ayz_rhs, Mh_ Ayz_rhs, matrix_size * sizeof(double), cudaMemcpyDeviceToHost);
+		cudaMemcpy(ctx.Azz_rhs, Mh_ Azz_rhs, matrix_size * sizeof(double), cudaMemcpyDeviceToHost);
+		cudaMemcpy(ctx.Gamx_rhs, Mh_ Gamx_rhs, matrix_size * sizeof(double), cudaMemcpyDeviceToHost);
+		cudaMemcpy(ctx.Gamy_rhs, Mh_ Gamy_rhs, matrix_size * sizeof(double), cudaMemcpyDeviceToHost);
+		cudaMemcpy(ctx.Gamz_rhs, Mh_ Gamz_rhs, matrix_size * sizeof(double), cudaMemcpyDeviceToHost);
+		cudaMemcpy(ctx.Lap_rhs, Mh_ Lap_rhs, matrix_size * sizeof(double), cudaMemcpyDeviceToHost);
+		cudaMemcpy(ctx.betax_rhs, Mh_ betax_rhs, matrix_size * sizeof(double), cudaMemcpyDeviceToHost);
+		cudaMemcpy(ctx.betay_rhs, Mh_ betay_rhs, matrix_size * sizeof(double), cudaMemcpyDeviceToHost);
+		cudaMemcpy(ctx.betaz_rhs, Mh_ betaz_rhs, matrix_size * sizeof(double), cudaMemcpyDeviceToHost);
+		cudaMemcpy(ctx.dtSfx_rhs, Mh_ dtSfx_rhs, matrix_size * sizeof(double), cudaMemcpyDeviceToHost);
+		cudaMemcpy(ctx.dtSfy_rhs, Mh_ dtSfy_rhs, matrix_size * sizeof(double), cudaMemcpyDeviceToHost);
+		cudaMemcpy(ctx.dtSfz_rhs, Mh_ dtSfz_rhs, matrix_size * sizeof(double), cudaMemcpyDeviceToHost);
 	}
-	else if(calledby == CALLED_BY_CONSTRAINT)
+	else if(ctx.calledby == CALLED_BY_CONSTRAINT)
 	{
-		cudaMemcpy(Gamxxx, Mh_ Gamxxx, matrix_size * sizeof(double), cudaMemcpyDeviceToHost);
-		cudaMemcpy(Gamxxy, Mh_ Gamxxy, matrix_size * sizeof(double), cudaMemcpyDeviceToHost);
-		cudaMemcpy(Gamxxz, Mh_ Gamxxz, matrix_size * sizeof(double), cudaMemcpyDeviceToHost);
-		cudaMemcpy(Gamxyy, Mh_ Gamxyy, matrix_size * sizeof(double), cudaMemcpyDeviceToHost);
-		cudaMemcpy(Gamxyz, Mh_ Gamxyz, matrix_size * sizeof(double), cudaMemcpyDeviceToHost);
-		cudaMemcpy(Gamxzz, Mh_ Gamxzz, matrix_size * sizeof(double), cudaMemcpyDeviceToHost);
-		cudaMemcpy(Gamyxx, Mh_ Gamyxx, matrix_size * sizeof(double), cudaMemcpyDeviceToHost);
-		cudaMemcpy(Gamyxy, Mh_ Gamyxy, matrix_size * sizeof(double), cudaMemcpyDeviceToHost);
-		cudaMemcpy(Gamyxz, Mh_ Gamyxz, matrix_size * sizeof(double), cudaMemcpyDeviceToHost);
-		cudaMemcpy(Gamyyy, Mh_ Gamyyy, matrix_size * sizeof(double), cudaMemcpyDeviceToHost);
-		cudaMemcpy(Gamyyz, Mh_ Gamyyz, matrix_size * sizeof(double), cudaMemcpyDeviceToHost);
-		cudaMemcpy(Gamyzz, Mh_ Gamyzz, matrix_size * sizeof(double), cudaMemcpyDeviceToHost);
-		cudaMemcpy(Gamzxx, Mh_ Gamzxx, matrix_size * sizeof(double), cudaMemcpyDeviceToHost);
-		cudaMemcpy(Gamzxy, Mh_ Gamzxy, matrix_size * sizeof(double), cudaMemcpyDeviceToHost);
-		cudaMemcpy(Gamzxz, Mh_ Gamzxz, matrix_size * sizeof(double), cudaMemcpyDeviceToHost);
-		cudaMemcpy(Gamzyy, Mh_ Gamzyy, matrix_size * sizeof(double), cudaMemcpyDeviceToHost);
-		cudaMemcpy(Gamzyz, Mh_ Gamzyz, matrix_size * sizeof(double), cudaMemcpyDeviceToHost);
-		cudaMemcpy(Gamzzz, Mh_ Gamzzz, matrix_size * sizeof(double), cudaMemcpyDeviceToHost);
-		cudaMemcpy(Rxx, Mh_ Rxx, matrix_size * sizeof(double), cudaMemcpyDeviceToHost);
-		cudaMemcpy(Rxy, Mh_ Rxy, matrix_size * sizeof(double), cudaMemcpyDeviceToHost);
-		cudaMemcpy(Rxz, Mh_ Rxz, matrix_size * sizeof(double), cudaMemcpyDeviceToHost);
-		cudaMemcpy(Ryy, Mh_ Ryy, matrix_size * sizeof(double), cudaMemcpyDeviceToHost);
-		cudaMemcpy(Ryz, Mh_ Ryz, matrix_size * sizeof(double), cudaMemcpyDeviceToHost);
-		cudaMemcpy(Rzz, Mh_ Rzz, matrix_size * sizeof(double), cudaMemcpyDeviceToHost);
-		cudaMemcpy(ham_Res, Mh_ ham_Res, matrix_size * sizeof(double), cudaMemcpyDeviceToHost);
-		cudaMemcpy(movx_Res, Mh_ movx_Res, matrix_size * sizeof(double), cudaMemcpyDeviceToHost);
-		cudaMemcpy(movy_Res, Mh_ movy_Res, matrix_size * sizeof(double), cudaMemcpyDeviceToHost);
-		cudaMemcpy(movz_Res, Mh_ movz_Res, matrix_size * sizeof(double), cudaMemcpyDeviceToHost);
-		cudaMemcpy(Gmx_Res, Mh_ Gmx_Res, matrix_size * sizeof(double), cudaMemcpyDeviceToHost);
-		cudaMemcpy(Gmy_Res, Mh_ Gmy_Res, matrix_size * sizeof(double), cudaMemcpyDeviceToHost);
-		cudaMemcpy(Gmz_Res, Mh_ Gmz_Res, matrix_size * sizeof(double), cudaMemcpyDeviceToHost);
+		cudaMemcpy(ctx.Gamxxx, Mh_ Gamxxx, matrix_size * sizeof(double), cudaMemcpyDeviceToHost);
+		cudaMemcpy(ctx.Gamxxy, Mh_ Gamxxy, matrix_size * sizeof(double), cudaMemcpyDeviceToHost);
+		cudaMemcpy(ctx.Gamxxz, Mh_ Gamxxz, matrix_size * sizeof(double), cudaMemcpyDeviceToHost);
+		cudaMemcpy(ctx.Gamxyy, Mh_ Gamxyy, matrix_size * sizeof(double), cudaMemcpyDeviceToHost);
+		cudaMemcpy(ctx.Gamxyz, Mh_ Gamxyz, matrix_size * sizeof(double), cudaMemcpyDeviceToHost);
+		cudaMemcpy(ctx.Gamxzz, Mh_ Gamxzz, matrix_size * sizeof(double), cudaMemcpyDeviceToHost);
+		cudaMemcpy(ctx.Gamyxx, Mh_ Gamyxx, matrix_size * sizeof(double), cudaMemcpyDeviceToHost);
+		cudaMemcpy(ctx.Gamyxy, Mh_ Gamyxy, matrix_size * sizeof(double), cudaMemcpyDeviceToHost);
+		cudaMemcpy(ctx.Gamyxz, Mh_ Gamyxz, matrix_size * sizeof(double), cudaMemcpyDeviceToHost);
+		cudaMemcpy(ctx.Gamyyy, Mh_ Gamyyy, matrix_size * sizeof(double), cudaMemcpyDeviceToHost);
+		cudaMemcpy(ctx.Gamyyz, Mh_ Gamyyz, matrix_size * sizeof(double), cudaMemcpyDeviceToHost);
+		cudaMemcpy(ctx.Gamyzz, Mh_ Gamyzz, matrix_size * sizeof(double), cudaMemcpyDeviceToHost);
+		cudaMemcpy(ctx.Gamzxx, Mh_ Gamzxx, matrix_size * sizeof(double), cudaMemcpyDeviceToHost);
+		cudaMemcpy(ctx.Gamzxy, Mh_ Gamzxy, matrix_size * sizeof(double), cudaMemcpyDeviceToHost);
+		cudaMemcpy(ctx.Gamzxz, Mh_ Gamzxz, matrix_size * sizeof(double), cudaMemcpyDeviceToHost);
+		cudaMemcpy(ctx.Gamzyy, Mh_ Gamzyy, matrix_size * sizeof(double), cudaMemcpyDeviceToHost);
+		cudaMemcpy(ctx.Gamzyz, Mh_ Gamzyz, matrix_size * sizeof(double), cudaMemcpyDeviceToHost);
+		cudaMemcpy(ctx.Gamzzz, Mh_ Gamzzz, matrix_size * sizeof(double), cudaMemcpyDeviceToHost);
+		cudaMemcpy(ctx.Rxx, Mh_ Rxx, matrix_size * sizeof(double), cudaMemcpyDeviceToHost);
+		cudaMemcpy(ctx.Rxy, Mh_ Rxy, matrix_size * sizeof(double), cudaMemcpyDeviceToHost);
+		cudaMemcpy(ctx.Rxz, Mh_ Rxz, matrix_size * sizeof(double), cudaMemcpyDeviceToHost);
+		cudaMemcpy(ctx.Ryy, Mh_ Ryy, matrix_size * sizeof(double), cudaMemcpyDeviceToHost);
+		cudaMemcpy(ctx.Ryz, Mh_ Ryz, matrix_size * sizeof(double), cudaMemcpyDeviceToHost);
+		cudaMemcpy(ctx.Rzz, Mh_ Rzz, matrix_size * sizeof(double), cudaMemcpyDeviceToHost);
+		cudaMemcpy(ctx.ham_Res, Mh_ ham_Res, matrix_size * sizeof(double), cudaMemcpyDeviceToHost);
+		cudaMemcpy(ctx.movx_Res, Mh_ movx_Res, matrix_size * sizeof(double), cudaMemcpyDeviceToHost);
+		cudaMemcpy(ctx.movy_Res, Mh_ movy_Res, matrix_size * sizeof(double), cudaMemcpyDeviceToHost);
+		cudaMemcpy(ctx.movz_Res, Mh_ movz_Res, matrix_size * sizeof(double), cudaMemcpyDeviceToHost);
+		cudaMemcpy(ctx.Gmx_Res, Mh_ Gmx_Res, matrix_size * sizeof(double), cudaMemcpyDeviceToHost);
+		cudaMemcpy(ctx.Gmy_Res, Mh_ Gmy_Res, matrix_size * sizeof(double), cudaMemcpyDeviceToHost);
+		cudaMemcpy(ctx.Gmz_Res, Mh_ Gmz_Res, matrix_size * sizeof(double), cudaMemcpyDeviceToHost);
 	}
 }

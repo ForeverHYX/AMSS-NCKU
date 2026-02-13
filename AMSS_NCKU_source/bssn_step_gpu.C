@@ -90,8 +90,15 @@ void bssn_class::Step_GPU(int lev, int YN)
         f_enforce_ga(cg->shape,
                      cg->fgfs[gxx0->sgfn], cg->fgfs[gxy0->sgfn], cg->fgfs[gxz0->sgfn], cg->fgfs[gyy0->sgfn], cg->fgfs[gyz0->sgfn], cg->fgfs[gzz0->sgfn],
                      cg->fgfs[Axx0->sgfn], cg->fgfs[Axy0->sgfn], cg->fgfs[Axz0->sgfn], cg->fgfs[Ayy0->sgfn], cg->fgfs[Ayz0->sgfn], cg->fgfs[Azz0->sgfn]);
-        if (gpu_rhs(CALLED_BY_STEP, myrank, RHS_PARA_CALLED_FIRST_TIME))
-        {
+        
+        GPU_CALL_CONTEXT ctx = {CALLED_BY_STEP, myrank, RHS_PARA_CALLED_FIRST_TIME};
+        gpu_init_meta(ctx);
+        gpu_to_device(ctx);
+        gpu_init_constant(ctx);
+        int res = gpu_rhs(ctx);
+        gpu_back_to_host(ctx);
+        gpu_destroy_meta();
+        if (res) {
           cout << "find NaN in domain: (" << cg->bbox[0] << ":" << cg->bbox[3] << "," << cg->bbox[1] << ":" << cg->bbox[4] << ","
                << cg->bbox[2] << ":" << cg->bbox[5] << ")" << endl;
           ERROR = 1;
@@ -167,12 +174,19 @@ void bssn_class::Step_GPU(int lev, int YN)
                        cg->fgfs[gxx->sgfn], cg->fgfs[gxy->sgfn], cg->fgfs[gxz->sgfn], cg->fgfs[gyy->sgfn], cg->fgfs[gyz->sgfn], cg->fgfs[gzz->sgfn],
                        cg->fgfs[Axx->sgfn], cg->fgfs[Axy->sgfn], cg->fgfs[Axz->sgfn], cg->fgfs[Ayy->sgfn], cg->fgfs[Ayz->sgfn], cg->fgfs[Azz->sgfn]);
 
-          if (gpu_rhs(CALLED_BY_STEP, myrank, RHS_PARA_CALLED_THEN))
-          {
-            cout << "find NaN in domain: (" << cg->bbox[0] << ":" << cg->bbox[3] << "," << cg->bbox[1] << ":" << cg->bbox[4] << ","
-                 << cg->bbox[2] << ":" << cg->bbox[5] << ")" << endl;
-            ERROR = 1;
-          }
+            
+            GPU_CALL_CONTEXT ctx = {CALLED_BY_STEP, myrank, RHS_PARA_CALLED_THEN};
+            gpu_init_meta(ctx);
+            gpu_to_device(ctx);
+            gpu_init_constant(ctx);
+            int res = gpu_rhs(ctx);
+            gpu_back_to_host(ctx);
+            gpu_destroy_meta();
+            if (res) {
+                cout << "find NaN in domain: (" << cg->bbox[0] << ":" << cg->bbox[3] << "," << cg->bbox[1] << ":" << cg->bbox[4] << ","
+                    << cg->bbox[2] << ":" << cg->bbox[5] << ")" << endl;
+                ERROR = 1;
+            }
           // rk4 substep and boundary
           {
             MyList<var> *varl0 = StateList, *varl = SynchList_pre, *varl1 = SynchList_cor, *varlrhs = RHSList; // we do not check the correspondence here
