@@ -27,4 +27,8 @@ extern "C"
 					  double *, double *, double *, double *, double *, double *,
 					  double *, double *, double *, double *, double *, double *);
 }
+
+#include "bssn_gpu_manager.h"
+void gpu_enforce_ga(GPU_CALL_CONTEXT &ctx);
+
 #endif /* ENFORCE_ALGEBRA_H */

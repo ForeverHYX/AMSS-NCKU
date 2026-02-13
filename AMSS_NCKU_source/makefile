@@ -54,7 +54,7 @@ initial_guess.o Newton.o Jacobian.o ilucg.o IntPnts0.o IntPnts.o
 
 TwoPunctureFILES = TwoPunctureABE.o TwoPunctures.o 
 
-CUDAFILES = bssn_gpu.o bssn_gpu_rhs_ss.o bssn_gpu_manager.o gpu_constant.o
+CUDAFILES = bssn_gpu.o bssn_gpu_rhs_ss.o bssn_gpu_manager.o gpu_constant.o enforce_algebra_gpu.o
 
 # file dependences
 $(C++FILES) $(C++FILESGPU) $(F90FILES) $(AHFDOBJS) $(CUDAFILES): macrodef.fh
