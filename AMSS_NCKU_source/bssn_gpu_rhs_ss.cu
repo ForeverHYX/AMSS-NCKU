@@ -14,7 +14,7 @@ using namespace std;
 
 //includes, bssn
 #include "gpu_rhsSS_mem.h"
-#include "bssn_gpu.h"
+#include "bssn_gpu_rhs.h"
 
 #ifdef WithShell
 

@@ -1,5 +1,5 @@
 #include <cuda_runtime.h>
-#include "gpu_mem.h"
+#include "gpu_rhs_mem.h"
 //------init constant memory---------
 
 // 1-----for compute_rhs_bssn---------

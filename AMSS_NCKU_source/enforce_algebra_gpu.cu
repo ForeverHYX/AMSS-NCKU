@@ -3,10 +3,9 @@
 #include <cuda_runtime.h>
 #include <math.h>
 
-#include "gpu_mem.h"
-#include "bssn_gpu.h"
-#include "bssn_gpu_manager.h"
-#include "gpu_constant.h"
+#include "gpu_rhs_mem.h"
+#include "bssn_gpu_rhs.h"
+#include "bssn_gpu_rhs_constant.h"
 
 __global__ void enforce_ga_kernel(
     int n,
@@ -61,7 +60,7 @@ __global__ void enforce_ga_kernel(
     }
 }
 
-void gpu_enforce_ga(GPU_CALL_CONTEXT &ctx) {
+void gpu_enforce_ga(GPU_RHS_CONTEXT &ctx) {
     cudaSetDevice(DEVICE_ID);
     Meta *meta = gpu_get_meta();
     int n = ctx.ex[0] * ctx.ex[1] * ctx.ex[2];

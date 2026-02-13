@@ -32,7 +32,7 @@ using namespace std;
 #include "ricci_gamma.h"
 
 // include GPU files
-#include "bssn_gpu.h"
+#include "bssn_gpu_rhs.h"
 
 //================================================================================================
 
@@ -1897,9 +1897,10 @@ void bssn_class::Evolve(int Steps)
 
   double beg_time;
   beg_time = MPI_Wtime();
-  use_gpu = 0;
-  if (myrank % 2 == 1)
-    use_gpu = 1;
+  // use_gpu = 0;
+  // if (myrank % 2 == 1)
+  //   use_gpu = 1;
+  use_gpu = 1;
 
   // for step 0 constraint interpolation
   Interp_Constraint(true);
@@ -3630,7 +3631,7 @@ void bssn_class::Constraint_Out()
             if (myrank == cg->rank)
             {
                 if (use_gpu == 1) {
-                    GPU_CALL_CONTEXT ctx = {CALLED_BY_CONSTRAINT, myrank, RHS_PARA_CALLED_Constraint_Out};
+                    GPU_RHS_CONTEXT ctx = {CALLED_BY_CONSTRAINT, myrank, RHS_PARA_CALLED_Constraint_Out};
                     gpu_init_meta(ctx);
                     gpu_to_device(ctx);
                     gpu_init_constant(ctx);
@@ -3958,7 +3959,7 @@ void bssn_class::Interp_Constraint(bool infg)
             if (myrank == cg->rank)
             {
                 if (use_gpu == 1) {
-                    GPU_CALL_CONTEXT ctx = {CALLED_BY_CONSTRAINT, myrank, RHS_PARA_CALLED_Interp_Constraint};
+                    GPU_RHS_CONTEXT ctx = {CALLED_BY_CONSTRAINT, myrank, RHS_PARA_CALLED_Interp_Constraint};
                     gpu_init_meta(ctx);
                     gpu_to_device(ctx);
                     gpu_init_constant(ctx);

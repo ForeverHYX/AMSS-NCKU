@@ -1,7 +1,7 @@
 #ifndef GPU_CONSTANT_H
 #define GPU_CONSTANT_H
 
-#include "gpu_mem.h"
+#include "gpu_rhs_mem.h"
 #include <cuda_runtime.h>
 //------init constant memory---------
 
