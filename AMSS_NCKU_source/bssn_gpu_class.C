@@ -1891,7 +1891,7 @@ void bssn_class::Read_Ansorg()
 void bssn_class::Evolve(int Steps)
 {
 
-  clock_t prev_clock, curr_clock;
+  double prev_clock, curr_clock = MPI_Wtime();
   double LastDump = 0.0, LastCheck = 0.0, Last2dDump = 0.0;
   LastAnas = 0;
 
@@ -1965,9 +1965,10 @@ void bssn_class::Evolve(int Steps)
     if (myrank == 0)
     {
       prev_clock = curr_clock;
-      curr_clock = clock();
+      curr_clock = MPI_Wtime();// clock();
       cout << "Timestep # " << ncount << ": integrating to time: " << PhysTime << endl;
-      cout << "used " << (double)(curr_clock - prev_clock) / ((double)CLOCKS_PER_SEC) << " seconds!" << endl;
+      cout << "used " << curr_clock - prev_clock << " seconds!" << endl;
+      // cout << "used " << (double)(curr_clock - prev_clock) / ((double)CLOCKS_PER_SEC) << " seconds!" << endl;
     }
 
     if (PhysTime >= TotalTime)
