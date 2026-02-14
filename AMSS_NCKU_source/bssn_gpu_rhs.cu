@@ -71,7 +71,7 @@ inline void sub_enforce_ga(int matrix_size){
 	double * trA = M_ chin1;
 	enforce_ga<<<GRID_DIM,BLOCK_DIM>>>(trA);
 	cudaMemset(trA,0,matrix_size * sizeof(double));
-	cudaThreadSynchronize(); 
+	// cudaThreadSynchronize(); 
 	
 	//cudaMemset(Mh_ gupxx,0,matrix_size * sizeof(double));
 	//trA gxx,gyy,gzz gupxx,gupxy,gupxz,gupyy,gupyz,gupzz
@@ -199,13 +199,13 @@ __global__ void sub_symmetry_bd_partK(int ord,double * func, double * funcc,doub
 
 inline void sub_symmetry_bd(int ord,double * func, double * funcc,double * SoA){
 	sub_symmetry_bd_partF<<<GRID_DIM,BLOCK_DIM>>>(ord,func,funcc);
-	cudaThreadSynchronize();
+	// cudaThreadSynchronize();
 	sub_symmetry_bd_partI<<<GRID_DIM,BLOCK_DIM>>>(ord,func,funcc,SoA[0]);
-	cudaThreadSynchronize();
+	// cudaThreadSynchronize();
 	sub_symmetry_bd_partJ<<<GRID_DIM,BLOCK_DIM>>>(ord,func,funcc,SoA[1]);
-	cudaThreadSynchronize();
+	// cudaThreadSynchronize();
 	sub_symmetry_bd_partK<<<GRID_DIM,BLOCK_DIM>>>(ord,func,funcc,SoA[2]);
-	cudaThreadSynchronize();
+	// cudaThreadSynchronize();
 }
 
 
@@ -304,9 +304,9 @@ inline void sub_fdderivs(double * f,double *fh,double *fxx,double *fxy,double *f
 	cudaMemset(fyy,0,_3D_SIZE[0] * sizeof(double));
 	cudaMemset(fyz,0,_3D_SIZE[0] * sizeof(double));
 	cudaMemset(fzz,0,_3D_SIZE[0] * sizeof(double));
-	cudaThreadSynchronize(); 
+	// cudaThreadSynchronize(); 
 	sub_fdderivs_part1<<<GRID_DIM,BLOCK_DIM>>>(f,fh,fxx,fxy,fxz,fyy,fyz,fzz);
-	cudaThreadSynchronize(); 
+	// cudaThreadSynchronize(); 
 }
 
 __global__ void sub_fderivs_part1(double * f,double * fh,double *fx,double *fy,double *fz  )
@@ -371,9 +371,9 @@ inline void sub_fderivs(double * f,double * fh,double *fx,double *fy,double *fz,
 	cudaMemset(fy,0,_3D_SIZE[0] * sizeof(double));
 	cudaMemset(fz,0,_3D_SIZE[0] * sizeof(double));
 	
-	cudaThreadSynchronize(); 
+	// cudaThreadSynchronize(); 
 	sub_fderivs_part1<<<GRID_DIM,BLOCK_DIM>>>(f,fh,fx,fy,fz);
-	cudaThreadSynchronize();
+	// cudaThreadSynchronize();
 }
 
 __global__ void computeRicci_part1(double * dst)
@@ -391,9 +391,9 @@ __global__ void computeRicci_part1(double * dst)
  inline void computeRicci(double * src,double* dst,double * SoA, Meta* meta)
 {
 	sub_fdderivs(src,Mh_ fh,Mh_ fxx,Mh_ fxy,Mh_ fxz,Mh_ fyy,Mh_ fyz,Mh_ fzz,SoA);
-	cudaThreadSynchronize();
+	// cudaThreadSynchronize();
 	computeRicci_part1<<<GRID_DIM,BLOCK_DIM>>>(dst);
-	cudaThreadSynchronize();
+	// cudaThreadSynchronize();
 	
 }/*Exception*/
 
@@ -450,9 +450,9 @@ __global__ void sub_kodis_part1(double *f,double *fh,double *f_rhs)
 inline void sub_kodis(double *f,double *fh,double *f_rhs,double *SoA)
 {
 	sub_symmetry_bd(3,f,fh,SoA);
-	cudaThreadSynchronize();
+	// cudaThreadSynchronize();
 	sub_kodis_part1<<<GRID_DIM,BLOCK_DIM>>>(f,fh,f_rhs);
-	cudaThreadSynchronize();
+	// cudaThreadSynchronize();
 }
  
 __global__ void  sub_lopsided_part1(double *f,double* fh,double *f_rhs,double *Sfx,double *Sfy,double *Sfz)
@@ -543,9 +543,9 @@ __global__ void  sub_lopsided_part1(double *f,double* fh,double *f_rhs,double *S
 
 inline void  sub_lopsided(double *f,double*fh,double *f_rhs,double *Sfx,double *Sfy,double *Sfz,double *SoA){
 	sub_symmetry_bd(3,f,fh,SoA);
-	cudaThreadSynchronize(); 
+	// cudaThreadSynchronize(); 
 	sub_lopsided_part1<<<GRID_DIM,BLOCK_DIM>>>(f,fh,f_rhs,Sfx,Sfy,Sfz);
-	cudaThreadSynchronize(); 
+	// cudaThreadSynchronize(); 
 }
 
 __global__ void compute_rhs_bssn_part1() 
@@ -2016,11 +2016,11 @@ int gpu_rhs(GPU_RHS_CONTEXT &ctx) {
 	double sas[3] = {1,-1,1};
 	double ssa[3] = {1,1,-1};
 	
-	cudaThreadSynchronize();
+	// cudaThreadSynchronize();
 
 //#4-----------------------calculate------------------------------
 	compute_rhs_bssn_part1<<<GRID_DIM,BLOCK_DIM>>>();
-	cudaThreadSynchronize();
+	// cudaThreadSynchronize();
 
 	sub_fderivs(Mh_ betax,Mh_ fh,Mh_ betaxx,Mh_ betaxy,Mh_ betaxz,ass);
 	sub_fderivs(Mh_ betay,Mh_ fh,Mh_ betayx,Mh_ betayy,Mh_ betayz,sas);
@@ -2036,7 +2036,7 @@ int gpu_rhs(GPU_RHS_CONTEXT &ctx) {
 	sub_fderivs(Mh_ gyz,Mh_ fh,Mh_ gyzx,Mh_ gyzy,Mh_ gyzz, saa);
   	
   	compute_rhs_bssn_part2<<<GRID_DIM,BLOCK_DIM>>>();
-	cudaThreadSynchronize();
+	// cudaThreadSynchronize();
 	
 	sub_fdderivs(Mh_ betax,Mh_ fh,Mh_ gxxx,Mh_ gxyx,Mh_ gxzx,Mh_ gyyx,Mh_ gyzx,Mh_ gzzx,ass);
 	sub_fdderivs(Mh_ betay,Mh_ fh,Mh_ gxxy,Mh_ gxyy,Mh_ gxzy,Mh_ gyyy,Mh_ gyzy,Mh_ gzzy,sas);
@@ -2046,7 +2046,7 @@ int gpu_rhs(GPU_RHS_CONTEXT &ctx) {
 	sub_fderivs( Mh_ Gamz, Mh_ fh,Mh_ Gamzx, Mh_ Gamzy, Mh_ Gamzz,ssa);
 	
 	compute_rhs_bssn_part3<<<GRID_DIM,BLOCK_DIM>>>();
-	cudaThreadSynchronize();
+	// cudaThreadSynchronize();
 	
 	computeRicci(Mh_ dxx,Mh_ Rxx,sss, meta);
 	computeRicci(Mh_ dyy,Mh_ Ryy,sss, meta);
@@ -2055,20 +2055,20 @@ int gpu_rhs(GPU_RHS_CONTEXT &ctx) {
 	computeRicci(Mh_ gxz,Mh_ Rxz,asa, meta);
 	computeRicci(Mh_ gyz,Mh_ Ryz,saa, meta);
 	
-	cudaThreadSynchronize();
+	// cudaThreadSynchronize();
 	
 	compute_rhs_bssn_part4<<<GRID_DIM,BLOCK_DIM>>>();
-	cudaThreadSynchronize();
+	// cudaThreadSynchronize();
 	
 	sub_fdderivs(Mh_ chi,Mh_ fh,Mh_ fxx,Mh_ fxy,Mh_ fxz,Mh_ fyy,Mh_ fyz,Mh_ fzz,sss);
 	
 	compute_rhs_bssn_part5<<<GRID_DIM,BLOCK_DIM>>>();
-	cudaThreadSynchronize();
+	// cudaThreadSynchronize();
 	
 	sub_fdderivs(Mh_ Lap,Mh_ fh,Mh_ fxx,Mh_ fxy,Mh_ fxz,Mh_ fyy,Mh_ fyz,Mh_ fzz,sss);
 	
 	compute_rhs_bssn_part6<<<GRID_DIM,BLOCK_DIM>>>();
-	cudaThreadSynchronize();
+	// cudaThreadSynchronize();
 	
 	sub_lopsided(Mh_ gxx,Mh_ fh2,Mh_ gxx_rhs,Mh_ betax,Mh_ betay,Mh_ betaz,sss);
 	sub_lopsided(Mh_ gxy,Mh_ fh2,Mh_ gxy_rhs,Mh_ betax,Mh_ betay,Mh_ betaz,aas);
@@ -2128,7 +2128,7 @@ int gpu_rhs(GPU_RHS_CONTEXT &ctx) {
 	
 	if(ctx.co == 0){
 		compute_rhs_bssn_part7<<<GRID_DIM,BLOCK_DIM>>>();
-		cudaThreadSynchronize();
+		// cudaThreadSynchronize();
 
 		sub_fderivs(Mh_ Axx,Mh_ fh,Mh_ gxxx,Mh_ gxxy,Mh_ gxxz,sss);
 		sub_fderivs(Mh_ Axy,Mh_ fh,Mh_ gxyx,Mh_ gxyy,Mh_ gxyz,aas);
@@ -2137,9 +2137,9 @@ int gpu_rhs(GPU_RHS_CONTEXT &ctx) {
 		sub_fderivs(Mh_ Ayz,Mh_ fh,Mh_ gyzx,Mh_ gyzy,Mh_ gyzz,saa);
 		sub_fderivs(Mh_ Azz,Mh_ fh,Mh_ gzzx,Mh_ gzzy,Mh_ gzzz,sss);
 		compute_rhs_bssn_part8<<<GRID_DIM,BLOCK_DIM>>>();
-		cudaThreadSynchronize();
+		// cudaThreadSynchronize();
 	}
 
-	
+	cudaDeviceSynchronize();
 	return 0;//TODO return
 }
