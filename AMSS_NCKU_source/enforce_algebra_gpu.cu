@@ -64,7 +64,7 @@ void gpu_enforce_ga(GPU_RHS_CONTEXT &ctx) {
     cudaSetDevice(DEVICE_ID);
     Meta *meta = gpu_get_meta();
     int n = ctx.ex[0] * ctx.ex[1] * ctx.ex[2];
-    enforce_ga_kernel<<<GRID_DIM, BLOCK_DIM>>>(
+    enforce_ga_kernel<<<RHS_GRID_DIM, RHS_BLOCK_DIM>>>(
         n,
         Mh_ dxx, Mh_ gxy, Mh_ gxz, Mh_ dyy, Mh_ gyz, Mh_ dzz,
         Mh_ Axx, Mh_ Axy, Mh_ Axz, Mh_ Ayy, Mh_ Ayz, Mh_ Azz

@@ -6,8 +6,8 @@
 
 #define DEVICE_ID 0
 // #define DEVICE_ID_BY_MPI_RANK
-#define GRID_DIM 256
-#define BLOCK_DIM 128
+#define RHS_GRID_DIM 256
+#define RHS_BLOCK_DIM 128
 
 #define _FH2_(i, j, k) fh[(i) + (j) * _1D_SIZE[2] + (k) * _2D_SIZE[2]]
 #define _FH3_(i, j, k) fh[(i) + (j) * _1D_SIZE[3] + (k) * _2D_SIZE[3]]

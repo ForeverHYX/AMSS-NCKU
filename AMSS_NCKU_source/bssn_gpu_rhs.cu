@@ -69,7 +69,7 @@ __global__ void enforce_ga(double * trA){
 
 inline void sub_enforce_ga(int matrix_size){
 	double * trA = M_ chin1;
-	enforce_ga<<<GRID_DIM,BLOCK_DIM>>>(trA);
+	enforce_ga<<<RHS_GRID_DIM, RHS_BLOCK_DIM>>>(trA);
 	cudaMemset(trA,0,matrix_size * sizeof(double));
 	// cudaThreadSynchronize(); 
 	
@@ -198,13 +198,13 @@ __global__ void sub_symmetry_bd_partK(int ord,double * func, double * funcc,doub
 }
 
 inline void sub_symmetry_bd(int ord,double * func, double * funcc,double * SoA){
-	sub_symmetry_bd_partF<<<GRID_DIM,BLOCK_DIM>>>(ord,func,funcc);
+	sub_symmetry_bd_partF<<<RHS_GRID_DIM, RHS_BLOCK_DIM>>>(ord,func,funcc);
 	// cudaThreadSynchronize();
-	sub_symmetry_bd_partI<<<GRID_DIM,BLOCK_DIM>>>(ord,func,funcc,SoA[0]);
+	sub_symmetry_bd_partI<<<RHS_GRID_DIM, RHS_BLOCK_DIM>>>(ord,func,funcc,SoA[0]);
 	// cudaThreadSynchronize();
-	sub_symmetry_bd_partJ<<<GRID_DIM,BLOCK_DIM>>>(ord,func,funcc,SoA[1]);
+	sub_symmetry_bd_partJ<<<RHS_GRID_DIM, RHS_BLOCK_DIM>>>(ord,func,funcc,SoA[1]);
 	// cudaThreadSynchronize();
-	sub_symmetry_bd_partK<<<GRID_DIM,BLOCK_DIM>>>(ord,func,funcc,SoA[2]);
+	sub_symmetry_bd_partK<<<RHS_GRID_DIM, RHS_BLOCK_DIM>>>(ord,func,funcc,SoA[2]);
 	// cudaThreadSynchronize();
 }
 
@@ -305,7 +305,7 @@ inline void sub_fdderivs(double * f,double *fh,double *fxx,double *fxy,double *f
 	cudaMemset(fyz,0,_3D_SIZE[0] * sizeof(double));
 	cudaMemset(fzz,0,_3D_SIZE[0] * sizeof(double));
 	// cudaThreadSynchronize(); 
-	sub_fdderivs_part1<<<GRID_DIM,BLOCK_DIM>>>(f,fh,fxx,fxy,fxz,fyy,fyz,fzz);
+	sub_fdderivs_part1<<<RHS_GRID_DIM, RHS_BLOCK_DIM>>>(f,fh,fxx,fxy,fxz,fyy,fyz,fzz);
 	// cudaThreadSynchronize(); 
 }
 
@@ -372,7 +372,7 @@ inline void sub_fderivs(double * f,double * fh,double *fx,double *fy,double *fz,
 	cudaMemset(fz,0,_3D_SIZE[0] * sizeof(double));
 	
 	// cudaThreadSynchronize(); 
-	sub_fderivs_part1<<<GRID_DIM,BLOCK_DIM>>>(f,fh,fx,fy,fz);
+	sub_fderivs_part1<<<RHS_GRID_DIM, RHS_BLOCK_DIM>>>(f,fh,fx,fy,fz);
 	// cudaThreadSynchronize();
 }
 
@@ -392,7 +392,7 @@ __global__ void computeRicci_part1(double * dst)
 {
 	sub_fdderivs(src,Mh_ fh,Mh_ fxx,Mh_ fxy,Mh_ fxz,Mh_ fyy,Mh_ fyz,Mh_ fzz,SoA);
 	// cudaThreadSynchronize();
-	computeRicci_part1<<<GRID_DIM,BLOCK_DIM>>>(dst);
+	computeRicci_part1<<<RHS_GRID_DIM, RHS_BLOCK_DIM>>>(dst);
 	// cudaThreadSynchronize();
 	
 }/*Exception*/
@@ -451,7 +451,7 @@ inline void sub_kodis(double *f,double *fh,double *f_rhs,double *SoA)
 {
 	sub_symmetry_bd(3,f,fh,SoA);
 	// cudaThreadSynchronize();
-	sub_kodis_part1<<<GRID_DIM,BLOCK_DIM>>>(f,fh,f_rhs);
+	sub_kodis_part1<<<RHS_GRID_DIM, RHS_BLOCK_DIM>>>(f,fh,f_rhs);
 	// cudaThreadSynchronize();
 }
  
@@ -544,7 +544,7 @@ __global__ void  sub_lopsided_part1(double *f,double* fh,double *f_rhs,double *S
 inline void  sub_lopsided(double *f,double*fh,double *f_rhs,double *Sfx,double *Sfy,double *Sfz,double *SoA){
 	sub_symmetry_bd(3,f,fh,SoA);
 	// cudaThreadSynchronize(); 
-	sub_lopsided_part1<<<GRID_DIM,BLOCK_DIM>>>(f,fh,f_rhs,Sfx,Sfy,Sfz);
+	sub_lopsided_part1<<<RHS_GRID_DIM, RHS_BLOCK_DIM>>>(f,fh,f_rhs,Sfx,Sfy,Sfz);
 	// cudaThreadSynchronize(); 
 }
 
@@ -1853,7 +1853,7 @@ void gpu_init_constant(GPU_RHS_CONTEXT &ctx) {
 	double F2o3h  = 2.0;	F2o3h /= 3.0;
 	double F1o6h  = 1.0;	F1o6h /= 6.0;
 	double PIh = M_PI;
-	int step = GRID_DIM * BLOCK_DIM;
+	int step = RHS_GRID_DIM *  RHS_BLOCK_DIM;
 	double dXh = ctx.X[1] - ctx.X[0];
 	double dYh = ctx.Y[1] - ctx.Y[0];
 	double dZh = ctx.Z[1] - ctx.Z[0];
@@ -2019,7 +2019,7 @@ int gpu_rhs(GPU_RHS_CONTEXT &ctx) {
 	// cudaThreadSynchronize();
 
 //#4-----------------------calculate------------------------------
-	compute_rhs_bssn_part1<<<GRID_DIM,BLOCK_DIM>>>();
+	compute_rhs_bssn_part1<<<RHS_GRID_DIM, RHS_BLOCK_DIM>>>();
 	// cudaThreadSynchronize();
 
 	sub_fderivs(Mh_ betax,Mh_ fh,Mh_ betaxx,Mh_ betaxy,Mh_ betaxz,ass);
@@ -2035,7 +2035,7 @@ int gpu_rhs(GPU_RHS_CONTEXT &ctx) {
 	sub_fderivs(Mh_ gxz,Mh_ fh,Mh_ gxzx,Mh_ gxzy,Mh_ gxzz, asa);
 	sub_fderivs(Mh_ gyz,Mh_ fh,Mh_ gyzx,Mh_ gyzy,Mh_ gyzz, saa);
   	
-  	compute_rhs_bssn_part2<<<GRID_DIM,BLOCK_DIM>>>();
+  	compute_rhs_bssn_part2<<<RHS_GRID_DIM, RHS_BLOCK_DIM>>>();
 	// cudaThreadSynchronize();
 	
 	sub_fdderivs(Mh_ betax,Mh_ fh,Mh_ gxxx,Mh_ gxyx,Mh_ gxzx,Mh_ gyyx,Mh_ gyzx,Mh_ gzzx,ass);
@@ -2045,7 +2045,7 @@ int gpu_rhs(GPU_RHS_CONTEXT &ctx) {
 	sub_fderivs( Mh_ Gamy, Mh_ fh,Mh_ Gamyx, Mh_ Gamyy, Mh_ Gamyz,sas);
 	sub_fderivs( Mh_ Gamz, Mh_ fh,Mh_ Gamzx, Mh_ Gamzy, Mh_ Gamzz,ssa);
 	
-	compute_rhs_bssn_part3<<<GRID_DIM,BLOCK_DIM>>>();
+	compute_rhs_bssn_part3<<<RHS_GRID_DIM, RHS_BLOCK_DIM>>>();
 	// cudaThreadSynchronize();
 	
 	computeRicci(Mh_ dxx,Mh_ Rxx,sss, meta);
@@ -2057,17 +2057,17 @@ int gpu_rhs(GPU_RHS_CONTEXT &ctx) {
 	
 	// cudaThreadSynchronize();
 	
-	compute_rhs_bssn_part4<<<GRID_DIM,BLOCK_DIM>>>();
+	compute_rhs_bssn_part4<<<RHS_GRID_DIM, RHS_BLOCK_DIM>>>();
 	// cudaThreadSynchronize();
 	
 	sub_fdderivs(Mh_ chi,Mh_ fh,Mh_ fxx,Mh_ fxy,Mh_ fxz,Mh_ fyy,Mh_ fyz,Mh_ fzz,sss);
 	
-	compute_rhs_bssn_part5<<<GRID_DIM,BLOCK_DIM>>>();
+	compute_rhs_bssn_part5<<<RHS_GRID_DIM, RHS_BLOCK_DIM>>>();
 	// cudaThreadSynchronize();
 	
 	sub_fdderivs(Mh_ Lap,Mh_ fh,Mh_ fxx,Mh_ fxy,Mh_ fxz,Mh_ fyy,Mh_ fyz,Mh_ fzz,sss);
 	
-	compute_rhs_bssn_part6<<<GRID_DIM,BLOCK_DIM>>>();
+	compute_rhs_bssn_part6<<<RHS_GRID_DIM, RHS_BLOCK_DIM>>>();
 	// cudaThreadSynchronize();
 	
 	sub_lopsided(Mh_ gxx,Mh_ fh2,Mh_ gxx_rhs,Mh_ betax,Mh_ betay,Mh_ betaz,sss);
@@ -2127,7 +2127,7 @@ int gpu_rhs(GPU_RHS_CONTEXT &ctx) {
 	}
 	
 	if(ctx.co == 0){
-		compute_rhs_bssn_part7<<<GRID_DIM,BLOCK_DIM>>>();
+		compute_rhs_bssn_part7<<<RHS_GRID_DIM, RHS_BLOCK_DIM>>>();
 		// cudaThreadSynchronize();
 
 		sub_fderivs(Mh_ Axx,Mh_ fh,Mh_ gxxx,Mh_ gxxy,Mh_ gxxz,sss);
@@ -2136,7 +2136,7 @@ int gpu_rhs(GPU_RHS_CONTEXT &ctx) {
 		sub_fderivs(Mh_ Ayy,Mh_ fh,Mh_ gyyx,Mh_ gyyy,Mh_ gyyz,sss);
 		sub_fderivs(Mh_ Ayz,Mh_ fh,Mh_ gyzx,Mh_ gyzy,Mh_ gyzz,saa);
 		sub_fderivs(Mh_ Azz,Mh_ fh,Mh_ gzzx,Mh_ gzzy,Mh_ gzzz,sss);
-		compute_rhs_bssn_part8<<<GRID_DIM,BLOCK_DIM>>>();
+		compute_rhs_bssn_part8<<<RHS_GRID_DIM, RHS_BLOCK_DIM>>>();
 		// cudaThreadSynchronize();
 	}
 

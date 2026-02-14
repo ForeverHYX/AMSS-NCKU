@@ -1897,10 +1897,9 @@ void bssn_class::Evolve(int Steps)
 
   double beg_time;
   beg_time = MPI_Wtime();
-  // use_gpu = 0;
-  // if (myrank % 2 == 1)
-  //   use_gpu = 1;
   use_gpu = 1;
+  if (myrank % 2 == 1)
+    use_gpu = 0;
 
   // for step 0 constraint interpolation
   Interp_Constraint(true);

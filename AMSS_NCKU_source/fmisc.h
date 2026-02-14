@@ -261,4 +261,14 @@ extern "C"
 {
 	void f_d2dump(int &, double *, double *, int *, double *, double *, int &, double *);
 }
+
+#include <cuda_runtime.h>
+
+__device__ void global_interp_device(
+	const int* ex, const double* X, const double* Y, const double* Z,
+	const double* f, double* f_int,
+	double x1, double y1, double z1,
+	int ORDN, const double* SoA, int symmetry
+);
+
 #endif /* FMISC_H */
