@@ -92,20 +92,6 @@
   real*8, parameter :: F1o3 = 1.D0/3.D0, F2o3 = 2.D0/3.D0,F3o2=1.5d0, F1o6 = 1.D0/6.D0
   real*8, parameter :: F16=1.6d1,F8=8.d0
 
-#if (GAUGE == 2 || GAUGE == 3 || GAUGE == 4 || GAUGE == 5)
-  real*8, dimension(ex(1),ex(2),ex(3)) :: reta
-#endif
-
-#if (GAUGE == 6 || GAUGE == 7)
-  integer :: BHN,i,j,k
-  real*8, dimension(9) :: Porg
-  real*8, dimension(3) :: Mass
-  real*8 :: r1,r2,M,A,w1,w2,C1,C2
-  real*8, dimension(ex(1),ex(2),ex(3)) :: reta
-
-  call getpbh(BHN,Porg,Mass)
-#endif
-
 !!! sanity check
   dX = sum(chi)+sum(trK)+sum(dxx)+sum(gxy)+sum(gxz)+sum(dyy)+sum(gyz)+sum(dzz) &
       +sum(Axx)+sum(Axy)+sum(Axz)+sum(Ayy)+sum(Ayz)+sum(Azz)                   &
@@ -662,7 +648,7 @@
 ! store D^i D_i Lap in trK_rhs upto chi
   trK_rhs =    gupxx * fxx + gupyy * fyy + gupzz * fzz + &
         TWO* ( gupxy * fxy + gupxz * fxz + gupyz * fyz )
-#if 1        
+       
 !! follow bam code
   S =  chin1 * ( gupxx * Sxx + gupyy * Syy + gupzz * Szz + &
      TWO * ( gupxy * Sxy + gupxz * Sxz + gupyz * Syz ) )
@@ -701,21 +687,6 @@
   fyy = alpn1 * (Ryy - EIGHT * PI * Syy) - fyy
   fyz = alpn1 * (Ryz - EIGHT * PI * Syz) - fyz
   fzz = alpn1 * (Rzz - EIGHT * PI * Szz) - fzz
-#else        
-! Add lapse and S_ij parts to Ricci tensor:
-
-  fxx = alpn1 * (Rxx - EIGHT * PI * Sxx) - fxx
-  fxy = alpn1 * (Rxy - EIGHT * PI * Sxy) - fxy
-  fxz = alpn1 * (Rxz - EIGHT * PI * Sxz) - fxz
-  fyy = alpn1 * (Ryy - EIGHT * PI * Syy) - fyy
-  fyz = alpn1 * (Ryz - EIGHT * PI * Syz) - fyz
-  fzz = alpn1 * (Rzz - EIGHT * PI * Szz) - fzz
-
-! Compute trace-free part (note: chi^-1 and chi cancel!):
-
-  f = F1o3 *(  gupxx * fxx + gupyy * fyy + gupzz * fzz + &
-        TWO* ( gupxy * fxy + gupxz * fxz + gupyz * fyz ) )
-#endif
 
   Axx_rhs = fxx - gxx * f
   Ayy_rhs = fyy - gyy * f
@@ -789,7 +760,7 @@
 !!!! gauge variable part
 
   Lap_rhs = -TWO*alpn1*trK
-#if (GAUGE == 0)
+
   betax_rhs = FF*dtSfx
   betay_rhs = FF*dtSfy
   betaz_rhs = FF*dtSfz
@@ -797,123 +768,6 @@
   dtSfx_rhs = Gamx_rhs - eta*dtSfx
   dtSfy_rhs = Gamy_rhs - eta*dtSfy
   dtSfz_rhs = Gamz_rhs - eta*dtSfz
-#elif (GAUGE == 1)
-  betax_rhs = Gamx - eta*betax
-  betay_rhs = Gamy - eta*betay
-  betaz_rhs = Gamz - eta*betaz
-
-  dtSfx_rhs = ZEO
-  dtSfy_rhs = ZEO
-  dtSfz_rhs = ZEO
-#elif (GAUGE == 2)
-  betax_rhs = FF*dtSfx
-  betay_rhs = FF*dtSfy
-  betaz_rhs = FF*dtSfz
-
-  call fderivs(ex,chi,dtSfx_rhs,dtSfy_rhs,dtSfz_rhs,X,Y,Z,SYM,SYM,SYM,Symmetry,Lev)
-  reta = gupxx * dtSfx_rhs * dtSfx_rhs + gupyy * dtSfy_rhs * dtSfy_rhs + gupzz * dtSfz_rhs * dtSfz_rhs + &
-       TWO * (gupxy * dtSfx_rhs * dtSfy_rhs + gupxz * dtSfx_rhs * dtSfz_rhs + gupyz * dtSfy_rhs * dtSfz_rhs)
-  reta = 1.31d0/2*dsqrt(reta/chin1)/(1-dsqrt(chin1))**2
-  dtSfx_rhs = Gamx_rhs - reta*dtSfx
-  dtSfy_rhs = Gamy_rhs - reta*dtSfy
-  dtSfz_rhs = Gamz_rhs - reta*dtSfz
-#elif (GAUGE == 3)
-  betax_rhs = FF*dtSfx
-  betay_rhs = FF*dtSfy
-  betaz_rhs = FF*dtSfz
-
-  call fderivs(ex,chi,dtSfx_rhs,dtSfy_rhs,dtSfz_rhs,X,Y,Z,SYM,SYM,SYM,Symmetry,Lev)
-  reta = gupxx * dtSfx_rhs * dtSfx_rhs + gupyy * dtSfy_rhs * dtSfy_rhs + gupzz * dtSfz_rhs * dtSfz_rhs + &
-       TWO * (gupxy * dtSfx_rhs * dtSfy_rhs + gupxz * dtSfx_rhs * dtSfz_rhs + gupyz * dtSfy_rhs * dtSfz_rhs)
-  reta = 1.31d0/2*dsqrt(reta/chin1)/(1-chin1)**2
-  dtSfx_rhs = Gamx_rhs - reta*dtSfx
-  dtSfy_rhs = Gamy_rhs - reta*dtSfy
-  dtSfz_rhs = Gamz_rhs - reta*dtSfz
-#elif (GAUGE == 4)
-  call fderivs(ex,chi,dtSfx_rhs,dtSfy_rhs,dtSfz_rhs,X,Y,Z,SYM,SYM,SYM,Symmetry,Lev)
-  reta = gupxx * dtSfx_rhs * dtSfx_rhs + gupyy * dtSfy_rhs * dtSfy_rhs + gupzz * dtSfz_rhs * dtSfz_rhs + &
-       TWO * (gupxy * dtSfx_rhs * dtSfy_rhs + gupxz * dtSfx_rhs * dtSfz_rhs + gupyz * dtSfy_rhs * dtSfz_rhs)
-  reta = 1.31d0/2*dsqrt(reta/chin1)/(1-dsqrt(chin1))**2
-  betax_rhs = FF*Gamx - reta*betax
-  betay_rhs = FF*Gamy - reta*betay
-  betaz_rhs = FF*Gamz - reta*betaz
-
-  dtSfx_rhs = ZEO
-  dtSfy_rhs = ZEO
-  dtSfz_rhs = ZEO
-#elif (GAUGE == 5)
-  call fderivs(ex,chi,dtSfx_rhs,dtSfy_rhs,dtSfz_rhs,X,Y,Z,SYM,SYM,SYM,Symmetry,Lev)
-  reta = gupxx * dtSfx_rhs * dtSfx_rhs + gupyy * dtSfy_rhs * dtSfy_rhs + gupzz * dtSfz_rhs * dtSfz_rhs + &
-       TWO * (gupxy * dtSfx_rhs * dtSfy_rhs + gupxz * dtSfx_rhs * dtSfz_rhs + gupyz * dtSfy_rhs * dtSfz_rhs)
-  reta = 1.31d0/2*dsqrt(reta/chin1)/(1-chin1)**2
-  betax_rhs = FF*Gamx - reta*betax
-  betay_rhs = FF*Gamy - reta*betay
-  betaz_rhs = FF*Gamz - reta*betaz
-
-  dtSfx_rhs = ZEO
-  dtSfy_rhs = ZEO
-  dtSfz_rhs = ZEO
-#elif (GAUGE == 6)
-  if(BHN==2)then
-   M = Mass(1)+Mass(2)
-   A = 2.d0/M
-   w1 = 1.2d1
-   w2 = w1
-   C1 = 1.d0/Mass(1) - A
-   C2 = 1.d0/Mass(2) - A
-
-   do k=1,ex(3)
-   do j=1,ex(2)
-   do i=1,ex(1)
-     r1 = ((Porg(1)-X(i))**2+(Porg(2)-Y(j))**2+(Porg(3)-Z(k))**2)/ &
-          ((Porg(1)-Porg(4))**2+(Porg(2)-Porg(5))**2+(Porg(3)-Porg(6))**2)
-     r2 = ((Porg(4)-X(i))**2+(Porg(5)-Y(j))**2+(Porg(6)-Z(k))**2)/ &
-          ((Porg(1)-Porg(4))**2+(Porg(2)-Porg(5))**2+(Porg(3)-Porg(6))**2)
-     reta(i,j,k) = A + C1/(ONE+w1*r1) + C2/(ONE+w2*r2)
-    enddo
-    enddo
-    enddo
-  else
-    write(*,*) "not support BH_num in Jason's form 1",BHN
-  endif
-  betax_rhs = FF*dtSfx
-  betay_rhs = FF*dtSfy
-  betaz_rhs = FF*dtSfz
-
-  dtSfx_rhs = Gamx_rhs - reta*dtSfx
-  dtSfy_rhs = Gamy_rhs - reta*dtSfy
-  dtSfz_rhs = Gamz_rhs - reta*dtSfz
-#elif (GAUGE == 7)
-  if(BHN==2)then
-   M = Mass(1)+Mass(2)
-   A = 2.d0/M
-   w1 = 1.2d1
-   w2 = w1
-   C1 = 1.d0/Mass(1) - A
-   C2 = 1.d0/Mass(2) - A
-
-   do k=1,ex(3)
-   do j=1,ex(2)
-   do i=1,ex(1)
-     r1 = ((Porg(1)-X(i))**2+(Porg(2)-Y(j))**2+(Porg(3)-Z(k))**2)/ &
-          ((Porg(1)-Porg(4))**2+(Porg(2)-Porg(5))**2+(Porg(3)-Porg(6))**2)
-     r2 = ((Porg(4)-X(i))**2+(Porg(5)-Y(j))**2+(Porg(6)-Z(k))**2)/ &
-          ((Porg(1)-Porg(4))**2+(Porg(2)-Porg(5))**2+(Porg(3)-Porg(6))**2)
-     reta(i,j,k) = A + C1*dexp(-w1*r1) + C2*dexp(-w2*r2)
-    enddo
-    enddo
-    enddo
-  else
-    write(*,*) "not support BH_num in Jason's form 2",BHN
-  endif
-  betax_rhs = FF*dtSfx
-  betay_rhs = FF*dtSfy
-  betaz_rhs = FF*dtSfz
-
-  dtSfx_rhs = Gamx_rhs - reta*dtSfx
-  dtSfy_rhs = Gamy_rhs - reta*dtSfy
-  dtSfz_rhs = Gamz_rhs - reta*dtSfz
-#endif  
 
   SSS(1)=SYM
   SSS(2)=SYM
@@ -968,17 +822,13 @@
 !!
   call lopsided(ex,X,Y,Z,Lap,Lap_rhs,betax,betay,betaz,Symmetry,SSS)
 
-#if (GAUGE == 0 || GAUGE == 1 || GAUGE == 2 || GAUGE == 3 || GAUGE == 4 || GAUGE == 5 || GAUGE == 6 || GAUGE == 7)
   call lopsided(ex,X,Y,Z,betax,betax_rhs,betax,betay,betaz,Symmetry,ASS)
   call lopsided(ex,X,Y,Z,betay,betay_rhs,betax,betay,betaz,Symmetry,SAS)
   call lopsided(ex,X,Y,Z,betaz,betaz_rhs,betax,betay,betaz,Symmetry,SSA)
-#endif
 
-#if (GAUGE == 0 || GAUGE == 2 || GAUGE == 3 || GAUGE == 6 || GAUGE == 7)
   call lopsided(ex,X,Y,Z,dtSfx,dtSfx_rhs,betax,betay,betaz,Symmetry,ASS)
   call lopsided(ex,X,Y,Z,dtSfy,dtSfy_rhs,betax,betay,betaz,Symmetry,SAS)
   call lopsided(ex,X,Y,Z,dtSfz,dtSfz_rhs,betax,betay,betaz,Symmetry,SSA)
-#endif
 
   if(eps>0)then 
 ! usual Kreiss-Oliger dissipation      
@@ -990,33 +840,9 @@
   call kodis(ex,X,Y,Z,dyy,gyy_rhs,SSS,Symmetry,eps)
   call kodis(ex,X,Y,Z,gyz,gyz_rhs,SAA,Symmetry,eps)
   call kodis(ex,X,Y,Z,dzz,gzz_rhs,SSS,Symmetry,eps)
-#if 0
-#define i 42
-#define j 40
-#define k 40
-if(Lev == 1)then
-write(*,*) X(i),Y(j),Z(k)
-write(*,*) "before",Axx_rhs(i,j,k)
-endif
-#undef i
-#undef j
-#undef k
-!!stop
-#endif
+
   call kodis(ex,X,Y,Z,Axx,Axx_rhs,SSS,Symmetry,eps)
-#if 0
-#define i 42
-#define j 40
-#define k 40
-if(Lev == 1)then
-write(*,*) X(i),Y(j),Z(k)
-write(*,*) "after",Axx_rhs(i,j,k)
-endif
-#undef i
-#undef j
-#undef k
-!!stop
-#endif
+
   call kodis(ex,X,Y,Z,Axy,Axy_rhs,AAS,Symmetry,eps)
   call kodis(ex,X,Y,Z,Axz,Axz_rhs,ASA,Symmetry,eps)
   call kodis(ex,X,Y,Z,Ayy,Ayy_rhs,SSS,Symmetry,eps)
@@ -1026,18 +852,14 @@ endif
   call kodis(ex,X,Y,Z,Gamy,Gamy_rhs,SAS,Symmetry,eps)
   call kodis(ex,X,Y,Z,Gamz,Gamz_rhs,SSA,Symmetry,eps)
 
-#if 1 
 !! bam does not apply dissipation on gauge variables
   call kodis(ex,X,Y,Z,Lap,Lap_rhs,SSS,Symmetry,eps)
   call kodis(ex,X,Y,Z,betax,betax_rhs,ASS,Symmetry,eps)
   call kodis(ex,X,Y,Z,betay,betay_rhs,SAS,Symmetry,eps)
   call kodis(ex,X,Y,Z,betaz,betaz_rhs,SSA,Symmetry,eps)
-#if (GAUGE == 0 || GAUGE == 2 || GAUGE == 3 || GAUGE == 6 || GAUGE == 7)
   call kodis(ex,X,Y,Z,dtSfx,dtSfx_rhs,ASS,Symmetry,eps)
   call kodis(ex,X,Y,Z,dtSfy,dtSfy_rhs,SAS,Symmetry,eps)
   call kodis(ex,X,Y,Z,dtSfz,dtSfz_rhs,SSA,Symmetry,eps)
-#endif
-#endif
 
   endif
 
@@ -1133,51 +955,6 @@ movx_Res = movx_Res - F2o3*Kx - F8*PI*sx
 movy_Res = movy_Res - F2o3*Ky - F8*PI*sy
 movz_Res = movz_Res - F2o3*Kz - F8*PI*sz
   endif
-
-#if (ABV == 1)
-  call ricci_gamma(ex, X, Y, Z,                                      &
-               chi,                                                  &
-               dxx    ,   gxy    ,   gxz    ,   dyy    ,   gyz    ,   dzz,&
-               Gamx   ,  Gamy    ,  Gamz    , &
-               Gamxxx,Gamxxy,Gamxxz,Gamxyy,Gamxyz,Gamxzz,&
-               Gamyxx,Gamyxy,Gamyxz,Gamyyy,Gamyyz,Gamyzz,&
-               Gamzxx,Gamzxy,Gamzxz,Gamzyy,Gamzyz,Gamzzz,&
-               Rxx,Rxy,Rxz,Ryy,Ryz,Rzz,&
-               Symmetry)
-  call constraint_bssn(ex, X, Y, Z,&
-               chi,trK, &
-               dxx,gxy,gxz,dyy,gyz,dzz, &
-               Axx,Axy,Axz,Ayy,Ayz,Azz, &
-               Gamx,Gamy,Gamz,&
-               Lap,betax,betay,betaz,rho,Sx,Sy,Sz,&
-               Gamxxx, Gamxxy, Gamxxz,Gamxyy, Gamxyz, Gamxzz, &
-               Gamyxx, Gamyxy, Gamyxz,Gamyyy, Gamyyz, Gamyzz, &
-               Gamzxx, Gamzxy, Gamzxz,Gamzyy, Gamzyz, Gamzzz, &
-               Rxx,Rxy,Rxz,Ryy,Ryz,Rzz, &
-               ham_Res,movx_Res,movy_Res,movz_Res,Gmx_Res,Gmy_Res,Gmz_Res, &
-               Symmetry)
-#endif 
-#if 0
-#define i 2
-if(Lev == 1)then
-write(*,*) X(i),Y(i),Z(i)
-write(*,*) Axx(i,i,i),Axy(i,i,i),Axz(i,i,i),Ayy(i,i,i),Ayz(i,i,i),Azz(i,i,i)
-write(*,*) 1+Lap(i,i,i),dtSfx(i,i,i),dtSfy(i,i,i),dtSfz(i,i,i)
-write(*,*) betax(i,i,i),betay(i,i,i),betaz(i,i,i)
-write(*,*) 1+chi(i,i,i),Gamx(i,i,i),Gamy(i,i,i),Gamz(i,i,i)
-write(*,*) gxx(i,i,i),gxy(i,i,i),gxz(i,i,i),gyy(i,i,i),gyz(i,i,i),gzz(i,i,i)
-write(*,*) trK(i,i,i)
-write(*,*) "====="
-write(*,*) Axx_rhs(i,i,i),Axy_rhs(i,i,i),Axz_rhs(i,i,i),Ayy_rhs(i,i,i),Ayz_rhs(i,i,i),Azz_rhs(i,i,i)
-write(*,*) Lap_rhs(i,i,i),dtSfx_rhs(i,i,i),dtSfy_rhs(i,i,i),dtSfz_rhs(i,i,i)
-write(*,*) betax_rhs(i,i,i),betay_rhs(i,i,i),betaz_rhs(i,i,i)
-write(*,*) chi_rhs(i,i,i),Gamx_rhs(i,i,i),Gamy_rhs(i,i,i),Gamz_rhs(i,i,i)
-write(*,*) gxx_rhs(i,i,i),gxy_rhs(i,i,i),gxz_rhs(i,i,i),gyy_rhs(i,i,i),gyz_rhs(i,i,i),gzz_rhs(i,i,i)
-write(*,*) trK_rhs(i,i,i)
-endif
-#undef i
-!!stop
-#endif
 
   gont = 0
 

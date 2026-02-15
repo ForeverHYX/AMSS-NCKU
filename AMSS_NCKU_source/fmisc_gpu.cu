@@ -211,3 +211,28 @@ __device__ void global_interp_device(
 	double ddy = 0.0;
 	polin3(x1a, x1a, x1a, ya, cx[0], cx[1], cx[2], f_int[0], ddy, ORDN);
 }
+
+__device__ double d_symmetry_bd(
+	int ord, const int extc[3], const double* func,
+	int i1b, int j1b, int k1b, const double SoA[3]
+) {
+	// out-of-range stays zero, matching funcc = 0.d0 initialization
+	if (i1b < -ord + 1 || i1b > extc[0]) return 0.0;
+	if (j1b < -ord + 1 || j1b > extc[1]) return 0.0;
+	if (k1b < -ord + 1 || k1b > extc[2]) return 0.0;
+
+	int ii = i1b, jj = j1b, kk = k1b;
+	double factor = 1.0;
+
+	// apply symmetry in x, then y, then z (same order as Fortran)
+	if (ii <= 0) { ii = 1 - ii; factor *= SoA[0]; }
+	if (jj <= 0) { jj = 1 - jj; factor *= SoA[1]; }
+	if (kk <= 0) { kk = 1 - kk; factor *= SoA[2]; }
+
+	if (ii < 1 || ii > extc[0]) return 0.0;
+	if (jj < 1 || jj > extc[1]) return 0.0;
+	if (kk < 1 || kk > extc[2]) return 0.0;
+
+	return f_at_1b(func, extc, ii, jj, kk) * factor;
+}
+

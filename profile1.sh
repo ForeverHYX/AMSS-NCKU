@@ -6,6 +6,8 @@ spack load intel-oneapi-mpi
 # spack load openmpi
 spack load intel-oneapi-compilers
 
+spack load cuda
+
 source /home/jjsnam/anaconda3/etc/profile.d/conda.sh
 conda activate AMSS
 
@@ -21,9 +23,11 @@ TS=$(date +"%Y%m%d_%H%M%S")
 
 export I_MPI_DEBUG=0
 
+export LD_LIBRARY_PATH=/home/jjsnam/spack/opt/spack/linux-icelake/cuda-13.0.2-nxiq75wz7g54wiu5ublimzvgspxrweit/lib64:${LD_LIBRARY_PATH}
+
 # vtune -collect hotspots -result-dir ../../profile/TwoPunctureABE/${TS}/ -- ./TwoPunctureABE
 # ./TwoPunctureABE
-mpirun -bootstrap fork -np 16 ./ABEGPU
+mpirun -bootstrap fork -np 1 ./ABEGPU
 # mpirun -bootstrap fork -np 1 vtune -collect hotspots -trace-mpi -result-dir ../../profile/ABEGPU/${TS}/ -- ./ABEGPU
 echo quit | nvidia-cuda-mps-control
 # mpirun -bootstrap fork -np 2 ncu --target-processes all ./ABEGPU

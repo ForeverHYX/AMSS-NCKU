@@ -209,91 +209,68 @@ inline void sub_symmetry_bd(int ord,double * func, double * funcc,double * SoA){
 }
 
 
+// ...existing code...
 __global__ void sub_fdderivs_part1(double * f,double *fh,double *fxx,double *fxy,double *fxz,double *fyy,double *fyz,double *fzz)
- {	
-	int curr = blockIdx.x*blockDim.x+threadIdx.x;
-	int ps; //TOTRY: i,j,k; double value;
-	
-	while(curr < _3D_SIZE[0])
-	{
-		int k = curr / _2D_SIZE[0];
-		ps = curr - (_2D_SIZE[0] * k); //TOTRY: = curr % _2D_SIZE[0];
-		int j = ps / ex_c[0];
-		int i = ps  - (j * ex_c[0]);
-		
-		if(k == ex_c[2]-1 || i == ex_c[0]-1 || j == ex_c[1]-1){
-			curr += STEP_SIZE;	
-			continue;
-		}
-		else
-		{
-			//xx
-			if(i+2 <= ijk_max[0] && i-2 >= ijk_min[0]){
-				fxx[curr] = Fdxdx*(-_FH2_(i,(j+2),(k+2))+16*_FH2_((i+1),(j+2),(k+2))-30*_FH2_((i+2),(j+2),(k+2)) 
-			            -_FH2_((i+4),(j+2),(k+2))+16*_FH2_((i+3),(j+2),(k+2))		);
-							
-			}
-			else if(i+1 <= ijk_max[0] && i-1 >= ijk_min[0]){
-				fxx[curr] = Sdxdx*(_FH2_((i+1),(j+2),(k+2))-2*_FH2_((i+2),(j+2),(k+2)) 
-			            +_FH2_(i+3,(j+2),(k+2))              );
-			}
-			//zz--
-			if(k+2 <= ijk_max[2] && k-2 >= ijk_min[2]){
-				fzz[curr] = Fdzdz * (-_FH2_((i+2),(j+2),k) + 16 *_FH2_((i+2),(j+2),(k+1))- 30*_FH2_((i+2),(j+2),(k+2)) 
-		            -_FH2_((i+2),(j+2),(k+4))+ 16*_FH2_((i+2),(j+2),(k+3))              );
-			}
-			else if(k+1 <= ijk_max[2] && k-1 >= ijk_min[2]){
-				fzz[curr] = Sdzdz*(_FH2_((i+2),(j+2),(k+1))- 2 * _FH2_((i+2),(j+2),(k+2)) 
-			            + _FH2_((i+2),(j+2),(k+3))              );
-			}
+{	
+    int curr = blockIdx.x*blockDim.x+threadIdx.x;
+    int ps;
+    
+    while(curr < _3D_SIZE[0])
+    {
+        int k = curr / _2D_SIZE[0];
+        ps = curr - (_2D_SIZE[0] * k);
+        int j = ps / ex_c[0];
+        int i = ps  - (j * ex_c[0]);
+        
+        if(k == ex_c[2]-1 || i == ex_c[0]-1 || j == ex_c[1]-1){
+            curr += STEP_SIZE;	
+            continue;
+        }
 
-			//yy--
-			if(j+2 <= ijk_max[1] && j-2 >= ijk_min[1]){
-			    fyy[curr] = Fdydy*(-_FH2_((i+2),j,(k+2))+16*_FH2_((i+2),(j+1),(k+2))-30*_FH2_((i+2),(j+2),(k+2)) 
-			            -_FH2_((i+2),(j+4),(k+2))+16*_FH2_((i+2),(j+3),(k+2))              );
-			}
-			else if(j+1 <= ijk_max[1] && j-1 >= ijk_min[1]){
-				fyy[curr] = Sdydy*(_FH2_((i+2),(j+1),(k+2))-2*_FH2_((i+2),(j+2),(k+2)) 
-			            +_FH2_((i+2),(j+3),(k+2))              );
-			}
+        const bool ok4 = (i+2 <= ijk_max[0] && i-2 >= ijk_min[0] &&
+                          j+2 <= ijk_max[1] && j-2 >= ijk_min[1] &&
+                          k+2 <= ijk_max[2] && k-2 >= ijk_min[2]);
 
-			
-			
-			//xy
-		    if(i+2 <= ijk_max[0] && i-2 >= ijk_min[0] && j+2 <= ijk_max[1] && j-2 >= ijk_min[1])	
-		   		fxy[curr] = Fdxdy*((_FH2_(i,j,(k+2))-8*_FH2_((i+1),j,(k+2))+8*_FH2_((i+3),j,(k+2))-_FH2_((i+4),j,(k+2))) 
-		                       -8 *(_FH2_(i,(j+1),(k+2))-8*_FH2_((i+1),(j+1),(k+2))+8*_FH2_((i+3),(j+1),(k+2))-_FH2_((i+4),(j+1),(k+2)))  
-		                       +8 *(_FH2_(i,(j+3),(k+2))-8*_FH2_((i+1),(j+3),(k+2))+8*_FH2_((i+3),(j+3),(k+2))-_FH2_((i+4),(j+3),(k+2)))  
-		                       -    (_FH2_(i,(j+4),(k+2))-8*_FH2_((i+1),(j+4),(k+2))+8*_FH2_((i+3),(j+4),(k+2))-_FH2_((i+4),(j+4),(k+2))));
+        const bool ok2 = (i+1 <= ijk_max[0] && i-1 >= ijk_min[0] &&
+                          j+1 <= ijk_max[1] && j-1 >= ijk_min[1] &&
+                          k+1 <= ijk_max[2] && k-1 >= ijk_min[2]);
 
-		   	else if(i+1 <= ijk_max[0] && i-1 >= ijk_min[0] && j+1 <= ijk_max[1] && j-1 >= ijk_min[1])
-		                
-		   		fxy[curr] = Sdxdy*(_FH2_((i+1),(j+1),(k+2))-_FH2_((i+3),(j+1),(k+2))-_FH2_((i+1),(j+3),(k+2))+_FH2_((i+3),(j+3),(k+2)));
-			//xz
-		    if(i+2 <= ijk_max[0] && i-2 >= ijk_min[0] && k+2 <= ijk_max[2] && k-2 >= ijk_min[2])
-		   		fxz[curr] = Fdxdz*(     (_FH2_(i,(j+2),k)-8*_FH2_((i+1),(j+2),k)+8*_FH2_((i+3),(j+2),k)-_FH2_((i+4),(j+2),k)) 
-		                       -8 *(_FH2_(i,(j+2),(k+1))-8*_FH2_((i+1),(j+2),(k+1))+8*_FH2_((i+3),(j+2),(k+1))-_FH2_((i+4),(j+2),(k+1))) 
-		                       +8 *(_FH2_(i,(j+2),(k+3))-8*_FH2_((i+1),(j+2),(k+3))+8*_FH2_((i+3),(j+2),(k+3))-_FH2_((i+4),(j+2),(k+3)))  
-		                       -    (_FH2_(i,(j+2),(k+4))-8*_FH2_((i+1),(j+2),(k+4))+8*_FH2_((i+3),(j+2),(k+4))-_FH2_((i+4),(j+2),(k+4))));
-		                       
-			else if(i+1 <= ijk_max[0] && i-1 >= ijk_min[0] && k+1 <= ijk_max[2] && k-1 >= ijk_min[2])
-					fxz[curr] = Sdxdz*(_FH2_((i+1),(j+2),(k+1))-_FH2_((i+3),(j+2),(k+1))-_FH2_((i+1),(j+2),(k+3))+_FH2_((i+3),(j+2),(k+3)));
-			//yz
-			if(j+2 <= ijk_max[1] && j-2 >= ijk_min[1] && k+2 <= ijk_max[2] && k-2 >= ijk_min[2])
-					fyz[curr] = Fdydz*(     (_FH2_((i+2),j,k)-8*_FH2_((i+2),(j+1),k)+8*_FH2_((i+2),(j+3),k)-_FH2_((i+2),(j+4),k))  
-		                       -8 *(_FH2_((i+2),j,(k+1))-8*_FH2_((i+2),(j+1),(k+1))+8*_FH2_((i+2),(j+3),(k+1))-_FH2_((i+2),(j+4),(k+1)))  
-		                       +8 *(_FH2_((i+2),j,(k+3))-8*_FH2_((i+2),(j+1),(k+3))+8*_FH2_((i+2),(j+3),(k+3))-_FH2_((i+2),(j+4),(k+3)))  
-		                       -    (_FH2_((i+2),j,(k+4))-8*_FH2_((i+2),(j+1),(k+4))+8*_FH2_((i+2),(j+3),(k+4))-_FH2_((i+2),(j+4),(k+4))));
-		                       
-			else if(j+1 <= ijk_max[1] && j-1 >= ijk_min[1] && k+1 <= ijk_max[2] && k-1 >= ijk_min[2])
-					fyz[curr] = Sdydz*(_FH2_((i+2),(j+1),(k+1))-_FH2_((i+2),(j+3),(k+1))-_FH2_((i+2),(j+1),(k+3))+_FH2_((i+2),(j+3),(k+3)));
-			
-			curr += STEP_SIZE;
-		}
-	}
- 	
- 	__syncthreads();
- }
+        if(ok4) {
+            fxx[curr] = Fdxdx*(-_FH2_(i,(j+2),(k+2))+16*_FH2_((i+1),(j+2),(k+2))-30*_FH2_((i+2),(j+2),(k+2)) 
+                              -_FH2_((i+4),(j+2),(k+2))+16*_FH2_((i+3),(j+2),(k+2)));
+            fyy[curr] = Fdydy*(-_FH2_((i+2),j,(k+2))+16*_FH2_((i+2),(j+1),(k+2))-30*_FH2_((i+2),(j+2),(k+2)) 
+                              -_FH2_((i+2),(j+4),(k+2))+16*_FH2_((i+2),(j+3),(k+2)));
+            fzz[curr] = Fdzdz*(-_FH2_((i+2),(j+2),k)+16*_FH2_((i+2),(j+2),(k+1))-30*_FH2_((i+2),(j+2),(k+2)) 
+                              -_FH2_((i+2),(j+2),(k+4))+16*_FH2_((i+2),(j+2),(k+3)));
+
+            fxy[curr] = Fdxdy*((_FH2_(i,j,(k+2))-8*_FH2_((i+1),j,(k+2))+8*_FH2_((i+3),j,(k+2))-_FH2_((i+4),j,(k+2))) 
+                              -8 *(_FH2_(i,(j+1),(k+2))-8*_FH2_((i+1),(j+1),(k+2))+8*_FH2_((i+3),(j+1),(k+2))-_FH2_((i+4),(j+1),(k+2)))  
+                              +8 *(_FH2_(i,(j+3),(k+2))-8*_FH2_((i+1),(j+3),(k+2))+8*_FH2_((i+3),(j+3),(k+2))-_FH2_((i+4),(j+3),(k+2)))  
+                              -   (_FH2_(i,(j+4),(k+2))-8*_FH2_((i+1),(j+4),(k+2))+8*_FH2_((i+3),(j+4),(k+2))-_FH2_((i+4),(j+4),(k+2))));
+
+            fxz[curr] = Fdxdz*((_FH2_(i,(j+2),k)-8*_FH2_((i+1),(j+2),k)+8*_FH2_((i+3),(j+2),k)-_FH2_((i+4),(j+2),k)) 
+                              -8 *(_FH2_(i,(j+2),(k+1))-8*_FH2_((i+1),(j+2),(k+1))+8*_FH2_((i+3),(j+2),(k+1))-_FH2_((i+4),(j+2),(k+1))) 
+                              +8 *(_FH2_(i,(j+2),(k+3))-8*_FH2_((i+1),(j+2),(k+3))+8*_FH2_((i+3),(j+2),(k+3))-_FH2_((i+4),(j+2),(k+3)))  
+                              -   (_FH2_(i,(j+2),(k+4))-8*_FH2_((i+1),(j+2),(k+4))+8*_FH2_((i+3),(j+2),(k+4))-_FH2_((i+4),(j+2),(k+4))));
+
+            fyz[curr] = Fdydz*((_FH2_((i+2),j,k)-8*_FH2_((i+2),(j+1),k)+8*_FH2_((i+2),(j+3),k)-_FH2_((i+2),(j+4),k))  
+                              -8 *(_FH2_((i+2),j,(k+1))-8*_FH2_((i+2),(j+1),(k+1))+8*_FH2_((i+2),(j+3),(k+1))-_FH2_((i+2),(j+4),(k+1)))  
+                              +8 *(_FH2_((i+2),j,(k+3))-8*_FH2_((i+2),(j+1),(k+3))+8*_FH2_((i+2),(j+3),(k+3))-_FH2_((i+2),(j+4),(k+3)))  
+                              -   (_FH2_((i+2),j,(k+4))-8*_FH2_((i+2),(j+1),(k+4))+8*_FH2_((i+2),(j+3),(k+4))-_FH2_((i+2),(j+4),(k+4))));
+        } else if(ok2) {
+            fxx[curr] = Sdxdx*(_FH2_((i+1),(j+2),(k+2)) - 2*_FH2_((i+2),(j+2),(k+2)) + _FH2_((i+3),(j+2),(k+2)));
+            fyy[curr] = Sdydy*(_FH2_((i+2),(j+1),(k+2)) - 2*_FH2_((i+2),(j+2),(k+2)) + _FH2_((i+2),(j+3),(k+2)));
+            fzz[curr] = Sdzdz*(_FH2_((i+2),(j+2),(k+1)) - 2*_FH2_((i+2),(j+2),(k+2)) + _FH2_((i+2),(j+2),(k+3)));
+
+            fxy[curr] = Sdxdy*(_FH2_((i+1),(j+1),(k+2))-_FH2_((i+3),(j+1),(k+2))-_FH2_((i+1),(j+3),(k+2))+_FH2_((i+3),(j+3),(k+2)));
+            fxz[curr] = Sdxdz*(_FH2_((i+1),(j+2),(k+1))-_FH2_((i+3),(j+2),(k+1))-_FH2_((i+1),(j+2),(k+3))+_FH2_((i+3),(j+2),(k+3)));
+            fyz[curr] = Sdydz*(_FH2_((i+2),(j+1),(k+1))-_FH2_((i+2),(j+3),(k+1))-_FH2_((i+2),(j+1),(k+3))+_FH2_((i+2),(j+3),(k+3)));
+        }
+
+        curr += STEP_SIZE;
+    }
+}
+// ...existing code...
 
 inline void sub_fdderivs(double * f,double *fh,double *fxx,double *fxy,double *fxz,double *fyy,double *fyz,double *fzz,double* SoA)
 {
@@ -309,59 +286,62 @@ inline void sub_fdderivs(double * f,double *fh,double *fxx,double *fxy,double *f
 	// cudaThreadSynchronize(); 
 }
 
+// ...existing code...
 __global__ void sub_fderivs_part1(double * f,double * fh,double *fx,double *fy,double *fz  )
- {	
-	int curr = blockIdx.x*blockDim.x+threadIdx.x;
-	int ps; //TOTRY: i,j,k; double value;
-	
-	while(curr < _3D_SIZE[0])
-	{
-		int k = curr / _2D_SIZE[0];
-		ps = curr - (_2D_SIZE[0] * k); //TOTRY: = curr % _2D_SIZE[0];
-		int j = ps / ex_c[0];
-		int i = ps  - (j * ex_c[0]);
-		
-		if(k == ex_c[2]-1 || i == ex_c[0]-1 || j == ex_c[1]-1){
-			curr += STEP_SIZE;	
-			continue;
-		}
-		
-			//X--
-			if(i+2 <= ijk_max[0] && i-2 >= ijk_min[0])
-				fx[curr] = d12dxyz[0]*(fh[i+(j+2)*_1D_SIZE[2]+(k+2)*_2D_SIZE[2]] - 
-								8*fh[i+1+(j+2)*_1D_SIZE[2]+(k+2)*_2D_SIZE[2]]	+
-								8*fh[i+3+(j+2)*_1D_SIZE[2]+(k+2)*_2D_SIZE[2]]	-
-								fh[i+4+(j+2)*_1D_SIZE[2]+(k+2)*_2D_SIZE[2]]	);
-							
-			else if(i+1 <= ijk_max[0] && i-1 >= ijk_min[0])
-				fx[curr] = d2dxyz[0]*(-fh[i+1+(j+2)*_1D_SIZE[2]+(k+2)*_2D_SIZE[2]]	+
-								fh[i+3+(j+2)*_1D_SIZE[2]+(k+2)*_2D_SIZE[2]]	);
-			//Y--
-			if(j+2 <= ijk_max[1] && j-2 >= ijk_min[1])
-	      		fy[curr]=d12dxyz[1]*(fh[i+2+j*_1D_SIZE[2]+(k+2)*_2D_SIZE[2]]-
-	      						8*fh[i+2+(j+1)*_1D_SIZE[2]+(k+2)*_2D_SIZE[2]]	+
-	      						8*fh[i+2+(j+3)*_1D_SIZE[2]+(k+2)*_2D_SIZE[2]]	-
-	      						fh[i+2+(j+4)*_1D_SIZE[2]+(k+2)*_2D_SIZE[2]]);
-	      						
-	    	else if(j+1 <= ijk_max[1] && j-1 >= ijk_min[1])
-	     		fy[curr]=d2dxyz[1]*(-fh[i+2+(j+1)*_1D_SIZE[2]+(k+2)*_2D_SIZE[2]]		+
-	     						fh[i+2+(j+3)*_1D_SIZE[2]+(k+2)*_2D_SIZE[2]]);
-	     	//Z--
-      
-	     	if(k+2 <= ijk_max[2] && k-2 >= ijk_min[2])
-	      	   fz[curr]=d12dxyz[2]*(	fh[i+2+(j+2)*_1D_SIZE[2]+k    *_2D_SIZE[2]]		-
-	      						 8*		fh[i+2+(j+2)*_1D_SIZE[2]+(k+1)*_2D_SIZE[2]]		+
-	      						 8*		fh[i+2+(j+2)*_1D_SIZE[2]+(k+3)*_2D_SIZE[2]]		-
-	      								fh[i+2+(j+2)*_1D_SIZE[2]+(k+4)*_2D_SIZE[2]]);
-	      					
-	    	else if(k+1 <= ijk_max[2] && k-1 >= ijk_min[2])
-	      		fz[curr]=d2dxyz[2]*(-fh[i+2+(j+2)*_1D_SIZE[2]+(k+1)*_2D_SIZE[2]]+
-	      						fh[i+2+(j+2)*_1D_SIZE[2]+(k+3)*_2D_SIZE[2]]);
-      
-			curr += STEP_SIZE;
-		
-	}
- }
+{	
+    int curr = blockIdx.x*blockDim.x+threadIdx.x;
+    int ps; //TOTRY: i,j,k; double value;
+    
+    while(curr < _3D_SIZE[0])
+    {
+        int k = curr / _2D_SIZE[0];
+        ps = curr - (_2D_SIZE[0] * k);
+        int j = ps / ex_c[0];
+        int i = ps  - (j * ex_c[0]);
+        
+        if(k == ex_c[2]-1 || i == ex_c[0]-1 || j == ex_c[1]-1){
+            curr += STEP_SIZE;	
+            continue;
+        }
+
+        const bool ok4 = (i+2 <= ijk_max[0] && i-2 >= ijk_min[0] &&
+                          j+2 <= ijk_max[1] && j-2 >= ijk_min[1] &&
+                          k+2 <= ijk_max[2] && k-2 >= ijk_min[2]);
+
+        const bool ok2 = (i+1 <= ijk_max[0] && i-1 >= ijk_min[0] &&
+                          j+1 <= ijk_max[1] && j-1 >= ijk_min[1] &&
+                          k+1 <= ijk_max[2] && k-1 >= ijk_min[2]);
+
+        if(ok4) {
+            fx[curr] = d12dxyz[0]*(fh[i+(j+2)*_1D_SIZE[2]+(k+2)*_2D_SIZE[2]] - 
+                                   8*fh[i+1+(j+2)*_1D_SIZE[2]+(k+2)*_2D_SIZE[2]] +
+                                   8*fh[i+3+(j+2)*_1D_SIZE[2]+(k+2)*_2D_SIZE[2]] -
+                                     fh[i+4+(j+2)*_1D_SIZE[2]+(k+2)*_2D_SIZE[2]]);
+
+            fy[curr] = d12dxyz[1]*(fh[i+2+j*_1D_SIZE[2]+(k+2)*_2D_SIZE[2]] -
+                                   8*fh[i+2+(j+1)*_1D_SIZE[2]+(k+2)*_2D_SIZE[2]] +
+                                   8*fh[i+2+(j+3)*_1D_SIZE[2]+(k+2)*_2D_SIZE[2]] -
+                                     fh[i+2+(j+4)*_1D_SIZE[2]+(k+2)*_2D_SIZE[2]]);
+
+            fz[curr] = d12dxyz[2]*(fh[i+2+(j+2)*_1D_SIZE[2]+k    *_2D_SIZE[2]] -
+                                   8*fh[i+2+(j+2)*_1D_SIZE[2]+(k+1)*_2D_SIZE[2]] +
+                                   8*fh[i+2+(j+2)*_1D_SIZE[2]+(k+3)*_2D_SIZE[2]] -
+                                     fh[i+2+(j+2)*_1D_SIZE[2]+(k+4)*_2D_SIZE[2]]);
+        } else if(ok2) {
+            fx[curr] = d2dxyz[0]*(-fh[i+1+(j+2)*_1D_SIZE[2]+(k+2)*_2D_SIZE[2]] +
+                                   fh[i+3+(j+2)*_1D_SIZE[2]+(k+2)*_2D_SIZE[2]]);
+
+            fy[curr] = d2dxyz[1]*(-fh[i+2+(j+1)*_1D_SIZE[2]+(k+2)*_2D_SIZE[2]] +
+                                   fh[i+2+(j+3)*_1D_SIZE[2]+(k+2)*_2D_SIZE[2]]);
+
+            fz[curr] = d2dxyz[2]*(-fh[i+2+(j+2)*_1D_SIZE[2]+(k+1)*_2D_SIZE[2]] +
+                                   fh[i+2+(j+2)*_1D_SIZE[2]+(k+3)*_2D_SIZE[2]]);
+        }
+
+        curr += STEP_SIZE;
+    }
+}
+// ...existing code...
  
 inline void sub_fderivs(double * f,double * fh,double *fx,double *fy,double *fz,double * SoA)
 {
@@ -455,90 +435,111 @@ inline void sub_kodis(double *f,double *fh,double *f_rhs,double *SoA)
 	// cudaThreadSynchronize();
 }
  
+// ...existing code...
 __global__ void  sub_lopsided_part1(double *f,double* fh,double *f_rhs,double *Sfx,double *Sfy,double *Sfz)
 {
-	int _t = blockIdx.x*blockDim.x+threadIdx.x;
-	int ps; //TOTRY: i,j,k; double value;
-	
-	while(_t < _3D_SIZE[0])
-	{
-		int k = _t / _2D_SIZE[0];
-		ps = _t - (_2D_SIZE[0] * k); //TOTRY: = curr % _2D_SIZE[0];
-		int j = ps / ex_c[0];
-		int i = ps  - (j * ex_c[0]);
-		
-		if(k < ex_c[2]-1 && i < ex_c[0]-1 && j < ex_c[1]-1){
-			// x direction   
-		    if(Sfx[_t] >= 0 && i+3 <= ijk_max[0] && i-1 >= ijk_min2[0])
-		     f_rhs[_t]=f_rhs[_t]+                                                   
-		                  Sfx[_t]*d12dxyz[0]*(-3*_FH3_((i+2),(j+3),(k+3))-10*_FH3_((i+3),(j+3),(k+3))+18*_FH3_((i+4),(j+3),(k+3)) 
-		                                    -6*_FH3_((i+5),(j+3),(k+3))+    _FH3_((i+6),(j+3),(k+3)));
+    int _t = blockIdx.x*blockDim.x+threadIdx.x;
+    int ps;
+    
+    while(_t < _3D_SIZE[0])
+    {
+        int k = _t / _2D_SIZE[0];
+        ps = _t - (_2D_SIZE[0] * k);
+        int j = ps / ex_c[0];
+        int i = ps  - (j * ex_c[0]);
+        
+        if(k < ex_c[2]-1 && i < ex_c[0]-1 && j < ex_c[1]-1){
+            // x direction   
+            if(Sfx[_t] > 0) {
+                if(i+3 <= ijk_max[0]) {
+                    f_rhs[_t] = f_rhs[_t] +
+                        Sfx[_t]*d12dxyz[0]*(-3*_FH3_((i+2),(j+3),(k+3))-10*_FH3_((i+3),(j+3),(k+3))+18*_FH3_((i+4),(j+3),(k+3)) 
+                                          -6*_FH3_((i+5),(j+3),(k+3)) + _FH3_((i+6),(j+3),(k+3)));
+                } else if(i+2 <= ijk_max[0]) {
+                    f_rhs[_t] = f_rhs[_t] +
+                        Sfx[_t]*d12dxyz[0]*(_FH3_((i+1),(j+3),(k+3))-8*_FH3_((i+2),(j+3),(k+3))+8*_FH3_((i+4),(j+3),(k+3))-_FH3_((i+5),(j+3),(k+3)));
+                } else if(i+1 <= ijk_max[0]) {
+                    f_rhs[_t] = f_rhs[_t] -
+                        Sfx[_t]*d12dxyz[0]*(-3*_FH3_((i+4),(j+3),(k+3))-10*_FH3_((i+3),(j+3),(k+3))+18*_FH3_((i+2),(j+3),(k+3)) 
+                                          -6*_FH3_((i+1),(j+3),(k+3)) + _FH3_(i,(j+3),(k+3)));
+                }
+            } else if(Sfx[_t] < 0) {
+                if(i-3 >= ijk_min2[0]) {
+                    f_rhs[_t] = f_rhs[_t] -
+                        Sfx[_t]*d12dxyz[0]*(-3*_FH3_((i+4),(j+3),(k+3))-10*_FH3_((i+3),(j+3),(k+3))+18*_FH3_((i+2),(j+3),(k+3)) 
+                                          -6*_FH3_((i+1),(j+3),(k+3)) + _FH3_(i,(j+3),(k+3)));
+                } else if(i-2 >= ijk_min2[0]) {
+                    f_rhs[_t] = f_rhs[_t] +
+                        Sfx[_t]*d12dxyz[0]*(_FH3_((i+1),(j+3),(k+3))-8*_FH3_((i+2),(j+3),(k+3))+8*_FH3_((i+4),(j+3),(k+3))-_FH3_((i+5),(j+3),(k+3)));
+                } else if(i-1 >= ijk_min2[0]) {
+                    f_rhs[_t] = f_rhs[_t] +
+                        Sfx[_t]*d12dxyz[0]*(-3*_FH3_((i+2),(j+3),(k+3))-10*_FH3_((i+3),(j+3),(k+3))+18*_FH3_((i+4),(j+3),(k+3)) 
+                                          -6*_FH3_((i+5),(j+3),(k+3)) + _FH3_((i+6),(j+3),(k+3)));
+                }
+            }
 
-		     else if(Sfx[_t] <= 0 && i-3 >= ijk_min2[0] && i+1 <= ijk_max[0])
-		     f_rhs[_t]=f_rhs[_t]-                                                   
-		                  Sfx[_t]*d12dxyz[0]*(-3*_FH3_((i+4),(j+3),(k+3))-10*_FH3_((i+3),(j+3),(k+3))+18*_FH3_((i+2),(j+3),(k+3)) 
-		                                    -6*_FH3_((i+1),(j+3),(k+3))+    _FH3_(i,(j+3),(k+3)));
+            // y direction
+            if(Sfy[_t] > 0) {
+                if(j+3 <= ijk_max[1]) {
+                    f_rhs[_t] = f_rhs[_t] +
+                        Sfy[_t]*d12dxyz[1]*(-3*_FH3_((i+3),(j+2),(k+3))-10*_FH3_((i+3),(j+3),(k+3))+18*_FH3_((i+3),(j+4),(k+3)) 
+                                          -6*_FH3_((i+3),(j+5),(k+3)) + _FH3_((i+3),(j+6),(k+3)));
+                } else if(j+2 <= ijk_max[1]) {
+                    f_rhs[_t] = f_rhs[_t] +
+                        Sfy[_t]*d12dxyz[1]*(_FH3_((i+3),(j+1),(k+3))-8*_FH3_((i+3),(j+2),(k+3))+8*_FH3_((i+3),(j+4),(k+3))-_FH3_((i+3),(j+5),(k+3)));
+                } else if(j+1 <= ijk_max[1]) {
+                    f_rhs[_t] = f_rhs[_t] -
+                        Sfy[_t]*d12dxyz[1]*(-3*_FH3_((i+3),(j+4),(k+3))-10*_FH3_((i+3),(j+3),(k+3))+18*_FH3_((i+3),(j+2),(k+3)) 
+                                          -6*_FH3_((i+3),(j+1),(k+3)) + _FH3_((i+3),j,(k+3)));
+                }
+            } else if(Sfy[_t] < 0) {
+                if(j-3 >= ijk_min2[1]) {
+                    f_rhs[_t] = f_rhs[_t] -
+                        Sfy[_t]*d12dxyz[1]*(-3*_FH3_((i+3),(j+4),(k+3))-10*_FH3_((i+3),(j+3),(k+3))+18*_FH3_((i+3),(j+2),(k+3)) 
+                                          -6*_FH3_((i+3),(j+1),(k+3)) + _FH3_((i+3),j,(k+3)));
+                } else if(j-2 >= ijk_min2[1]) {
+                    f_rhs[_t] = f_rhs[_t] +
+                        Sfy[_t]*d12dxyz[1]*(_FH3_((i+3),(j+1),(k+3))-8*_FH3_((i+3),(j+2),(k+3))+8*_FH3_((i+3),(j+4),(k+3))-_FH3_((i+3),(j+5),(k+3)));
+                } else if(j-1 >= ijk_min2[1]) {
+                    f_rhs[_t] = f_rhs[_t] +
+                        Sfy[_t]*d12dxyz[1]*(-3*_FH3_((i+3),(j+2),(k+3))-10*_FH3_((i+3),(j+3),(k+3))+18*_FH3_((i+3),(j+4),(k+3)) 
+                                          -6*_FH3_((i+3),(j+5),(k+3)) + _FH3_((i+3),(j+6),(k+3)));
+                }
+            }
 
-		     else if(i+2 <= ijk_max[0] && i-2 >= ijk_min2[0])
-
-
-		     f_rhs[_t]=f_rhs[_t]+                                                           
-		                  Sfx[_t]*d12dxyz[0]*(_FH3_((i+1),(j+3),(k+3))-8*_FH3_((i+2),(j+3),(k+3))+8*_FH3_((i+4),(j+3),(k+3))-_FH3_((i+5),(j+3),(k+3)));
-
-		     else if(i+1 <= ijk_max[0] && i-1 >= ijk_min2[0])
-
-		     f_rhs[_t]=f_rhs[_t] + Sfx[_t]*d2dxyz[0]*(-_FH3_((i+2),(j+3),(k+3))+_FH3_((i+4),(j+3),(k+3)));
-
-
-			// y direction   
-		    if(Sfy[_t] >= 0 && j+3 <= ijk_max[1] && j-1 >= ijk_min2[1])
-
-		     f_rhs[_t]=f_rhs[_t]+                                                   
-		                  Sfy[_t]*d12dxyz[1]*(-3*_FH3_((i+3),(j+2),(k+3))-10*_FH3_((i+3),(j+3),(k+3))+18*_FH3_((i+3),(j+4),(k+3)) 
-		                                    -6*_FH3_((i+3),(j+5),(k+3))+    _FH3_((i+3),(j+6),(k+3)));
-
-		    else if(Sfy[_t] <= 0 && j-3 >= ijk_min2[1] && j+1 <= ijk_max[1])
-		     f_rhs[_t]=f_rhs[_t]-                                                   
-		                  Sfy[_t]*d12dxyz[1]*(-3*_FH3_((i+3),(j+4),(k+3))-10*_FH3_((i+3),(j+3),(k+3))+18*_FH3_((i+3),(j+2),(k+3)) 
-		                                    -6*_FH3_((i+3),(j+1),(k+3))+    _FH3_((i+3),j,(k+3)));
-
-		    else if(j+2 <= ijk_max[1] && j-2 >= ijk_min2[1])
-
-		     f_rhs[_t]=f_rhs[_t]+                                                            
-		                  Sfy[_t]*d12dxyz[1]*(_FH3_((i+3),(j+1),(k+3))-8*_FH3_((i+3),(j+2),(k+3))+8*_FH3_((i+3),(j+4),(k+3))-_FH3_((i+3),(j+5),(k+3)));
-
-		    else if(j+1 <= ijk_max[1] && j-1 >= ijk_min2[1])
-
-		     f_rhs[_t]=f_rhs[_t] + Sfy[_t]*d2dxyz[1]*(-_FH3_((i+3),(j+2),(k+3))+_FH3_((i+3),(j+4),(k+3)));
-		     
-
-			// z direction   
-		    if(Sfz[_t] >= 0 && k+3 <= ijk_max[2] && k-1 >= ijk_min2[2])
-			//         v
-			// D f = ------[ - 3f    - 10f  + 18f    - 6f     + f     ]
-			//  i     12dx       i-v      i      i+v     i+2v    i+3v
-		     f_rhs[_t]=f_rhs[_t]+                                                   
-		                  Sfz[_t]*d12dxyz[2]*(-3*_FH3_((i+3),(j+3),(k+2))-10*_FH3_((i+3),(j+3),(k+3))+18*_FH3_((i+3),(j+3),(k+4)) 
-		                                    -6*_FH3_((i+3),(j+3),(k+5))+    _FH3_((i+3),(j+3),(k+6)));
-
-		    else if(Sfz[_t] <= 0 && k-3 >= ijk_min2[2] && k+1 <= ijk_max[2])
-		     f_rhs[_t]=f_rhs[_t]-                                                   
-		                  Sfz[_t]*d12dxyz[2]*(-3*_FH3_((i+3),(j+3),(k+4))-10*_FH3_((i+3),(j+3),(k+3))+18*_FH3_((i+3),(j+3),(k+2)) 
-		                                    -6*_FH3_((i+3),(j+3),(k+1))+    _FH3_((i+3),(j+3),k));
-
-		     else if(k+2 <= ijk_max[2] && k-2 >= ijk_min2[2])
-
-		     f_rhs[_t]=f_rhs[_t]+                                                            
-		                  Sfz[_t]*d12dxyz[2]*(_FH3_((i+3),(j+3),(k+1))-8*_FH3_((i+3),(j+3),(k+2))+8*_FH3_((i+3),(j+3),(k+4))-_FH3_((i+3),(j+3),(k+5)));
-
-		     else if(k+1 <= ijk_max[2] && k-1 >= ijk_min2[2])
-
-		     f_rhs[_t]=f_rhs[_t]+Sfz[_t]*d2dxyz[2]*(-_FH3_((i+3),(j+3),(k+2))+_FH3_((i+3),(j+3),(k+4)));
-		}
-		//-------------------
-		_t += STEP_SIZE;
-	}
+            // z direction
+            if(Sfz[_t] > 0) {
+                if(k+3 <= ijk_max[2]) {
+                    f_rhs[_t] = f_rhs[_t] +
+                        Sfz[_t]*d12dxyz[2]*(-3*_FH3_((i+3),(j+3),(k+2))-10*_FH3_((i+3),(j+3),(k+3))+18*_FH3_((i+3),(j+3),(k+4)) 
+                                          -6*_FH3_((i+3),(j+3),(k+5)) + _FH3_((i+3),(j+3),(k+6)));
+                } else if(k+2 <= ijk_max[2]) {
+                    f_rhs[_t] = f_rhs[_t] +
+                        Sfz[_t]*d12dxyz[2]*(_FH3_((i+3),(j+3),(k+1))-8*_FH3_((i+3),(j+3),(k+2))+8*_FH3_((i+3),(j+3),(k+4))-_FH3_((i+3),(j+3),(k+5)));
+                } else if(k+1 <= ijk_max[2]) {
+                    f_rhs[_t] = f_rhs[_t] -
+                        Sfz[_t]*d12dxyz[2]*(-3*_FH3_((i+3),(j+3),(k+4))-10*_FH3_((i+3),(j+3),(k+3))+18*_FH3_((i+3),(j+3),(k+2)) 
+                                          -6*_FH3_((i+3),(j+3),(k+1)) + _FH3_((i+3),(j+3),k));
+                }
+            } else if(Sfz[_t] < 0) {
+                if(k-3 >= ijk_min2[2]) {
+                    f_rhs[_t] = f_rhs[_t] -
+                        Sfz[_t]*d12dxyz[2]*(-3*_FH3_((i+3),(j+3),(k+4))-10*_FH3_((i+3),(j+3),(k+3))+18*_FH3_((i+3),(j+3),(k+2)) 
+                                          -6*_FH3_((i+3),(j+3),(k+1)) + _FH3_((i+3),(j+3),k));
+                } else if(k-2 >= ijk_min2[2]) {
+                    f_rhs[_t] = f_rhs[_t] +
+                        Sfz[_t]*d12dxyz[2]*(_FH3_((i+3),(j+3),(k+1))-8*_FH3_((i+3),(j+3),(k+2))+8*_FH3_((i+3),(j+3),(k+4))-_FH3_((i+3),(j+3),(k+5)));
+                } else if(k-1 >= ijk_min2[2]) {
+                    f_rhs[_t] = f_rhs[_t] +
+                        Sfz[_t]*d12dxyz[2]*(-3*_FH3_((i+3),(j+3),(k+2))-10*_FH3_((i+3),(j+3),(k+3))+18*_FH3_((i+3),(j+3),(k+4)) 
+                                          -6*_FH3_((i+3),(j+3),(k+5)) + _FH3_((i+3),(j+3),(k+6)));
+                }
+            }
+        }
+        _t += STEP_SIZE;
+    }
 }
+// ...existing code...
 
 
 inline void  sub_lopsided(double *f,double*fh,double *f_rhs,double *Sfx,double *Sfy,double *Sfz,double *SoA){
@@ -1882,21 +1883,21 @@ void gpu_init_constant(GPU_RHS_CONTEXT &ctx) {
 	
 //3.2--------for fderivs------------
 	int ijkmax_h[3] = {ctx.ex[0]-1,ctx.ex[1]-1,ctx.ex[2]-1};
-	int ijkmin_h[3] = {0,0,0};
-	int ijkmin2_h[3] = {0,0,0};
-	int ijkmin3_h[3] = {0,0,0};
-	
-	double abs[3] = {ctx.X[0],ctx.Y[0],ctx.Z[0]};
-	for(int i = 0;i<3;++i){
-		if(abs[i] < 0) abs[i] = -abs[i]; 
-	}
-  	if(ctx.Symmetry > 1 && abs[0] < dXh) {ijkmin_h[0] = -2; ijkmin2_h[0] = -3;}
-  	if(ctx.Symmetry > 1 && abs[1] < dYh) {ijkmin_h[1] = -2; ijkmin2_h[1] = -3;}
-  	if(ctx.Symmetry > 0 && abs[2] < dZh) {ijkmin_h[2] = -2; ijkmin2_h[2] = -3;}
-  	
-  	if(ctx.Symmetry > 2 && abs[0] < dXh) {ijkmin3_h[0] = -3;}
-  	if(ctx.Symmetry > 2 && abs[1] < dYh) {ijkmin3_h[1] = -3;}
-  	if(ctx.Symmetry > 0 && abs[2] < dZh) {ijkmin3_h[2] = -3;}
+    int ijkmin_h[3] = {0,0,0};
+    int ijkmin2_h[3] = {0,0,0};
+    int ijkmin3_h[3] = {0,0,0};
+    
+    double abs[3] = {ctx.X[0],ctx.Y[0],ctx.Z[0]};
+    for(int i = 0;i<3;++i){
+        if(abs[i] < 0) abs[i] = -abs[i]; 
+    }
+      if(ctx.Symmetry > 1 && abs[0] < dXh) {ijkmin_h[0] = -1; ijkmin2_h[0] = -2;}
+      if(ctx.Symmetry > 1 && abs[1] < dYh) {ijkmin_h[1] = -1; ijkmin2_h[1] = -2;}
+      if(ctx.Symmetry > 0 && abs[2] < dZh) {ijkmin_h[2] = -1; ijkmin2_h[2] = -2;}
+      
+      if(ctx.Symmetry > 2 && abs[0] < dXh) {ijkmin3_h[0] = -3;}
+      if(ctx.Symmetry > 2 && abs[1] < dYh) {ijkmin3_h[1] = -3;}
+      if(ctx.Symmetry > 0 && abs[2] < dZh) {ijkmin3_h[2] = -3;}
   	
   	cudaMemcpyToSymbol(ijk_max,ijkmax_h,3*sizeof(int));
   	cudaMemcpyToSymbol(ijk_min,ijkmin_h,3*sizeof(int));

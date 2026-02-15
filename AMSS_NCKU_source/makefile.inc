@@ -1,6 +1,6 @@
 MPI_DIR = /home/jjsnam/spack/opt/spack/linux-haswell/intel-oneapi-mpi-2021.17.2-tzh7zdi7akujs3w3z6xura62oofpnlw7/mpi/2021.17/
 
-CUDA_DIR = /usr/local/cuda
+CUDA_DIR = /home/jjsnam/spack/opt/spack/linux-icelake/cuda-13.0.2-nxiq75wz7g54wiu5ublimzvgspxrweit/
 CUDA_COMPUTE_CAPABILITY = 80
 
 # Simplified includes - Intel MPI wrappers handle most paths automatically
@@ -23,5 +23,5 @@ CC           = mpiicc
 CLINKER      = mpiicpx
 
 Cu = $(CUDA_DIR)/bin/nvcc
-CUDA_LIB_PATH = -L/usr/lib/cuda/lib64 -I/usr/include -I/usr/lib/cuda/include
+CUDA_LIB_PATH = -L$(CUDA_DIR)/lib64 -I$(CUDA_DIR)/include
 CUDA_APP_FLAGS = -g -O3 --ptxas-options=-v -Dfortran3 -Dnewc  -arch=sm_$(CUDA_COMPUTE_CAPABILITY) -rdc=true

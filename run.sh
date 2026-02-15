@@ -16,6 +16,10 @@ echo "Node: $(hostname)"
 spack load intel-oneapi-compilers
 spack load intel-oneapi-mpi
 
+spack load cuda
+
+export LD_LIBRARY_PATH=/home/jjsnam/spack/opt/spack/linux-icelake/cuda-13.0.2-nxiq75wz7g54wiu5ublimzvgspxrweit/lib64:${LD_LIBRARY_PATH}
+
 source ~/anaconda3/etc/profile.d/conda.sh
 conda activate AMSS
 
