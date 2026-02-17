@@ -159,7 +159,7 @@ private:
 };
 
 bool gpu_compute_rhs_bssn(
-    int* ex, double* T, double* X, double* Y, double* Z,
+    int* ex, double T, double* X, double* Y, double* Z,
     double* chi, double* trK,
     double* dxx, double* gxy, double* gxz,
     double* dyy, double* gyz, double* dzz,
@@ -191,7 +191,7 @@ bool gpu_compute_rhs_bssn(
     double* Ryy, double* Ryz, double* Rzz,
     double* ham_Res, double* movx_Res, double* movy_Res, double* movz_Res,
     double* Gmx_Res, double* Gmy_Res, double* Gmz_Res,
-    int* symmetry, int* lev, double* eps, int* co
+    int symmetry, int lev, double eps, int co
 );
 
 #endif /* BSSN_GPU_MANAGER_H */

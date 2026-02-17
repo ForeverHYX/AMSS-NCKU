@@ -20,7 +20,6 @@
 #include "sommerfeld_rout.h"
 
 // include gpu files
-#include "bssn_gpu_rhs.h"
 #include "bssn_gpu_manager.h"
 
 void bssn_class::Step_GPU(int lev, int YN)
@@ -93,20 +92,9 @@ void bssn_class::Step_GPU(int lev, int YN)
 					cg->fgfs[gxx0->sgfn], cg->fgfs[gxy0->sgfn], cg->fgfs[gxz0->sgfn], cg->fgfs[gyy0->sgfn], cg->fgfs[gyz0->sgfn], cg->fgfs[gzz0->sgfn],
 					cg->fgfs[Axx0->sgfn], cg->fgfs[Axy0->sgfn], cg->fgfs[Axz0->sgfn], cg->fgfs[Ayy0->sgfn], cg->fgfs[Ayz0->sgfn], cg->fgfs[Azz0->sgfn]
 				);
-				
-				// GPU_RHS_CONTEXT ctx = {CALLED_BY_STEP, myrank, RHS_PARA_CALLED_FIRST_TIME};
-				// gpu_init_meta(ctx);
-				// gpu_to_device(ctx);
-				// gpu_init_constant(ctx);
 
-				// gpu_enforce_ga(ctx);
-
-				// int res = gpu_rhs(ctx);
-				// gpu_back_to_host(ctx);
-				// gpu_destroy_meta();
-				// if (res) {
 				if (gpu_compute_rhs_bssn(
-					cg->shape, &TRK4, cg->X[0], cg->X[1], cg->X[2],
+					cg->shape, TRK4, cg->X[0], cg->X[1], cg->X[2],
 					cg->fgfs[phi0->sgfn], cg->fgfs[trK0->sgfn],
 					cg->fgfs[gxx0->sgfn], cg->fgfs[gxy0->sgfn], cg->fgfs[gxz0->sgfn], 
 					cg->fgfs[gyy0->sgfn], cg->fgfs[gyz0->sgfn], cg->fgfs[gzz0->sgfn],
@@ -139,13 +127,12 @@ void bssn_class::Step_GPU(int lev, int YN)
 					cg->fgfs[Cons_Ham->sgfn],
 					cg->fgfs[Cons_Px->sgfn], cg->fgfs[Cons_Py->sgfn], cg->fgfs[Cons_Pz->sgfn],
 					cg->fgfs[Cons_Gx->sgfn], cg->fgfs[Cons_Gy->sgfn], cg->fgfs[Cons_Gz->sgfn],
-					&Symmetry, &lev, &ndeps, &pre
+					Symmetry, lev, ndeps, pre
 				)) {
 					cout << "find NaN in domain: (" << cg->bbox[0] << ":" << cg->bbox[3] << "," << cg->bbox[1] << ":" << cg->bbox[4] << ","
 							 << cg->bbox[2] << ":" << cg->bbox[5] << ")" << endl;
 					ERROR = 1;
 				}
-
 				// rk4 substep and boundary
 				{
 					MyList<var> *varl0 = StateList, *varl = SynchList_pre, *varlrhs = RHSList; // we do not check the correspondence here
@@ -217,19 +204,9 @@ void bssn_class::Step_GPU(int lev, int YN)
 							cg->fgfs[gxx->sgfn], cg->fgfs[gxy->sgfn], cg->fgfs[gxz->sgfn], cg->fgfs[gyy->sgfn], cg->fgfs[gyz->sgfn], cg->fgfs[gzz->sgfn],
 							cg->fgfs[Axx->sgfn], cg->fgfs[Axy->sgfn], cg->fgfs[Axz->sgfn], cg->fgfs[Ayy->sgfn], cg->fgfs[Ayz->sgfn], cg->fgfs[Azz->sgfn]
 						);
-						// GPU_RHS_CONTEXT ctx = {CALLED_BY_STEP, myrank, RHS_PARA_CALLED_THEN};
-						// gpu_init_meta(ctx);
-						// gpu_to_device(ctx);
-						// gpu_init_constant(ctx);
-
-						// gpu_enforce_ga(ctx);
-
-						// int res = gpu_rhs(ctx);
-						// gpu_back_to_host(ctx);
-						// gpu_destroy_meta();
-						// if (res) {
+						
 						if (gpu_compute_rhs_bssn(
-							cg->shape, &TRK4, cg->X[0], cg->X[1], cg->X[2],
+							cg->shape, TRK4, cg->X[0], cg->X[1], cg->X[2],
 							cg->fgfs[phi->sgfn], cg->fgfs[trK->sgfn],
 							cg->fgfs[gxx->sgfn], cg->fgfs[gxy->sgfn], cg->fgfs[gxz->sgfn], 
 							cg->fgfs[gyy->sgfn], cg->fgfs[gyz->sgfn], cg->fgfs[gzz->sgfn],
@@ -263,7 +240,7 @@ void bssn_class::Step_GPU(int lev, int YN)
 							cg->fgfs[Cons_Ham->sgfn],
 							cg->fgfs[Cons_Px->sgfn], cg->fgfs[Cons_Py->sgfn], cg->fgfs[Cons_Pz->sgfn],
 							cg->fgfs[Cons_Gx->sgfn], cg->fgfs[Cons_Gy->sgfn], cg->fgfs[Cons_Gz->sgfn],
-							&Symmetry, &lev, &ndeps, &cor)
+							Symmetry, lev, ndeps, cor)
 						){
 								cout << "find NaN in domain: (" << cg->bbox[0] << ":" << cg->bbox[3] << "," << cg->bbox[1] << ":" << cg->bbox[4] << ","
 										<< cg->bbox[2] << ":" << cg->bbox[5] << ")" << endl;

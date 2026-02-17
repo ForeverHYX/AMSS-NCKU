@@ -54,7 +54,7 @@ initial_guess.o Newton.o Jacobian.o ilucg.o IntPnts0.o IntPnts.o
 
 TwoPunctureFILES = TwoPunctureABE.o TwoPunctures.o 
 
-CUDAFILES = bssn_gpu_rhs.o bssn_gpu_rhs_ss.o bssn_gpu_rhs_constant.o enforce_algebra_gpu.o Interp_Points_gpu.o fmisc_gpu.o lopsidediff_gpu.o kodiss_gpu.o diff_new_gpu.o bssn_rhs_gpu.o bssn_gpu_manager.o
+CUDAFILES = Interp_Points_gpu.o fmisc_gpu.o lopsidediff_gpu.o kodiss_gpu.o diff_new_gpu.o bssn_rhs_gpu.o bssn_gpu_manager.o
 
 # file dependences
 $(C++FILES) $(C++FILESGPU) $(F90FILES) $(AHFDOBJS) $(CUDAFILES): macrodef.fh
@@ -84,7 +84,7 @@ $(C++FILES) $(C++FILES_GPU) $(AHFDOBJS) $(CUDAFILES): macrodef.h
 
 TwoPunctureFILES: TwoPunctures.h
 
-$(CUDAFILES): bssn_gpu_rhs.h gpu_rhs_mem.h gpu_rhsSS_mem.h bssn_gpu_rhs_constant.h Interp_Points_gpu.h lopsidediff.h kodiss.h derivatives.h bssn_rhs_gpu.h bssn_gpu_manager.h
+$(CUDAFILES): Interp_Points_gpu.h lopsidediff.h kodiss.h derivatives.h bssn_rhs_gpu.h bssn_gpu_manager.h
 
 misc.o : zbesh.o
 

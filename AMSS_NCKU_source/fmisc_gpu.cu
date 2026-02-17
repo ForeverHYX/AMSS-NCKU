@@ -212,7 +212,7 @@ __device__ void global_interp_device(
 	polin3(x1a, x1a, x1a, ya, cx[0], cx[1], cx[2], f_int[0], ddy, ORDN);
 }
 
-__device__ double d_symmetry_bd(
+__device__ double d_symmetry_bd_1b(
 	int ord, const int extc[3], const double* func,
 	int i1b, int j1b, int k1b, const double SoA[3]
 ) {

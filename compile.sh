@@ -7,6 +7,8 @@ spack load intel-oneapi-mpi
 # spack load openmpi
 spack load intel-oneapi-compilers
 
+spack load cuda
+
 source /home/jjsnam/anaconda3/etc/profile.d/conda.sh
 conda activate AMSS
 

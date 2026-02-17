@@ -4,7 +4,11 @@
 
 #include "macrodef.fh"
 #include <cmath>
+#include <iostream>
 
+// ==========================================
+// Device Function: 一阶导数 (4th Order)
+// ==========================================
 __device__ void d_fderivs_point(
     const int ex[3], const double* f,
     double* fx, double* fy, double* fz,
@@ -24,14 +28,26 @@ __device__ void d_fderivs_point(
     const double dY = Y[1] - Y[0];
     const double dZ = Z[1] - Z[0];
 
-    const int imax = ex[0];
-    const int jmax = ex[1];
-    const int kmax = ex[2];
+    const int imax = ex[0] - 1;
+    const int jmax = ex[1] - 1;
+    const int kmax = ex[2] - 1;
 
-    int imin = 1, jmin = 1, kmin = 1;
-    if (symmetry > NO_SYMM && fabs(Z[0]) < dZ) kmin = -1;
-    if (symmetry > EQ_SYMM && fabs(X[0]) < dX) imin = -1;
-    if (symmetry > EQ_SYMM && fabs(Y[0]) < dY) jmin = -1;
+    *fx = ZEO;
+    *fy = ZEO;
+    *fz = ZEO;
+
+    // Fortran 循环范围是 1 到 ex-1，对应 CUDA 0 到 ex-2。
+    // 如果 i >= imax (即 i >= ex-1)，直接返回，保持输出为 0。
+    if (i >= imax || j >= jmax || k >= kmax) return;
+
+    // --- 修复开始 ---
+    // Fortran 中 imin = -1 (1-based index)。
+    // 在 CUDA (0-based) 中，为了使边界点 i=0 满足 (i-2 >= imin)，
+    // 即 (0-2 >= imin) -> (-2 >= imin)，imin 必须设为 -2。
+    int imin = 0, jmin = 0, kmin = 0;
+    if (symmetry > NO_SYMM && fabs(Z[0]) < dZ) kmin = -2; // 原代码为 -1，修正为 -2
+    if (symmetry > EQ_SYMM && fabs(X[0]) < dX) imin = -2; // 原代码为 -1，修正为 -2
+    if (symmetry > EQ_SYMM && fabs(Y[0]) < dY) jmin = -2; // 原代码为 -1，修正为 -2
 
     double SoA[3] = {SYM1, SYM2, SYM3};
 
@@ -43,14 +59,11 @@ __device__ void d_fderivs_point(
     const double d2dy = ONE / TWO / dY;
     const double d2dz = ONE / TWO / dZ;
 
-    *fx = ZEO;
-    *fy = ZEO;
-    *fz = ZEO;
-
+    // Helper lambda for symmetry boundary access
     const auto fh = [&](int ii, int jj, int kk) -> double {
-        return d_symmetry_bd(2, ex, f, ii, jj, kk, SoA);
+        return d_symmetry_bd_1b(2, ex, f, ii + 1, jj + 1, kk + 1, SoA);
     };
-
+    
     if (i + 2 <= imax && i - 2 >= imin &&
         j + 2 <= jmax && j - 2 >= jmin &&
         k + 2 <= kmax && k - 2 >= kmin) {
@@ -59,7 +72,8 @@ __device__ void d_fderivs_point(
         *fy = d12dy * (fh(i,j-2,k) - EIT*fh(i,j-1,k) + EIT*fh(i,j+1,k) - fh(i,j+2,k));
         *fz = d12dz * (fh(i,j,k-2) - EIT*fh(i,j,k-1) + EIT*fh(i,j,k+1) - fh(i,j,k+2));
 
-    } else if (i + 1 <= imax && i - 1 >= imin &&
+    }
+    else if (i + 1 <= imax && i - 1 >= imin &&
                j + 1 <= jmax && j - 1 >= jmin &&
                k + 1 <= kmax && k - 1 >= kmin) {
 
@@ -71,6 +85,9 @@ __device__ void d_fderivs_point(
     (void)onoff;
 }
 
+// ==========================================
+// Device Function: 二阶导数 (4th Order)
+// ==========================================
 __device__ void d_fdderivs_point(
     const int ex[3], const double* f,
     double* fxx, double* fxy, double* fxz,
@@ -95,14 +112,19 @@ __device__ void d_fdderivs_point(
     const double dY = Y[1] - Y[0];
     const double dZ = Z[1] - Z[0];
 
-    const int imax = ex[0];
-    const int jmax = ex[1];
-    const int kmax = ex[2];
+    const int imax = ex[0] - 1;
+    const int jmax = ex[1] - 1;
+    const int kmax = ex[2] - 1;
 
-    int imin = 1, jmin = 1, kmin = 1;
-    if (symmetry > NO_SYMM && fabs(Z[0]) < dZ) kmin = -1;
-    if (symmetry > EQ_SYMM && fabs(X[0]) < dX) imin = -1;
-    if (symmetry > EQ_SYMM && fabs(Y[0]) < dY) jmin = -1;
+    *fxx = ZEO; *fyy = ZEO; *fzz = ZEO;
+    *fxy = ZEO; *fxz = ZEO; *fyz = ZEO;
+
+    if (i >= imax || j >= jmax || k >= kmax) return;
+
+    int imin = 0, jmin = 0, kmin = 0;
+    if (symmetry > NO_SYMM && fabs(Z[0]) < dZ) kmin = -2;
+    if (symmetry > EQ_SYMM && fabs(X[0]) < dX) imin = -2;
+    if (symmetry > EQ_SYMM && fabs(Y[0]) < dY) jmin = -2;
 
     double SoA[3] = {SYM1, SYM2, SYM3};
 
@@ -122,13 +144,11 @@ __device__ void d_fdderivs_point(
     const double Fdxdz = F1o144 / (dX * dZ);
     const double Fdydz = F1o144 / (dY * dZ);
 
-    *fxx = ZEO; *fyy = ZEO; *fzz = ZEO;
-    *fxy = ZEO; *fxz = ZEO; *fyz = ZEO;
-
     const auto fh = [&](int ii, int jj, int kk) -> double {
-        return d_symmetry_bd(2, ex, f, ii, jj, kk, SoA);
+        return d_symmetry_bd_1b(2, ex, f, ii + 1, jj + 1, kk + 1, SoA);
     };
-
+    
+    // --- 4th Order Accuracy ---
     if (i + 2 <= imax && i - 2 >= imin &&
         j + 2 <= jmax && j - 2 >= jmin &&
         k + 2 <= kmax && k - 2 >= kmin) {
@@ -153,13 +173,16 @@ __device__ void d_fdderivs_point(
                         +F8*(fh(i,j-2,k+1) - F8*fh(i,j-1,k+1) + F8*fh(i,j+1,k+1) - fh(i,j+2,k+1))
                         -   (fh(i,j-2,k+2) - F8*fh(i,j-1,k+2) + F8*fh(i,j+1,k+2) - fh(i,j+2,k+2)) );
 
-    } else if (i + 1 <= imax && i - 1 >= imin &&
+    } 
+    // --- 2nd Order Accuracy ---
+    else if (i + 1 <= imax && i - 1 >= imin &&
                j + 1 <= jmax && j - 1 >= jmin &&
                k + 1 <= kmax && k - 1 >= kmin) {
 
         *fxx = Sdxdx * (fh(i-1,j,k) - TWO*fh(i,j,k) + fh(i+1,j,k));
         *fyy = Sdydy * (fh(i,j-1,k) - TWO*fh(i,j,k) + fh(i,j+1,k));
         *fzz = Sdzdz * (fh(i,j,k-1) - TWO*fh(i,j,k) + fh(i,j,k+1));
+
         *fxy = Sdxdy * (fh(i-1,j-1,k) - fh(i+1,j-1,k) - fh(i-1,j+1,k) + fh(i+1,j+1,k));
         *fxz = Sdxdz * (fh(i-1,j,k-1) - fh(i+1,j,k-1) - fh(i-1,j,k+1) + fh(i+1,j,k+1));
         *fyz = Sdydz * (fh(i,j-1,k-1) - fh(i,j+1,k-1) - fh(i,j-1,k+1) + fh(i,j+1,k+1));

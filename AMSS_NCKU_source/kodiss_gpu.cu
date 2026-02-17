@@ -10,7 +10,7 @@ __device__ double d_kodis_point(
     const double* X, const double* Y, const double* Z,
     double SYM1, double SYM2, double SYM3,
     int symmetry, double eps,
-    int i, int j, int k
+    int i, int j, int k // 0-based
 ) {
     const double ONE = 1.0;
     const double SIX = 6.0;
@@ -23,19 +23,19 @@ __device__ double d_kodis_point(
     const double dY = Y[1] - Y[0];
     const double dZ = Z[1] - Z[0];
 
-    const int imax = ex[0];
-    const int jmax = ex[1];
-    const int kmax = ex[2];
+    const int imax = ex[0] - 1;
+    const int jmax = ex[1] - 1;
+    const int kmax = ex[2] - 1;
 
-    int imin = 1, jmin = 1, kmin = 1;
-    if (symmetry > NO_SYMM && fabs(Z[0]) < dZ) kmin = -2;
-    if (symmetry == OCTANT && fabs(X[0]) < dX) imin = -2;
-    if (symmetry == OCTANT && fabs(Y[0]) < dY) jmin = -2;
+    int imin = 0, jmin = 0, kmin = 0;
+    if (symmetry > NO_SYMM && fabs(Z[0]) < dZ) kmin = -3;
+    if (symmetry == OCTANT && fabs(X[0]) < dX) imin = -3;
+    if (symmetry == OCTANT && fabs(Y[0]) < dY) jmin = -3;
 
     double SoA[3] = {SYM1, SYM2, SYM3};
 
     const auto fh = [&](int ii, int jj, int kk) -> double {
-        return d_symmetry_bd(3, ex, f, ii, jj, kk, SoA);
+        return d_symmetry_bd_1b(3, ex, f, ii + 1, jj + 1, kk + 1, SoA);
     };
 
     double rhs_add = 0.0;

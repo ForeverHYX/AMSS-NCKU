@@ -181,6 +181,7 @@ void BssnCudaManager::allocate_intermediates(size_t total_elements) {
     auto malloc_dev = [&](double*& ptr) {
         if(ptr) cudaFree(ptr);
         CHECK_CUDA(cudaMalloc(&ptr, total_elements * sizeof(double)));
+        CHECK_CUDA(cudaMemset(ptr, 0, total_elements * sizeof(double)));
     };
 
     // 1. Inputs
@@ -535,7 +536,7 @@ void cleanup_bssn_gpu() {
 }
 
 bool gpu_compute_rhs_bssn(
-    int* ex, double* T, double* X, double* Y, double* Z,
+    int* ex, double T, double* X, double* Y, double* Z,
     double* chi, double* trK,
     double* dxx, double* gxy, double* gxz,
     double* dyy, double* gyz, double* dzz,
@@ -567,14 +568,14 @@ bool gpu_compute_rhs_bssn(
     double* Ryy, double* Ryz, double* Rzz,
     double* ham_Res, double* movx_Res, double* movy_Res, double* movz_Res,
     double* Gmx_Res, double* Gmy_Res, double* Gmz_Res,
-    int* symmetry, int* lev, double* eps, int* co
+    int symmetry, int lev, double eps, int co
 ) {
     if (!g_bssn_manager) {
         g_bssn_manager = new BssnCudaManager();
     }
 
     g_bssn_manager->compute_rhs_bssn(
-        ex, *T, X, Y, Z,
+        ex, T, X, Y, Z,
         chi, trK,
         dxx, gxy, gxz,
         dyy, gyz, dzz,
@@ -606,7 +607,7 @@ bool gpu_compute_rhs_bssn(
         Ryy, Ryz, Rzz,
         ham_Res, movx_Res, movy_Res, movz_Res,
         Gmx_Res, Gmy_Res, Gmz_Res,
-        *symmetry, *lev, *eps, *co
+        symmetry, lev, eps, co
     );
 
     return 0;

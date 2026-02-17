@@ -73,28 +73,6 @@ integer, parameter :: NO_SYMM=0, OCTANT=2
   if(i-3 >= imin .and. i+3 <= imax .and. &
      j-3 >= jmin .and. j+3 <= jmax .and. &
      k-3 >= kmin .and. k+3 <= kmax) then
-#if 0     
-! x direction
-   f_rhs(i,j,k)       = f_rhs(i,j,k) + eps/dX/cof * (     &
-                              (fh(i-3,j,k)+fh(i+3,j,k)) - &
-                          SIX*(fh(i-2,j,k)+fh(i+2,j,k)) + &
-                          FIT*(fh(i-1,j,k)+fh(i+1,j,k)) - &
-                          TWT* fh(i,j,k)            )
-! y direction
-
-   f_rhs(i,j,k)       = f_rhs(i,j,k) + eps/dY/cof * (     &
-                              (fh(i,j-3,k)+fh(i,j+3,k)) - &
-                          SIX*(fh(i,j-2,k)+fh(i,j+2,k)) + &
-                          FIT*(fh(i,j-1,k)+fh(i,j+1,k)) - &
-                          TWT* fh(i,j,k)            )
-! z direction
-
-   f_rhs(i,j,k)       = f_rhs(i,j,k) + eps/dZ/cof * (     &
-                              (fh(i,j,k-3)+fh(i,j,k+3)) - &
-                          SIX*(fh(i,j,k-2)+fh(i,j,k+2)) + &
-                          FIT*(fh(i,j,k-1)+fh(i,j,k+1)) - &
-                          TWT* fh(i,j,k)            )
-#else
 ! calculation order if important ?
    f_rhs(i,j,k)       = f_rhs(i,j,k) + eps/cof *( (     &
                               (fh(i-3,j,k)+fh(i+3,j,k)) - &
@@ -111,7 +89,6 @@ integer, parameter :: NO_SYMM=0, OCTANT=2
                           SIX*(fh(i,j,k-2)+fh(i,j,k+2)) + &
                           FIT*(fh(i,j,k-1)+fh(i,j,k+1)) - &
                           TWT* fh(i,j,k)            )/dZ )
-#endif
   endif
 
   enddo

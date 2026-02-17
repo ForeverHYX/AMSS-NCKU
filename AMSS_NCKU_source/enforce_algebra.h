@@ -28,7 +28,7 @@ extern "C"
 					  double *, double *, double *, double *, double *, double *);
 }
 
-#include "bssn_gpu_rhs.h"
-void gpu_enforce_ga(GPU_RHS_CONTEXT &ctx);
+// #include "bssn_gpu_rhs.h"
+// void gpu_enforce_ga(GPU_RHS_CONTEXT &ctx);
 
 #endif /* ENFORCE_ALGEBRA_H */
