@@ -8,6 +8,13 @@
 #SBATCH --error=slurm_%j.err      # 错误日志
 #SBATCH --time=01:00:00           # 限制运行时间 1 小时 (测试用)
 
+cleanup() {
+    echo "Stopping MPS..."
+    echo quit | nvidia-cuda-mps-control
+}
+
+trap cleanup EXIT INT TERM
+
 echo "Job start at $(date)"
 echo "Node: $(hostname)"
 

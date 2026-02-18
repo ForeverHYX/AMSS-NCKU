@@ -68,7 +68,7 @@ __device__ void d_prolong3_device(
         if (llbc[d] <= llbf[d]) {
             base[d] = llbc[d];
         } else {
-            int j_val = d_idint((llbc[d] - llbf[d]) / FD[d] + 0.4);
+            int j_val = d_idint((llbc[d] - llbf[d]) / FD[d] + 0.4f);
             if ((j_val / 2) * 2 == j_val) {
                 base[d] = llbf[d];
             } else {
@@ -79,14 +79,14 @@ __device__ void d_prolong3_device(
 
     // Calculate integer bounds (Resulting values are "1-based" relative to base)
     for (int d = 0; d < 3; d++) {
-        lbf[d] = d_idint((llbf[d] - base[d]) / FD[d] + 0.4) + 1;
-        lbc[d] = d_idint((llbc[d] - base[d]) / CD[d] + 0.4) + 1;
+        lbf[d] = d_idint((llbf[d] - base[d]) / FD[d] + 0.4f) + 1;
+        lbc[d] = d_idint((llbc[d] - base[d]) / CD[d] + 0.4f) + 1;
         
-        lbp[d] = d_idint((llbp[d] - base[d]) / FD[d] + 0.4) + 1; 
-        ubp[d] = d_idint((uubp[d] - base[d]) / FD[d] + 0.4);
+        lbp[d] = d_idint((llbp[d] - base[d]) / FD[d] + 0.4f) + 1; 
+        ubp[d] = d_idint((uubp[d] - base[d]) / FD[d] + 0.4f);
         
-        lbpc[d] = d_idint((llbp[d] - base[d]) / CD[d] + 0.4) + 1;
-        ubpc[d] = d_idint((uubp[d] - base[d]) / CD[d] + 0.4); // Not strictly used for bounds check here
+        lbpc[d] = d_idint((llbp[d] - base[d]) / CD[d] + 0.4f) + 1;
+        ubpc[d] = d_idint((uubp[d] - base[d]) / CD[d] + 0.4f); // Not strictly used for bounds check here
     }
 
     // Calculate valid range (1-based relative to loop start)
@@ -215,7 +215,7 @@ __device__ void d_restrict3_device(
         if (llbc[d] <= llbf[d]) {
             base[d] = llbc[d];
         } else {
-            int j_val = d_idint((llbc[d] - llbf[d]) / FD[d] + 0.4);
+            int j_val = d_idint((llbc[d] - llbf[d]) / FD[d] + 0.4f);
             if ((j_val / 2) * 2 == j_val) {
                 base[d] = llbf[d];
             } else {
@@ -225,10 +225,10 @@ __device__ void d_restrict3_device(
     }
 
     for (int d = 0; d < 3; d++) {
-        lbf[d] = d_idint((llbf[d] - base[d]) / FD[d] + 0.4) + 1;
-        lbc[d] = d_idint((llbc[d] - base[d]) / CD[d] + 0.4) + 1;
-        lbr[d] = d_idint((llbr[d] - base[d]) / CD[d] + 0.4) + 1;
-        ubr[d] = d_idint((uubr[d] - base[d]) / CD[d] + 0.4);
+        lbf[d] = d_idint((llbf[d] - base[d]) / FD[d] + 0.4f) + 1;
+        lbc[d] = d_idint((llbc[d] - base[d]) / CD[d] + 0.4f) + 1;
+        lbr[d] = d_idint((llbr[d] - base[d]) / CD[d] + 0.4f) + 1;
+        ubr[d] = d_idint((uubr[d] - base[d]) / CD[d] + 0.4f);
     }
 
     // Range Check

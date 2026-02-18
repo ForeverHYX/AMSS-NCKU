@@ -1,4 +1,12 @@
 #!/bin/bash
+
+cleanup() {
+    echo "Stopping MPS..."
+    echo quit | nvidia-cuda-mps-control
+}
+
+trap cleanup EXIT INT TERM
+
 nvidia-cuda-mps-control -d
 . /home/jjsnam/spack/share/spack/setup-env.sh
 spack load intel-oneapi-vtune
