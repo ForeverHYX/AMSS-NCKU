@@ -1304,31 +1304,6 @@ void cgh::Regrid_Onelevel(int lev, int Symmetry, int BH_num, double **Porgbr, do
   if (lev < movls)
     return;
 
-#if (0)
-  // #if (PSTR == 1 || PSTR == 2)
-  MyList<Patch> *Pp = PatL[lev];
-  while (Pp)
-  {
-    Pp->data->checkPatch(0, start_rank[mylev]);
-    Pp = Pp->next;
-  }
-  int myrank;
-  MPI_Comm_rank(MPI_COMM_WORLD, &myrank);
-  if (myrank == start_rank[mylev])
-  {
-    cout << "out_rank = " << myrank << endl;
-    for (int grd = 0; grd < grids[lev]; grd++)
-    {
-      cout << handle[lev][grd][0] << "," << handle[lev][grd][1] << "," << handle[lev][grd][2] << endl;
-    }
-    for (int bhi = 0; bhi < BH_num; bhi++)
-    {
-      cout << Porgls[lev][bhi][0] << "," << Porgls[lev][bhi][1] << "," << Porgls[lev][bhi][2] << endl;
-      cout << Porg0[bhi][0] << "," << Porg0[bhi][1] << "," << Porg0[bhi][2] << endl;
-    }
-  }
-#endif
-
   //   misc::tillherecheck(Commlev[lev],start_rank[lev],"start Regrid_Onelevel");
   // for moving part
   bool tot_flag = false;
@@ -1481,15 +1456,6 @@ void cgh::Regrid_Onelevel(int lev, int Symmetry, int BH_num, double **Porgbr, do
       for (int i = 0; i < dim; i++)
         Porgls[lev][bhi][i] = tmpPorg[bhi][i];
     }
-
-#if (PSTR == 1 || PSTR == 2)
-//       MyList<Patch> *Pp=PatL[lev];
-//       while(Pp)
-//       {
-//	 Pp->data->checkPatch(0,start_rank[mylev]);
-//	 Pp=Pp->next;
-//       }
-#endif
   }
 
   for (int bhi = 0; bhi < BH_num; bhi++)

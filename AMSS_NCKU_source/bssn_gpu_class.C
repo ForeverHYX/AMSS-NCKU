@@ -48,9 +48,6 @@ bssn_class::bssn_class(double Couranti, double StartTimei, double TotalTimei,
                                              : Courant(Couranti), StartTime(StartTimei), TotalTime(TotalTimei), 
                                                  DumpTime(DumpTimei), d2DumpTime(d2DumpTimei), CheckTime(CheckTimei), AnasTime(AnasTimei),
                                                  Symmetry(Symmetryi), checkrun(checkruni), numepss(numepssi), numepsb(numepsbi), numepsh(numepshi),
-#ifdef With_AHF
-                                                 xc(0), yc(0), zc(0), xr(0), yr(0), zr(0), trigger(0), dTT(0), dumpid(0),
-#endif
                                                  a_lev(a_levi), maxl(maxli), decn(decni), maxrex(maxrexi), drex(drexi),
                                                  CheckPoint(0)
 {
@@ -136,12 +133,6 @@ bssn_class::bssn_class(double Couranti, double StartTimei, double TotalTimei,
                 chitiny = atof(sval.c_str());
             else if (sgrp == "BSSN" && skey == "time refinement start from level")
                 trfls = atoi(sval.c_str());
-#ifdef With_AHF
-            else if (sgrp == "AHF" && skey == "AHfindevery")
-                AHfindevery = atoi(sval.c_str());
-            else if (sgrp == "AHF" && skey == "AHdumptime")
-                AHdumptime = atof(sval.c_str());
-#endif
         }
         inf.close();
     }
@@ -150,11 +141,6 @@ bssn_class::bssn_class(double Couranti, double StartTimei, double TotalTimei,
         // echo information of lower bound of chi
         cout << "chitiny = " << chitiny << endl;
         cout << "time refinement start from level #" << trfls << endl;
-#ifdef With_AHF
-        cout << "parameters for AHF:" << endl;
-        cout << "AHfindevery = " << AHfindevery << endl;
-        cout << "AHdumptime = " << AHdumptime << endl;
-#endif
     }
 
     chitiny = chitiny - 1; // because we have subtracted one from chi
@@ -341,33 +327,6 @@ bssn_class::bssn_class(double Couranti, double StartTimei, double TotalTimei,
     Cons_Gy = new var("Cons_Gy", ngfs++, 1, -1, 1);
     Cons_Gz = new var("Cons_Gz", ngfs++, 1, 1, -1);
 
-#ifdef Point_Psi4
-    phix = new var("phix", ngfs++, -1, 1, 1);
-    phiy = new var("phiy", ngfs++, 1, -1, 1);
-    phiz = new var("phiz", ngfs++, 1, 1, -1);
-    trKx = new var("trKx", ngfs++, -1, 1, 1);
-    trKy = new var("trKy", ngfs++, 1, -1, 1);
-    trKz = new var("trKz", ngfs++, 1, 1, -1);
-    Axxx = new var("Axxx", ngfs++, -1, 1, 1);
-    Axxy = new var("Axxy", ngfs++, 1, -1, 1);
-    Axxz = new var("Axxz", ngfs++, 1, 1, -1);
-    Axyx = new var("Axyx", ngfs++, 1, -1, 1);
-    Axyy = new var("Axyy", ngfs++, -1, 1, 1);
-    Axyz = new var("Axyz", ngfs++, -1, -1, -1);
-    Axzx = new var("Axzx", ngfs++, 1, 1, -1);
-    Axzy = new var("Axzy", ngfs++, -1, -1, -1);
-    Axzz = new var("Axzz", ngfs++, -1, 1, 1);
-    Ayyx = new var("Ayyx", ngfs++, -1, 1, 1);
-    Ayyy = new var("Ayyy", ngfs++, 1, -1, 1);
-    Ayyz = new var("Ayyz", ngfs++, 1, 1, -1);
-    Ayzx = new var("Ayzx", ngfs++, -1, -1, -1);
-    Ayzy = new var("Ayzy", ngfs++, 1, 1, -1);
-    Ayzz = new var("Ayzz", ngfs++, 1, -1, 1);
-    Azzx = new var("Azzx", ngfs++, -1, 1, 1);
-    Azzy = new var("Azzy", ngfs++, 1, -1, 1);
-    Azzz = new var("Azzz", ngfs++, 1, 1, -1);
-#endif
-
     // specific properspeed for 1+log slice
     {
         const double vl = sqrt(2);
@@ -523,31 +482,13 @@ bssn_class::bssn_class(double Couranti, double StartTimei, double TotalTimei,
     DumpList->insert(gyy0);
     DumpList->insert(gyz0);
     DumpList->insert(gzz0);
-    // DumpList->insert(Axx0);
-    // DumpList->insert(Axy0);
-    // DumpList->insert(Axz0);
-    // DumpList->insert(Ayy0);
-    // DumpList->insert(Ayz0);
-    // DumpList->insert(Azz0);
-    // DumpList->insert(Gmx0);
-    // DumpList->insert(Gmy0);
-    // DumpList->insert(Gmz0);
     DumpList->insert(Lap0);
-    // DumpList->insert(Sfx0);
-    // DumpList->insert(Sfy0);
-    // DumpList->insert(Sfz0);
-    // DumpList->insert(dtSfx0);
-    // DumpList->insert(dtSfy0);
-    // DumpList->insert(dtSfz0);
     DumpList->insert(Rpsi4);
     DumpList->insert(Ipsi4);
     DumpList->insert(Cons_Ham);
     DumpList->insert(Cons_Px);
     DumpList->insert(Cons_Py);
     DumpList->insert(Cons_Pz);
-    // DumpList->insert(Cons_Gx);
-    // DumpList->insert(Cons_Gy);
-    // DumpList->insert(Cons_Gz);
 
     ConstraintList = new MyList<var>(Cons_Ham);
     ConstraintList->insert(Cons_Px);
@@ -556,78 +497,6 @@ bssn_class::bssn_class(double Couranti, double StartTimei, double TotalTimei,
     ConstraintList->insert(Cons_Gx);
     ConstraintList->insert(Cons_Gy);
     ConstraintList->insert(Cons_Gz);
-#ifdef With_AHF
-    // setup kinds of var list
-    // List for AparentHorizonFinderDirect
-    // special attension is payed to symmetry type
-    // gij   gij,x   gij,y   gij,z
-    AHList = new MyList<var>(gxx0);
-    AHList->insert(Gamxxx);
-    AHList->insert(Gamyxx);
-    AHList->insert(Gamzxx);
-    AHList->insert(gxy0);
-    AHList->insert(Gamxxy);
-    AHList->insert(Gamyxy);
-    AHList->insert(Gamzxy);
-    AHList->insert(gxz0);
-    AHList->insert(Gamxxz);
-    AHList->insert(Gamyxz);
-    AHList->insert(Gamzxz);
-    AHList->insert(gyy0);
-    AHList->insert(Gamxyy);
-    AHList->insert(Gamyyy);
-    AHList->insert(Gamzyy);
-    AHList->insert(gyz0);
-    AHList->insert(Gamxyz);
-    AHList->insert(Gamyyz);
-    AHList->insert(Gamzyz);
-    AHList->insert(gzz0);
-    AHList->insert(Gamxzz);
-    AHList->insert(Gamyzz);
-    AHList->insert(Gamzzz);
-    // phi  phi,x  phi,y  phi,z
-    AHList->insert(phi0);
-    AHList->insert(dtSfx_rhs);
-    AHList->insert(dtSfy_rhs);
-    AHList->insert(dtSfz_rhs);
-    // Aij
-    AHList->insert(Axx0);
-    AHList->insert(Axy0);
-    AHList->insert(Axz0);
-    AHList->insert(Ayy0);
-    AHList->insert(Ayz0);
-    AHList->insert(Azz0);
-    // trK
-    AHList->insert(trK0);
-    // gij,x  gij,y  gij,z
-    AHDList = new MyList<var>(Gamxxx);
-    AHDList->insert(Gamyxx);
-    AHDList->insert(Gamzxx);
-    AHDList->insert(Gamxxy);
-    AHDList->insert(Gamyxy);
-    AHDList->insert(Gamzxy);
-    AHDList->insert(Gamxxz);
-    AHDList->insert(Gamyxz);
-    AHDList->insert(Gamzxz);
-    AHDList->insert(Gamxyy);
-    AHDList->insert(Gamyyy);
-    AHDList->insert(Gamzyy);
-    AHDList->insert(Gamxyz);
-    AHDList->insert(Gamyyz);
-    AHDList->insert(Gamzyz);
-    AHDList->insert(Gamxzz);
-    AHDList->insert(Gamyzz);
-    AHDList->insert(Gamzzz);
-    // phi,x  phi,y  phi,z
-    AHDList->insert(dtSfx_rhs);
-    AHDList->insert(dtSfy_rhs);
-    AHDList->insert(dtSfz_rhs);
-
-    GaugeList = new MyList<var>(Lap0);
-    GaugeList->insert(Sfx0);
-    GaugeList->insert(Sfy0);
-    GaugeList->insert(Sfz0);
-#endif
 
     CheckPoint = new checkpoint(checkrun, checkfilename, myrank);
 }
@@ -655,21 +524,7 @@ void bssn_class::Initialize()
         CheckPoint->readcheck_cgh(PhysTime, GH, myrank, nprocs, Symmetry);
     else
         GH->compose_cgh(nprocs);
-
-#ifdef WithShell
-    SH = new ShellPatch(0, ngfs, "input.par", Symmetry, myrank, ErrorMonitor);
-    SH->matchcheck(GH->PatL[0]);
-    SH->compose_sh(nprocs);
-    //   SH->compose_shr(nprocs);  //sh is faster than shr
-    SH->setupcordtrans();
-    SH->Dump_xyz(0, 0, 1);
-    SH->setupintintstuff(nprocs, GH->PatL[0], Symmetry);
-
-    if (checkrun)
-        CheckPoint->readcheck_sh(SH, myrank);
-#else
     SH = 0;
-#endif
 
     double h = GH->PatL[0]->data->blb->data->getdX(0);
     for (int i = 1; i < dim; i++)
@@ -699,31 +554,6 @@ void bssn_class::Initialize()
 
 bssn_class::~bssn_class()
 {
-#ifdef With_AHF
-    AHList->clearList();
-    AHDList->clearList();
-    GaugeList->clearList();
-    if (lastahdumpid)
-        delete[] lastahdumpid;
-    if (findeveryl)
-        delete[] findeveryl;
-
-    if (xc)
-    {
-        delete[] xc;
-        delete[] yc;
-        delete[] zc;
-        delete[] xr;
-        delete[] yr;
-        delete[] zr;
-        delete[] trigger;
-        delete[] dumpid;
-        delete[] dTT;
-    }
-
-    AHFinderDirect::AHFinderDirect_cleanup();
-#endif
-
     StateList->clearList();
     RHSList->clearList();
     OldStateList->clearList();
@@ -909,37 +739,7 @@ bssn_class::~bssn_class()
     delete Cons_Gy;
     delete Cons_Gz;
 
-#ifdef Point_Psi4
-    delete phix;
-    delete phiy;
-    delete phiz;
-    delete trKx;
-    delete trKy;
-    delete trKz;
-    delete Axxx;
-    delete Axxy;
-    delete Axxz;
-    delete Axyx;
-    delete Axyy;
-    delete Axyz;
-    delete Axzx;
-    delete Axzy;
-    delete Axzz;
-    delete Ayyx;
-    delete Ayyy;
-    delete Ayyz;
-    delete Ayzx;
-    delete Ayzy;
-    delete Ayzz;
-    delete Azzx;
-    delete Azzy;
-    delete Azzz;
-#endif
-
     delete GH;
-#ifdef WithShell
-    delete SH;
-#endif
 
     for (int i = 0; i < BH_num; i++)
     {
@@ -1124,41 +924,6 @@ void bssn_class::Setup_Initial_Data_Lousto()
         // dump read_in initial data
         for (int lev = 0; lev < GH->levels; lev++)
             Parallel::Dump_Data(GH->PatL[lev], StateList, 0, PhysTime, dT);
-#ifdef WithShell
-        // ShellPatch part
-        MyList<ss_patch> *Pp = SH->PatL;
-        while (Pp)
-        {
-            MyList<Block> *BL = Pp->data->blb;
-            while (BL)
-            {
-                Block *cg = BL->data;
-                if (myrank == cg->rank)
-                {
-                    f_get_initial_nbhs_sh(cg->shape, 
-                                                                cg->fgfs[Pp->data->fngfs + ShellPatch::gx], 
-                                                                cg->fgfs[Pp->data->fngfs + ShellPatch::gy],
-                                                                cg->fgfs[Pp->data->fngfs + ShellPatch::gz],
-                                                                cg->fgfs[phi0->sgfn], cg->fgfs[trK0->sgfn],
-                                                                cg->fgfs[gxx0->sgfn], cg->fgfs[gxy0->sgfn], cg->fgfs[gxz0->sgfn], 
-                                                                cg->fgfs[gyy0->sgfn], cg->fgfs[gyz0->sgfn], cg->fgfs[gzz0->sgfn],
-                                                                cg->fgfs[Axx0->sgfn], cg->fgfs[Axy0->sgfn], cg->fgfs[Axz0->sgfn], 
-                                                                cg->fgfs[Ayy0->sgfn], cg->fgfs[Ayz0->sgfn], cg->fgfs[Azz0->sgfn],
-                                                                cg->fgfs[Gmx0->sgfn], cg->fgfs[Gmy0->sgfn], cg->fgfs[Gmz0->sgfn],
-                                                                cg->fgfs[Lap0->sgfn], 
-                                                                cg->fgfs[Sfx0->sgfn], cg->fgfs[Sfy0->sgfn], cg->fgfs[Sfz0->sgfn],
-                                                                cg->fgfs[dtSfx0->sgfn], cg->fgfs[dtSfy0->sgfn], cg->fgfs[dtSfz0->sgfn], 
-                                                                Mass_here, Porg_here, Pmom_here, Spin_here, BH_NM);
-                }
-                if (BL == Pp->data->ble)
-                    break;
-                BL = BL->next;
-            }
-            Pp = Pp->next;
-        }
-        // dump read_in initial data
-        SH->Dump_Data(StateList, 0, PhysTime, dT);
-#endif
 
         delete[] Porg_here;
         delete[] Mass_here;
@@ -1323,41 +1088,6 @@ void bssn_class::Setup_Initial_Data_Cao()
         // dump read_in initial data
         for (int lev = 0; lev < GH->levels; lev++)
             Parallel::Dump_Data(GH->PatL[lev], StateList, 0, PhysTime, dT);
-#ifdef WithShell
-        // ShellPatch part
-        MyList<ss_patch> *Pp = SH->PatL;
-        while (Pp)
-        {
-            MyList<Block> *BL = Pp->data->blb;
-            while (BL)
-            {
-                Block *cg = BL->data;
-                if (myrank == cg->rank)
-                {
-                    f_get_initial_nbhs_sh(cg->shape, 
-                                                                cg->fgfs[Pp->data->fngfs + ShellPatch::gx], 
-                                                                cg->fgfs[Pp->data->fngfs + ShellPatch::gy],
-                                                                cg->fgfs[Pp->data->fngfs + ShellPatch::gz],
-                                                                cg->fgfs[phi0->sgfn], cg->fgfs[trK0->sgfn],
-                                                                cg->fgfs[gxx0->sgfn], cg->fgfs[gxy0->sgfn], cg->fgfs[gxz0->sgfn], 
-                                                                cg->fgfs[gyy0->sgfn], cg->fgfs[gyz0->sgfn], cg->fgfs[gzz0->sgfn],
-                                                                cg->fgfs[Axx0->sgfn], cg->fgfs[Axy0->sgfn], cg->fgfs[Axz0->sgfn], 
-                                                                cg->fgfs[Ayy0->sgfn], cg->fgfs[Ayz0->sgfn], cg->fgfs[Azz0->sgfn],
-                                                                cg->fgfs[Gmx0->sgfn], cg->fgfs[Gmy0->sgfn], cg->fgfs[Gmz0->sgfn],
-                                                                cg->fgfs[Lap0->sgfn], 
-                                                                cg->fgfs[Sfx0->sgfn], cg->fgfs[Sfy0->sgfn], cg->fgfs[Sfz0->sgfn],
-                                                                cg->fgfs[dtSfx0->sgfn], cg->fgfs[dtSfy0->sgfn], cg->fgfs[dtSfz0->sgfn], 
-                                                                Mass_here, Porg_here, Pmom_here, Spin_here, BH_NM);
-                }
-                if (BL == Pp->data->ble)
-                    break;
-                BL = BL->next;
-            }
-            Pp = Pp->next;
-        }
-        // dump read_in initial data
-        SH->Dump_Data(StateList, 0, PhysTime, dT);
-#endif
 
         delete[] Porg_here;
         delete[] Mass_here;
@@ -1412,91 +1142,6 @@ void bssn_class::Setup_KerrSchild()
                 Pp = Pp->next;
             }
         }
-#ifdef WithShell
-        // ShellPatch part
-        MyList<ss_patch> *Pp = SH->PatL;
-        while (Pp)
-        {
-            int lev = 0, fngfs = Pp->data->fngfs;
-
-            MyList<Block> *BL = Pp->data->blb;
-            while (BL)
-            {
-                Block *cg = BL->data;
-                if (myrank == cg->rank)
-                {
-                    f_get_initial_kerrschild_ss(cg->shape, 
-                                                                            cg->fgfs[Pp->data->fngfs + ShellPatch::gx], 
-                                                                            cg->fgfs[Pp->data->fngfs + ShellPatch::gy],
-                                                                            cg->fgfs[Pp->data->fngfs + ShellPatch::gz],
-                                                                            cg->fgfs[phi0->sgfn], cg->fgfs[trK0->sgfn],
-                                                                            cg->fgfs[gxx0->sgfn], cg->fgfs[gxy0->sgfn], cg->fgfs[gxz0->sgfn], 
-                                                                            cg->fgfs[gyy0->sgfn], cg->fgfs[gyz0->sgfn], cg->fgfs[gzz0->sgfn],
-                                                                            cg->fgfs[Axx0->sgfn], cg->fgfs[Axy0->sgfn], cg->fgfs[Axz0->sgfn], 
-                                                                            cg->fgfs[Ayy0->sgfn], cg->fgfs[Ayz0->sgfn], cg->fgfs[Azz0->sgfn],
-                                                                            cg->fgfs[Gmx0->sgfn], cg->fgfs[Gmy0->sgfn], cg->fgfs[Gmz0->sgfn],
-                                                                            cg->fgfs[Lap0->sgfn], 
-                                                                            cg->fgfs[Sfx0->sgfn], cg->fgfs[Sfy0->sgfn], cg->fgfs[Sfz0->sgfn],
-                                                                            cg->fgfs[dtSfx0->sgfn], cg->fgfs[dtSfy0->sgfn], cg->fgfs[dtSfz0->sgfn]);
-                    /*
-                             f_fderivs_shc(cg->shape,
-                                                         cg->fgfs[phi0->sgfn],
-                                                         cg->fgfs[Sfx_rhs->sgfn],cg->fgfs[Sfy_rhs->sgfn],cg->fgfs[Sfz_rhs->sgfn],
-                                                         cg->X[0],cg->X[1],cg->X[2],
-                                                         phi0->SoA[0],phi0->SoA[1],phi0->SoA[2],
-                                                         Symmetry,lev,Pp->data->sst,
-                                                         cg->fgfs[fngfs+ShellPatch::drhodx],
-                                                         cg->fgfs[fngfs+ShellPatch::drhody],
-                                                         cg->fgfs[fngfs+ShellPatch::drhodz],
-                                                         cg->fgfs[fngfs+ShellPatch::dsigmadx],
-                                                         cg->fgfs[fngfs+ShellPatch::dsigmady],
-                                                         cg->fgfs[fngfs+ShellPatch::dsigmadz],
-                                                         cg->fgfs[fngfs+ShellPatch::dRdx],
-                                                         cg->fgfs[fngfs+ShellPatch::dRdy],
-                                                         cg->fgfs[fngfs+ShellPatch::dRdz]);
-                             f_fdderivs_shc(cg->shape,cg->fgfs[phi0->sgfn],
-                                                            cg->fgfs[Axx_rhs->sgfn],cg->fgfs[Axy_rhs->sgfn],cg->fgfs[Axz_rhs->sgfn],
-                                                            cg->fgfs[Ayy_rhs->sgfn],cg->fgfs[Ayz_rhs->sgfn],cg->fgfs[Azz_rhs->sgfn],
-                                                            cg->X[0],cg->X[1],cg->X[2],
-                                                            phi0->SoA[0],phi0->SoA[1],phi0->SoA[2],
-                                                            Symmetry,lev,Pp->data->sst,
-                                                            cg->fgfs[fngfs+ShellPatch::drhodx],
-                                                            cg->fgfs[fngfs+ShellPatch::drhody],
-                                                            cg->fgfs[fngfs+ShellPatch::drhodz],
-                                                            cg->fgfs[fngfs+ShellPatch::dsigmadx],
-                                                            cg->fgfs[fngfs+ShellPatch::dsigmady],
-                                                            cg->fgfs[fngfs+ShellPatch::dsigmadz],
-                                                            cg->fgfs[fngfs+ShellPatch::dRdx],
-                                                            cg->fgfs[fngfs+ShellPatch::dRdy],
-                                                            cg->fgfs[fngfs+ShellPatch::dRdz],
-                                                            cg->fgfs[fngfs+ShellPatch::drhodxx],
-                                                            cg->fgfs[fngfs+ShellPatch::drhodxy],
-                                                            cg->fgfs[fngfs+ShellPatch::drhodxz],
-                                                            cg->fgfs[fngfs+ShellPatch::drhodyy],
-                                                            cg->fgfs[fngfs+ShellPatch::drhodyz],
-                                                            cg->fgfs[fngfs+ShellPatch::drhodzz],
-                                                            cg->fgfs[fngfs+ShellPatch::dsigmadxx],
-                                                            cg->fgfs[fngfs+ShellPatch::dsigmadxy],
-                                                            cg->fgfs[fngfs+ShellPatch::dsigmadxz],
-                                                            cg->fgfs[fngfs+ShellPatch::dsigmadyy],
-                                                            cg->fgfs[fngfs+ShellPatch::dsigmadyz],
-                                                            cg->fgfs[fngfs+ShellPatch::dsigmadzz],
-                                                            cg->fgfs[fngfs+ShellPatch::dRdxx],
-                                                            cg->fgfs[fngfs+ShellPatch::dRdxy],
-                                                            cg->fgfs[fngfs+ShellPatch::dRdxz],
-                                                            cg->fgfs[fngfs+ShellPatch::dRdyy],
-                                                            cg->fgfs[fngfs+ShellPatch::dRdyz],
-                                                            cg->fgfs[fngfs+ShellPatch::dRdzz]);
-                    */
-                }
-                if (BL == Pp->data->ble)
-                    break;
-                BL = BL->next;
-            }
-            Pp = Pp->next;
-        }
-#endif
-
         // dump read_in initial data
         //   SH->Synch(GH->PatL[0],StateList,Symmetry);
         //   for(int lev=0;lev<GH->levels;lev++) Parallel::Dump_Data(GH->PatL[lev],StateList,0,PhysTime,dT);
@@ -1579,21 +1224,7 @@ void bssn_class::write_Pablo_file(int *ext, double xmin, double xmax, double ymi
     Y = new double[ny];
     Z = new double[nz];
     double dX, dY, dZ;
-#ifdef Vertex
-#ifdef Cell
-#error Both Cell and Vertex are defined
-#endif
-    dX = (xmax - xmin) / (nx - 1);
-    for (i = 0; i < nx; i++)
-        X[i] = xmin + i * dX;
-    dY = (ymax - ymin) / (ny - 1);
-    for (j = 0; j < ny; j++)
-        Y[j] = ymin + j * dY;
-    dZ = (zmax - zmin) / (nz - 1);
-    for (k = 0; k < nz; k++)
-        Z[k] = zmin + k * dZ;
-#else
-#ifdef Cell
+
     dX = (xmax - xmin) / nx;
     for (i = 0; i < nx; i++)
         X[i] = xmin + (i + 0.5) * dX;
@@ -1603,10 +1234,7 @@ void bssn_class::write_Pablo_file(int *ext, double xmin, double xmax, double ymi
     dZ = (zmax - zmin) / nz;
     for (k = 0; k < nz; k++)
         Z[k] = zmin + (k + 0.5) * dZ;
-#else
-#error Not define Vertex nor Cell
-#endif
-#endif
+
     //|--->open out put file
     ofstream outfile;
     outfile.open(filename);
@@ -1794,73 +1422,6 @@ void bssn_class::Read_Ansorg()
                 Pp = Pp->next;
             }
         }
-#ifdef WithShell
-        // ShellPatch part
-        MyList<ss_patch> *Pp = SH->PatL;
-        while (Pp)
-        {
-            MyList<Block> *BL = Pp->data->blb;
-            while (BL)
-            {
-                Block *cg = BL->data;
-                if (myrank == cg->rank)
-                {
-                    for (int k = 0; k < cg->shape[2]; k++)
-                        for (int j = 0; j < cg->shape[1]; j++)
-                            for (int i = 0; i < cg->shape[0]; i++)
-                                cg->fgfs[phi0->sgfn][i + j * cg->shape[0] + k * cg->shape[0] * cg->shape[1]] =
-                                        read_ansorg.ps_u_at_xyz(cg->fgfs[Pp->data->fngfs + ShellPatch::gx][i + j * cg->shape[0] + k * cg->shape[0] * cg->shape[1]],
-                                                                                        cg->fgfs[Pp->data->fngfs + ShellPatch::gy][i + j * cg->shape[0] + k * cg->shape[0] * cg->shape[1]],
-                                                                                        cg->fgfs[Pp->data->fngfs + ShellPatch::gz][i + j * cg->shape[0] + k * cg->shape[0] * cg->shape[1]]);
-
-                    f_get_ansorg_nbhs_ss(cg->shape, 
-                                                             cg->fgfs[Pp->data->fngfs + ShellPatch::gx], 
-                                                             cg->fgfs[Pp->data->fngfs + ShellPatch::gy],
-                                                             cg->fgfs[Pp->data->fngfs + ShellPatch::gz],
-                                                             cg->fgfs[phi0->sgfn], cg->fgfs[trK0->sgfn],
-                                                             cg->fgfs[gxx0->sgfn], cg->fgfs[gxy0->sgfn], cg->fgfs[gxz0->sgfn], 
-                                                             cg->fgfs[gyy0->sgfn], cg->fgfs[gyz0->sgfn], cg->fgfs[gzz0->sgfn],
-                                                             cg->fgfs[Axx0->sgfn], cg->fgfs[Axy0->sgfn], cg->fgfs[Axz0->sgfn], 
-                                                             cg->fgfs[Ayy0->sgfn], cg->fgfs[Ayz0->sgfn], cg->fgfs[Azz0->sgfn],
-                                                             cg->fgfs[Gmx0->sgfn], cg->fgfs[Gmy0->sgfn], cg->fgfs[Gmz0->sgfn],
-                                                             cg->fgfs[Lap0->sgfn], 
-                                                             cg->fgfs[Sfx0->sgfn], cg->fgfs[Sfy0->sgfn], cg->fgfs[Sfz0->sgfn],
-                                                             cg->fgfs[dtSfx0->sgfn], cg->fgfs[dtSfy0->sgfn], cg->fgfs[dtSfz0->sgfn],
-                                                             Mass_here, Porg_here, Pmom_here, Spin_here, BH_NM);
-#if 0
-// for check fderivs_sh
-                        f_fderivs_sh(cg->shape,cg->fgfs[Ayz0->sgfn],
-             cg->fgfs[Sfx0->sgfn],cg->fgfs[Sfy0->sgfn],cg->fgfs[Sfz0->sgfn],
-                                                 cg->X[0],cg->X[1],cg->X[2],
-                                                 Ayz0->SoA[0],Ayz0->SoA[1],Ayz0->SoA[2],
-                                                 Symmetry,Pp->data->sst,Pp->data->sst);
-#endif
-#if 0
-// for check fderivs_shc
-                        int fngfs = Pp->data->fngfs;
-                        f_fderivs_shc(cg->shape,cg->fgfs[Ayz0->sgfn],
-                cg->fgfs[Sfx0->sgfn],cg->fgfs[Sfy0->sgfn],cg->fgfs[Sfz0->sgfn],
-                                                    cg->X[0],cg->X[1],cg->X[2],
-                                                    Ayz0->SoA[0],Ayz0->SoA[1],Ayz0->SoA[2],
-                                                    Symmetry,Pp->data->sst,Pp->data->sst,
-                                                    cg->fgfs[fngfs+ShellPatch::drhodx],
-                                                    cg->fgfs[fngfs+ShellPatch::drhody],
-                                                    cg->fgfs[fngfs+ShellPatch::drhodz],
-                                                    cg->fgfs[fngfs+ShellPatch::dsigmadx],
-                                                    cg->fgfs[fngfs+ShellPatch::dsigmady],
-                                                    cg->fgfs[fngfs+ShellPatch::dsigmadz],
-                                                    cg->fgfs[fngfs+ShellPatch::dRdx],
-                                                    cg->fgfs[fngfs+ShellPatch::dRdy],
-                                                    cg->fgfs[fngfs+ShellPatch::dRdz]);
-#endif
-                }
-                if (BL == Pp->data->ble)
-                    break;
-                BL = BL->next;
-            }
-            Pp = Pp->next;
-        }
-#endif
 
         delete[] Porg_here;
         delete[] Mass_here;
@@ -1871,9 +1432,7 @@ void bssn_class::Read_Ansorg()
         // dump read_in initial data
         for (int lev = 0; lev < GH->levels; lev++)
             Parallel::Dump_Data(GH->PatL[lev], DumpList, 0, PhysTime, dT);
-#ifdef WithShell
-        SH->Dump_Data(DumpList, 0, PhysTime, dT);
-#endif
+
         //   if(myrank==0) MPI_Abort(MPI_COMM_WORLD,1);
     }
 }
@@ -2021,7 +1580,6 @@ void bssn_class::RecursiveStep(int lev)
     {
         YN = (i == NoIterations - 1) ? 1 : 0; // 1: same time level for coarse level and fine level
 
-        // Step_GPU(lev, YN);
         if (use_gpu == 1)
             Step_GPU(lev, YN);
         else
@@ -2126,7 +1684,7 @@ void bssn_class::Step(int lev, int YN)
                                          cg->fgfs[Axx0->sgfn], cg->fgfs[Axy0->sgfn], cg->fgfs[Axz0->sgfn], 
                                          cg->fgfs[Ayy0->sgfn], cg->fgfs[Ayz0->sgfn], cg->fgfs[Azz0->sgfn]);
 
-                if (gpu_compute_rhs_bssn(cg->shape, TRK4, cg->X[0], cg->X[1], cg->X[2],
+                if (f_compute_rhs_bssn(cg->shape, TRK4, cg->X[0], cg->X[1], cg->X[2],
                                                              cg->fgfs[phi0->sgfn], cg->fgfs[trK0->sgfn],
                                                              cg->fgfs[gxx0->sgfn], cg->fgfs[gxy0->sgfn], cg->fgfs[gxz0->sgfn], 
                                                              cg->fgfs[gyy0->sgfn], cg->fgfs[gyz0->sgfn], cg->fgfs[gzz0->sgfn],
@@ -2250,7 +1808,7 @@ void bssn_class::Step(int lev, int YN)
                                              cg->fgfs[gyy->sgfn], cg->fgfs[gyz->sgfn], cg->fgfs[gzz->sgfn],
                                              cg->fgfs[Axx->sgfn], cg->fgfs[Axy->sgfn], cg->fgfs[Axz->sgfn], 
                                              cg->fgfs[Ayy->sgfn], cg->fgfs[Ayz->sgfn], cg->fgfs[Azz->sgfn]);
-                    if (gpu_compute_rhs_bssn(cg->shape, TRK4, cg->X[0], cg->X[1], cg->X[2],
+                    if (f_compute_rhs_bssn(cg->shape, TRK4, cg->X[0], cg->X[1], cg->X[2],
                                                                  cg->fgfs[phi->sgfn], cg->fgfs[trK->sgfn],
                                                                  cg->fgfs[gxx->sgfn], cg->fgfs[gxy->sgfn], cg->fgfs[gxz->sgfn], 
                                                                  cg->fgfs[gyy->sgfn], cg->fgfs[gyz->sgfn], cg->fgfs[gzz->sgfn],
@@ -3435,50 +2993,6 @@ void bssn_class::Setup_Black_Hole_position()
 
 //================================================================================================
 
-#if 0
-// old code 
-
-void bssn_class::compute_Porg_rhs(double **BH_PS,double **BH_RHS,var *forx,var *fory,var *forz,int lev)
-{
-    const int InList = 3;
-
-    MyList<var> * DG_List=new MyList<var>(forx);
-    DG_List->insert(fory); DG_List->insert(forz);
-
-    int n;
-    double *x1,*y1,*z1;
-    double *shellf;
-    shellf=new double[3*BH_num];
-    double *pox[3];
-    for(int i=0;i<3;i++) pox[i] = new double[BH_num];
-    for( n = 0; n < BH_num; n++)
-    {
-        pox[0][n] = BH_PS[n][0];
-        pox[1][n] = BH_PS[n][1];
-        pox[2][n] = BH_PS[n][2];
-    }
-
-    if(!Parallel::PatList_Interp_Points(GH->PatL[lev],DG_List,BH_num,pox,shellf,Symmetry))
-    {
-        ErrorMonitor->outfile<<"fail to find black holes at t = "<<PhysTime<<endl;
-                    for( n = 0; n < BH_num; n++) 
-                            ErrorMonitor->outfile<<"(x,y,z) = ("<<pox[0][n]<<","<<pox[1][n]<<","<<pox[2][n]<<")"<<endl;
-    }
-    
-    for( n = 0; n < BH_num; n++)
-    {
-        BH_RHS[n][0]=-shellf[3*n  ];
-        BH_RHS[n][1]=-shellf[3*n+1];
-        BH_RHS[n][2]=-shellf[3*n+2];
-    }
-     
-    DG_List->clearList();
-    delete[] shellf;
-    for(int i=0;i<3;i++) delete[] pox[i];
-}
-
-#else
-
 // new code considering diferent levels for different black hole
 
 void bssn_class::compute_Porg_rhs(double **BH_PS, double **BH_RHS, var *forx, var *fory, var *forz, int ilev)
@@ -3504,11 +3018,7 @@ void bssn_class::compute_Porg_rhs(double **BH_PS, double **BH_RHS, var *forx, va
 
         int lev = ilev;
 
-#if (PSTR == 0)
         while (!Parallel::PatList_Interp_Points(GH->PatL[lev], DG_List, 1, pox, shellf, Symmetry))
-#elif (PSTR == 1)
-        while (!Parallel::PatList_Interp_Points(GH->PatL[lev], DG_List, 1, pox, shellf, Symmetry, GH->Commlev[lev]))
-#endif
         {
             lev--;
             if (lev < 0)
@@ -3533,7 +3043,6 @@ void bssn_class::compute_Porg_rhs(double **BH_PS, double **BH_RHS, var *forx, va
     for (int i = 0; i < 3; i++)
         delete[] pox[i];
 }
-#endif
 
 //================================================================================================
 
@@ -3675,254 +3184,6 @@ void bssn_class::Constraint_Out()
 }
 
 //================================================================================================
-
-
-
-//================================================================================================
-
-// This member function computes derivatives required by the apparent-horizon routines
-
-//================================================================================================
-
-#ifdef With_AHF
-void bssn_class::AH_Prepare_derivatives()
-{
-    double SYM = 1.0, ANT = -1.0;
-    int ZEO = 0;
-
-    for (int lev = 0; lev < GH->levels; lev++)
-    {
-        MyList<Patch> *Pp = GH->PatL[lev];
-        while (Pp)
-        {
-            MyList<Block> *BP = Pp->data->blb;
-            while (BP)
-            {
-                Block *cg = BP->data;
-                if (myrank == cg->rank)
-                {
-                    f_fderivs(cg->shape, cg->fgfs[phi0->sgfn], 
-                                        cg->fgfs[dtSfx_rhs->sgfn], cg->fgfs[dtSfy_rhs->sgfn], cg->fgfs[dtSfz_rhs->sgfn],
-                                        cg->X[0], cg->X[1], cg->X[2], 
-                                        SYM, SYM, SYM, Symmetry, ZEO);
-                    f_fderivs(cg->shape, cg->fgfs[gxx0->sgfn], 
-                                        cg->fgfs[Gamxxx->sgfn], cg->fgfs[Gamyxx->sgfn], cg->fgfs[Gamzxx->sgfn],
-                                        cg->X[0], cg->X[1], cg->X[2], 
-                                        SYM, SYM, SYM, Symmetry, ZEO);
-                    f_fderivs(cg->shape, cg->fgfs[gxy0->sgfn], 
-                                        cg->fgfs[Gamxxy->sgfn], cg->fgfs[Gamyxy->sgfn], cg->fgfs[Gamzxy->sgfn],
-                                        cg->X[0], cg->X[1], cg->X[2], 
-                                        ANT, ANT, SYM, Symmetry, ZEO);
-                    f_fderivs(cg->shape, cg->fgfs[gxz0->sgfn], 
-                                        cg->fgfs[Gamxxz->sgfn], cg->fgfs[Gamyxz->sgfn], cg->fgfs[Gamzxz->sgfn],
-                                        cg->X[0], cg->X[1], cg->X[2], 
-                                        ANT, SYM, ANT, Symmetry, ZEO);
-                    f_fderivs(cg->shape, cg->fgfs[gyy0->sgfn], 
-                                        cg->fgfs[Gamxyy->sgfn], cg->fgfs[Gamyyy->sgfn], cg->fgfs[Gamzyy->sgfn],
-                                        cg->X[0], cg->X[1], cg->X[2], 
-                                        SYM, SYM, SYM, Symmetry, ZEO);
-                    f_fderivs(cg->shape, cg->fgfs[gyz0->sgfn], 
-                                        cg->fgfs[Gamxyz->sgfn], cg->fgfs[Gamyyz->sgfn], cg->fgfs[Gamzyz->sgfn],
-                                        cg->X[0], cg->X[1], cg->X[2], 
-                                        SYM, ANT, ANT, Symmetry, ZEO);
-                    f_fderivs(cg->shape, cg->fgfs[gzz0->sgfn], 
-                                        cg->fgfs[Gamxzz->sgfn], cg->fgfs[Gamyzz->sgfn], cg->fgfs[Gamzzz->sgfn],
-                                        cg->X[0], cg->X[1], cg->X[2], 
-                                        SYM, SYM, SYM, Symmetry, ZEO);
-                }
-                if (BP == Pp->data->ble)
-                    break;
-                BP = BP->next;
-            }
-            Pp = Pp->next;
-        }
-        Parallel::Sync(GH->PatL[lev], AHDList, Symmetry);
-    }
-}
-
-//================================================================================================
-
-
-
-//================================================================================================
-
-// This member function interpolates apparent-horizon data
-
-//================================================================================================
-
-bool bssn_class::AH_Interp_Points(MyList<var> *VarList,
-                                                                    int NN, double **XX,
-                                                                    double *Shellf, int Symmetryi)
-{
-    MyList<var> *varl;
-    int num_var = 0;
-    varl = VarList;
-    while (varl)
-    {
-        num_var++;
-        varl = varl->next;
-    }
-
-    double pox[3];
-    for (int i = 0; i < NN; i++)
-    {
-        for (int j = 0; j < 3; j++)
-            pox[j] = XX[j][i];
-        int lev = GH->levels - 1;
-        bool notfound = true;
-
-        while (notfound)
-        {
-            if (lev < 0)
-            {
-#ifdef WithShell
-                if (SH->Interp_One_Point(VarList, pox, Shellf + i * num_var, Symmetryi))
-                {
-                    return true;
-                }
-                if (myrank == 0)
-                    cout << "bssn_class::AH_Interp_Points: point (" 
-                             << pox[0] << "," << pox[1] << "," << pox[2] 
-                             << ") is out of cgh and shell domain!" << endl;
-#else
-                if (myrank == 0)
-                    cout << "bssn_class::AH_Interp_Points: point (" 
-                             << pox[0] << "," << pox[1] << "," << pox[2] 
-                             << ") is out of cgh domain!" << endl;
-#endif
-                return false;
-            }
-            MyList<Patch> *Pp = GH->PatL[lev];
-            while (Pp)
-            {
-                if (Pp->data->Interp_ONE_Point(VarList, pox, Shellf + i * num_var, Symmetryi))
-                {
-                    notfound = false;
-                    break;
-                }
-                Pp = Pp->next;
-            }
-            lev--;
-        }
-    }
-    return true;
-}
-
-//================================================================================================
-
-
-
-//================================================================================================
-
-// This member function computes the apparent horizon at the current iteration step
-
-//================================================================================================
-
-void bssn_class::AH_Step_Find(int lev, double dT_lev)
-{
-    if ((lev == GH->levels - 1))
-    {
-        int ncount = int(PhysTime / dT_lev);
-        bool tf = false;
-        for (int ihn = 0; ihn < HN_num; ihn++)
-        {
-            if (ncount % findeveryl[ihn] == 0)
-            {
-                tf = true;
-                break;
-            }
-        }
-        if (tf)
-        {
-            clock_t prev_clock, curr_clock;
-            if (myrank == 0)
-                prev_clock = clock();
-            const int cdumpid = int(PhysTime / AHdumptime) + 1;
-            for (int ihn = 0; ihn < HN_num; ihn++)
-                dumpid[ihn] = cdumpid;
-
-            double gam;
-            for (int ihn = 0; ihn < BH_num; ihn++)
-            {
-                xc[ihn] = Porg0[ihn][0];
-                yc[ihn] = Porg0[ihn][1];
-                zc[ihn] = Porg0[ihn][2];
-                gam = fabs(Pmom[ihn * 3]) / (Mass[ihn]);
-                gam = sqrt(1 - gam * gam);
-                xr[ihn] = Mass[ihn] * gam;
-                gam = fabs(Pmom[ihn * 3 + 1]) / (Mass[ihn]);
-                gam = sqrt(1 - gam * gam);
-                yr[ihn] = Mass[ihn] * gam;
-                gam = fabs(Pmom[ihn * 3 + 2]) / (Mass[ihn]);
-                gam = sqrt(1 - gam * gam);
-                zr[ihn] = Mass[ihn] * gam;
-                dTT[ihn] = -1;
-
-                if (ncount % findeveryl[ihn] == 0)
-                {
-                    trigger[ihn] = true;
-                    dTT[ihn] = findeveryl[ihn] * dT_lev;
-                }
-                else
-                    trigger[ihn] = false;
-                if (trigger[ihn] && (dumpid[ihn] > lastahdumpid[ihn]))
-                    lastahdumpid[ihn] = dumpid[ihn];
-                else
-                    dumpid[ihn] = 0;
-            }
-            int ihn = BH_num;
-            for (int ia = 0; ia < BH_num; ia++)
-                for (int ib = ia + 1; ib < BH_num; ib++)
-                {
-                    xc[ihn] = (Porg0[ia][0] + Porg0[ib][0]) / 2;
-                    yc[ihn] = (Porg0[ia][1] + Porg0[ib][1]) / 2;
-                    zc[ihn] = (Porg0[ia][2] + Porg0[ib][2]) / 2;
-
-                    xr[ihn] = yr[ihn] = zr[ihn] = Mass[ia] + Mass[ib];
-
-                    dTT[ihn] = -1;
-
-                    if (fabs(Porg0[ia][0] - Porg0[ib][0]) < 2 * xr[ihn] &&
-                            fabs(Porg0[ia][1] - Porg0[ib][1]) < 2 * xr[ihn] &&
-                            fabs(Porg0[ia][2] - Porg0[ib][2]) < 2 * xr[ihn] &&
-                            (ncount % findeveryl[ihn] == 0))
-                    {
-                        trigger[ihn] = true;
-                        dTT[ihn] = findeveryl[ihn] * dT_lev;
-                    }
-                    else
-                        trigger[ihn] = false;
-
-                    if (trigger[ihn] && (dumpid[ihn] > lastahdumpid[ihn]))
-                        lastahdumpid[ihn] = dumpid[ihn];
-                    else
-                        dumpid[ihn] = 0;
-
-                    ihn++;
-                }
-#if (ABEtype == 1)
-            if (PhysTime > 10)
-            {
-                ihn--;
-                trigger[ihn] = true;
-                xr[ihn] = yr[ihn] = zr[ihn] = 50;
-                //	if(myrank==0) for(ihn=0;ihn<HN_num;ihn++) cout<<"trigger#"<<ihn<<": "<<trigger[ihn]<<endl;
-            }
-#endif
-            AHFinderDirect::AHFinderDirect_find_horizons(HN_num, dumpid,
-                                                                                                     xc, yc, zc, xr, yr, zr, trigger, dTT); 
-                                                                                                     // note rhs and Gamijk have been used as temp storage space
-
-            if (myrank == 0)
-            {
-                curr_clock = clock();
-                cout << "Finding horizon used " << (double)(curr_clock - prev_clock) / ((double)CLOCKS_PER_SEC) 
-                         << " seconds!" << endl;
-            }
-        }
-    }
-}
-#endif
 
 //================================================================================================
 

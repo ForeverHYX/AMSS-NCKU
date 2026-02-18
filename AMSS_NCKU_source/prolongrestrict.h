@@ -52,4 +52,22 @@ extern "C"
 					   double *, double *, double *, int &);
 }
 
+__device__ int d_idint(double a);
+
+__device__ void d_prolong3_device(
+    int i, int j, int k, 
+    const double* llbc, const double* uubc, const int* extc, const double* func,
+    const double* llbf, const double* uubf, const int* extf, double* funf, 
+    const double* llbp, const double* uubp,
+    const double* SoA, int Symmetry
+);
+
+__device__ void d_restrict3_device(
+    int i, int j, int k, 
+    const double* llbc, const double* uubc, const int* extc, double* func, // func is output
+    const double* llbf, const double* uubf, const int* extf, const double* funf, // funf is input
+    const double* llbr, const double* uubr,
+    const double* SoA, int Symmetry
+);
+
 #endif /* PROLONGRESTRICT_H */
