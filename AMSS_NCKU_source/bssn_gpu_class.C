@@ -32,7 +32,7 @@ using namespace std;
 #include "ricci_gamma.h"
 
 // include GPU files
-#include "bssn_gpu_manager.h"
+#include "gpu_manager.h"
 
 //================================================================================================
 
@@ -498,6 +498,17 @@ bssn_class::bssn_class(double Couranti, double StartTimei, double TotalTimei,
     ConstraintList->insert(Cons_Gy);
     ConstraintList->insert(Cons_Gz);
 
+    MiscList = new MyList<var>(rho);
+    MiscList->insert(Sx);
+    MiscList->insert(Sy);
+    MiscList->insert(Sz);
+    MiscList->insert(Sxx);
+    MiscList->insert(Sxy);
+    MiscList->insert(Sxz);
+    MiscList->insert(Syy);
+    MiscList->insert(Syz);
+    MiscList->insert(Szz);
+
     CheckPoint = new checkpoint(checkrun, checkfilename, myrank);
 }
 
@@ -561,6 +572,7 @@ bssn_class::~bssn_class()
     SynchList_cor->clearList();
     DumpList->clearList();
     ConstraintList->clearList();
+    MiscList->clearList();
 
     delete phio;
     delete trKo;
@@ -2402,22 +2414,6 @@ for(int ilev = GH->levels-1;ilev>=lev;ilev--)
             Block *cg = BP->data;
             if (myrank == cg->rank)
             {
-#if (Psi4type == 0)
-                if (0) // if Gamma^i_jk and R_ij can be reused from the rhs calculation
-                    f_ricci_gamma(cg->shape, cg->X[0], cg->X[1], cg->X[2],
-                                                cg->fgfs[phi0->sgfn],
-                                                cg->fgfs[gxx0->sgfn], cg->fgfs[gxy0->sgfn], cg->fgfs[gxz0->sgfn], 
-                                                cg->fgfs[gyy0->sgfn], cg->fgfs[gyz0->sgfn], cg->fgfs[gzz0->sgfn],
-                                                cg->fgfs[Gmx0->sgfn], cg->fgfs[Gmy0->sgfn], cg->fgfs[Gmz0->sgfn],
-                                                cg->fgfs[Gamxxx->sgfn], cg->fgfs[Gamxxy->sgfn], cg->fgfs[Gamxxz->sgfn],
-                                                cg->fgfs[Gamxyy->sgfn], cg->fgfs[Gamxyz->sgfn], cg->fgfs[Gamxzz->sgfn],
-                                                cg->fgfs[Gamyxx->sgfn], cg->fgfs[Gamyxy->sgfn], cg->fgfs[Gamyxz->sgfn],
-                                                cg->fgfs[Gamyyy->sgfn], cg->fgfs[Gamyyz->sgfn], cg->fgfs[Gamyzz->sgfn],
-                                                cg->fgfs[Gamzxx->sgfn], cg->fgfs[Gamzxy->sgfn], cg->fgfs[Gamzxz->sgfn],
-                                                cg->fgfs[Gamzyy->sgfn], cg->fgfs[Gamzyz->sgfn], cg->fgfs[Gamzzz->sgfn],
-                                                cg->fgfs[Rxx->sgfn], cg->fgfs[Rxy->sgfn], cg->fgfs[Rxz->sgfn], 
-                                                cg->fgfs[Ryy->sgfn], cg->fgfs[Ryz->sgfn], cg->fgfs[Rzz->sgfn],
-                                                Symmetry);
                 // the input arguments Gamma^i_jk and R_ij do not need synch, because we do not need to derivate them
                 f_getnp4(cg->shape, cg->X[0], cg->X[1], cg->X[2],
                                  cg->fgfs[phi0->sgfn], cg->fgfs[trK0->sgfn],
@@ -2435,21 +2431,6 @@ for(int ilev = GH->levels-1;ilev>=lev;ilev--)
                                  cg->fgfs[Ryy->sgfn], cg->fgfs[Ryz->sgfn], cg->fgfs[Rzz->sgfn],
                                  cg->fgfs[Rpsi4->sgfn], cg->fgfs[Ipsi4->sgfn],
                                  Symmetry);
-#elif (Psi4type == 1)
-                f_getnp4old(cg->shape, cg->X[0], cg->X[1], cg->X[2],
-                                        cg->fgfs[phi0->sgfn], cg->fgfs[trK0->sgfn],
-                                        cg->fgfs[gxx0->sgfn], cg->fgfs[gxy0->sgfn], cg->fgfs[gxz0->sgfn], 
-                                        cg->fgfs[gyy0->sgfn], cg->fgfs[gyz0->sgfn], cg->fgfs[gzz0->sgfn],
-                                        cg->fgfs[Axx0->sgfn], cg->fgfs[Axy0->sgfn], cg->fgfs[Axz0->sgfn], 
-                                        cg->fgfs[Ayy0->sgfn], cg->fgfs[Ayz0->sgfn], cg->fgfs[Azz0->sgfn],
-                                        cg->fgfs[Gmx0->sgfn], cg->fgfs[Gmy0->sgfn], cg->fgfs[Gmz0->sgfn],
-                                        cg->fgfs[Lap0->sgfn], 
-                                        cg->fgfs[Sfx0->sgfn], cg->fgfs[Sfy0->sgfn], cg->fgfs[Sfz0->sgfn],
-                                        cg->fgfs[Rpsi4->sgfn], cg->fgfs[Ipsi4->sgfn],
-                                        Symmetry);
-#else
-#error "not recognized Psi4type"
-#endif
             }
             if (BP == Pp->data->ble)
                 break;
@@ -2458,184 +2439,7 @@ for(int ilev = GH->levels-1;ilev>=lev;ilev--)
         Pp = Pp->next;
     }
 
-#if 0  
-        Parallel::Sync(GH->PatL[ilev],DG_List,Symmetry);
-}
-// because of double level data change, you can not do this in above loop
-// prolong restrict Psi4
-for(int ilev=GH->levels-1;ilev>lev;ilev--)
-        RestrictProlong(ilev,1,false,DG_List,DG_List,DG_List);
-#else
     Parallel::Sync(GH->PatL[lev], DG_List, Symmetry);
-#endif
-
-#ifdef WithShell
-    // ShellPatch part
-    if (lev == 0)
-    {
-        MyList<ss_patch> *Pp = SH->PatL;
-        while (Pp)
-        {
-            MyList<Block> *BL = Pp->data->blb;
-            int fngfs = Pp->data->fngfs;
-            while (BL)
-            {
-                Block *cg = BL->data;
-                if (myrank == cg->rank)
-                {
-#if (Psi4type == 0)
-                    if (0) // if Gamma^i_jk and R_ij can be reused from the rhs calculation
-                        f_ricci_gamma_ss(cg->shape, cg->X[0], cg->X[1], cg->X[2],
-                                                         cg->fgfs[fngfs + ShellPatch::gx], 
-                                                         cg->fgfs[fngfs + ShellPatch::gy], 
-                                                         cg->fgfs[fngfs + ShellPatch::gz],
-                                                         cg->fgfs[fngfs + ShellPatch::drhodx], 
-                                                         cg->fgfs[fngfs + ShellPatch::drhody], 
-                                                         cg->fgfs[fngfs + ShellPatch::drhodz],
-                                                         cg->fgfs[fngfs + ShellPatch::dsigmadx], 
-                                                         cg->fgfs[fngfs + ShellPatch::dsigmady], 
-                                                         cg->fgfs[fngfs + ShellPatch::dsigmadz],
-                                                         cg->fgfs[fngfs + ShellPatch::dRdx], 
-                                                         cg->fgfs[fngfs + ShellPatch::dRdy], 
-                                                         cg->fgfs[fngfs + ShellPatch::dRdz],
-                                                         cg->fgfs[fngfs + ShellPatch::drhodxx], 
-                                                         cg->fgfs[fngfs + ShellPatch::drhodxy], 
-                                                         cg->fgfs[fngfs + ShellPatch::drhodxz],
-                                                         cg->fgfs[fngfs + ShellPatch::drhodyy], 
-                                                         cg->fgfs[fngfs + ShellPatch::drhodyz], 
-                                                         cg->fgfs[fngfs + ShellPatch::drhodzz],
-                                                         cg->fgfs[fngfs + ShellPatch::dsigmadxx], 
-                                                         cg->fgfs[fngfs + ShellPatch::dsigmadxy], 
-                                                         cg->fgfs[fngfs + ShellPatch::dsigmadxz],
-                                                         cg->fgfs[fngfs + ShellPatch::dsigmadyy], 
-                                                         cg->fgfs[fngfs + ShellPatch::dsigmadyz], 
-                                                         cg->fgfs[fngfs + ShellPatch::dsigmadzz],
-                                                         cg->fgfs[fngfs + ShellPatch::dRdxx], 
-                                                         cg->fgfs[fngfs + ShellPatch::dRdxy], 
-                                                         cg->fgfs[fngfs + ShellPatch::dRdxz],
-                                                         cg->fgfs[fngfs + ShellPatch::dRdyy], 
-                                                         cg->fgfs[fngfs + ShellPatch::dRdyz], 
-                                                         cg->fgfs[fngfs + ShellPatch::dRdzz],
-                                                         cg->fgfs[phi0->sgfn],
-                                                         cg->fgfs[gxx0->sgfn], cg->fgfs[gxy0->sgfn], cg->fgfs[gxz0->sgfn], 
-                                                         cg->fgfs[gyy0->sgfn], cg->fgfs[gyz0->sgfn], cg->fgfs[gzz0->sgfn],
-                                                         cg->fgfs[Gmx0->sgfn], cg->fgfs[Gmy0->sgfn], cg->fgfs[Gmz0->sgfn],
-                                                         cg->fgfs[Gamxxx->sgfn], cg->fgfs[Gamxxy->sgfn], cg->fgfs[Gamxxz->sgfn],
-                                                         cg->fgfs[Gamxyy->sgfn], cg->fgfs[Gamxyz->sgfn], cg->fgfs[Gamxzz->sgfn],
-                                                         cg->fgfs[Gamyxx->sgfn], cg->fgfs[Gamyxy->sgfn], cg->fgfs[Gamyxz->sgfn],
-                                                         cg->fgfs[Gamyyy->sgfn], cg->fgfs[Gamyyz->sgfn], cg->fgfs[Gamyzz->sgfn],
-                                                         cg->fgfs[Gamzxx->sgfn], cg->fgfs[Gamzxy->sgfn], cg->fgfs[Gamzxz->sgfn],
-                                                         cg->fgfs[Gamzyy->sgfn], cg->fgfs[Gamzyz->sgfn], cg->fgfs[Gamzzz->sgfn],
-                                                         cg->fgfs[Rxx->sgfn], cg->fgfs[Rxy->sgfn], cg->fgfs[Rxz->sgfn], 
-                                                         cg->fgfs[Ryy->sgfn], cg->fgfs[Ryz->sgfn], cg->fgfs[Rzz->sgfn],
-                                                         Symmetry, lev, Pp->data->sst);
-
-                    f_getnp4_ss(cg->shape, cg->X[0], cg->X[1], cg->X[2],
-                                            cg->fgfs[fngfs + ShellPatch::gx], 
-                                            cg->fgfs[fngfs + ShellPatch::gy], 
-                                            cg->fgfs[fngfs + ShellPatch::gz],
-                                            cg->fgfs[fngfs + ShellPatch::drhodx], 
-                                            cg->fgfs[fngfs + ShellPatch::drhody], 
-                                            cg->fgfs[fngfs + ShellPatch::drhodz],
-                                            cg->fgfs[fngfs + ShellPatch::dsigmadx], 
-                                            cg->fgfs[fngfs + ShellPatch::dsigmady], 
-                                            cg->fgfs[fngfs + ShellPatch::dsigmadz],
-                                            cg->fgfs[fngfs + ShellPatch::dRdx], 
-                                            cg->fgfs[fngfs + ShellPatch::dRdy], 
-                                            cg->fgfs[fngfs + ShellPatch::dRdz],
-                                            cg->fgfs[fngfs + ShellPatch::drhodxx], 
-                                            cg->fgfs[fngfs + ShellPatch::drhodxy], 
-                                            cg->fgfs[fngfs + ShellPatch::drhodxz],
-                                            cg->fgfs[fngfs + ShellPatch::drhodyy], 
-                                            cg->fgfs[fngfs + ShellPatch::drhodyz], 
-                                            cg->fgfs[fngfs + ShellPatch::drhodzz],
-                                            cg->fgfs[fngfs + ShellPatch::dsigmadxx], 
-                                            cg->fgfs[fngfs + ShellPatch::dsigmadxy], 
-                                            cg->fgfs[fngfs + ShellPatch::dsigmadxz],
-                                            cg->fgfs[fngfs + ShellPatch::dsigmadyy], 
-                                            cg->fgfs[fngfs + ShellPatch::dsigmadyz], 
-                                            cg->fgfs[fngfs + ShellPatch::dsigmadzz],
-                                            cg->fgfs[fngfs + ShellPatch::dRdxx], 
-                                            cg->fgfs[fngfs + ShellPatch::dRdxy], 
-                                            cg->fgfs[fngfs + ShellPatch::dRdxz],
-                                            cg->fgfs[fngfs + ShellPatch::dRdyy], 
-                                            cg->fgfs[fngfs + ShellPatch::dRdyz], 
-                                            cg->fgfs[fngfs + ShellPatch::dRdzz],
-                                            cg->fgfs[phi0->sgfn], cg->fgfs[trK0->sgfn],
-                                            cg->fgfs[gxx0->sgfn], cg->fgfs[gxy0->sgfn], cg->fgfs[gxz0->sgfn], 
-                                            cg->fgfs[gyy0->sgfn], cg->fgfs[gyz0->sgfn], cg->fgfs[gzz0->sgfn],
-                                            cg->fgfs[Axx0->sgfn], cg->fgfs[Axy0->sgfn], cg->fgfs[Axz0->sgfn], 
-                                            cg->fgfs[Ayy0->sgfn], cg->fgfs[Ayz0->sgfn], cg->fgfs[Azz0->sgfn],
-                                            cg->fgfs[Gamxxx->sgfn], cg->fgfs[Gamxxy->sgfn], cg->fgfs[Gamxxz->sgfn],
-                                            cg->fgfs[Gamxyy->sgfn], cg->fgfs[Gamxyz->sgfn], cg->fgfs[Gamxzz->sgfn],
-                                            cg->fgfs[Gamyxx->sgfn], cg->fgfs[Gamyxy->sgfn], cg->fgfs[Gamyxz->sgfn],
-                                            cg->fgfs[Gamyyy->sgfn], cg->fgfs[Gamyyz->sgfn], cg->fgfs[Gamyzz->sgfn],
-                                            cg->fgfs[Gamzxx->sgfn], cg->fgfs[Gamzxy->sgfn], cg->fgfs[Gamzxz->sgfn],
-                                            cg->fgfs[Gamzyy->sgfn], cg->fgfs[Gamzyz->sgfn], cg->fgfs[Gamzzz->sgfn],
-                                            cg->fgfs[Rxx->sgfn], cg->fgfs[Rxy->sgfn], cg->fgfs[Rxz->sgfn], 
-                                            cg->fgfs[Ryy->sgfn], cg->fgfs[Ryz->sgfn], cg->fgfs[Rzz->sgfn],
-                                            cg->fgfs[Rpsi4->sgfn], cg->fgfs[Ipsi4->sgfn],
-                                            Symmetry, Pp->data->sst);
-#elif (Psi4type == 1)
-                    f_getnp4old_ss(cg->shape, cg->X[0], cg->X[1], cg->X[2],
-                                                 cg->fgfs[fngfs + ShellPatch::gx], 
-                                                 cg->fgfs[fngfs + ShellPatch::gy], 
-                                                 cg->fgfs[fngfs + ShellPatch::gz],
-                                                 cg->fgfs[fngfs + ShellPatch::drhodx], 
-                                                 cg->fgfs[fngfs + ShellPatch::drhody], 
-                                                 cg->fgfs[fngfs + ShellPatch::drhodz],
-                                                 cg->fgfs[fngfs + ShellPatch::dsigmadx], 
-                                                 cg->fgfs[fngfs + ShellPatch::dsigmady], 
-                                                 cg->fgfs[fngfs + ShellPatch::dsigmadz],
-                                                 cg->fgfs[fngfs + ShellPatch::dRdx], 
-                                                 cg->fgfs[fngfs + ShellPatch::dRdy], 
-                                                 cg->fgfs[fngfs + ShellPatch::dRdz],
-                                                 cg->fgfs[fngfs + ShellPatch::drhodxx], 
-                                                 cg->fgfs[fngfs + ShellPatch::drhodxy], 
-                                                 cg->fgfs[fngfs + ShellPatch::drhodxz],
-                                                 cg->fgfs[fngfs + ShellPatch::drhodyy], 
-                                                 cg->fgfs[fngfs + ShellPatch::drhodyz], 
-                                                 cg->fgfs[fngfs + ShellPatch::drhodzz],
-                                                 cg->fgfs[fngfs + ShellPatch::dsigmadxx], 
-                                                 cg->fgfs[fngfs + ShellPatch::dsigmadxy], 
-                                                 cg->fgfs[fngfs + ShellPatch::dsigmadxz],
-                                                 cg->fgfs[fngfs + ShellPatch::dsigmadyy], 
-                                                 cg->fgfs[fngfs + ShellPatch::dsigmadyz], 
-                                                 cg->fgfs[fngfs + ShellPatch::dsigmadzz],
-                                                 cg->fgfs[fngfs + ShellPatch::dRdxx], 
-                                                 cg->fgfs[fngfs + ShellPatch::dRdxy], 
-                                                 cg->fgfs[fngfs + ShellPatch::dRdxz],
-                                                 cg->fgfs[fngfs + ShellPatch::dRdyy], 
-                                                 cg->fgfs[fngfs + ShellPatch::dRdyz], 
-                                                 cg->fgfs[fngfs + ShellPatch::dRdzz],
-                                                 cg->fgfs[phi0->sgfn], cg->fgfs[trK0->sgfn],
-                                                 cg->fgfs[gxx0->sgfn], cg->fgfs[gxy0->sgfn], cg->fgfs[gxz0->sgfn], 
-                                                 cg->fgfs[gyy0->sgfn], cg->fgfs[gyz0->sgfn], cg->fgfs[gzz0->sgfn],
-                                                 cg->fgfs[Axx0->sgfn], cg->fgfs[Axy0->sgfn], cg->fgfs[Axz0->sgfn], 
-                                                 cg->fgfs[Ayy0->sgfn], cg->fgfs[Ayz0->sgfn], cg->fgfs[Azz0->sgfn],
-                                                 cg->fgfs[Gmx0->sgfn], cg->fgfs[Gmy0->sgfn], cg->fgfs[Gmz0->sgfn],
-                                                 cg->fgfs[Lap0->sgfn], 
-                                                 cg->fgfs[Sfx0->sgfn], cg->fgfs[Sfy0->sgfn], cg->fgfs[Sfz0->sgfn],
-                                                 cg->fgfs[Rpsi4->sgfn], cg->fgfs[Ipsi4->sgfn],
-                                                 Symmetry, Pp->data->sst);
-#else
-#error "not recognized Psi4type"
-#endif
-                }
-                if (BL == Pp->data->ble)
-                    break;
-                BL = BL->next;
-            }
-            Pp = Pp->next;
-        }
-
-        SH->Synch(DG_List, Symmetry);
-#if 0     
-// interpolate Psi4
-         SH->CS_Inter(DG_List,Symmetry);
-#endif
-    }
-#endif
 
     DG_List->clearList();
 
@@ -3070,6 +2874,7 @@ void bssn_class::AnalysisStuff(int lev, double dT_lev)
         IP = new double[NN];
         RoutMAP = new double[7];
         double Rex = maxrex;
+        if (isnan(Rex)) puts("Rex is nan in AnalysisStuff");
         for (int i = 0; i < decn; i++)
         {
             Waveshell->surf_Wave(Rex, lev, GH, Rpsi4, Ipsi4, 2, maxl, NN, RP, IP, ErrorMonitor);
@@ -3141,15 +2946,73 @@ void bssn_class::Constraint_Out()
                         if (myrank == cg->rank)
                         {
                             if (use_gpu == 1) {
-                                // GPU_RHS_CONTEXT ctx = {CALLED_BY_CONSTRAINT, myrank, RHS_PARA_CALLED_Constraint_Out};
-                                // gpu_init_meta(ctx);
-                                // gpu_to_device(ctx);
-                                // gpu_init_constant(ctx);
-                                // gpu_rhs(ctx);
-                                // gpu_back_to_host(ctx);
-                                // gpu_destroy_meta();
-                                //   gpu_rhs(CALLED_BY_CONSTRAINT, myrank, RHS_PARA_CALLED_Constraint_Out);
-                                gpu_compute_rhs_bssn(RHS_PARA_CALLED_Constraint_Out);
+                                // f_compute_rhs_bssn(RHS_PARA_CALLED_Constraint_Out);
+                                MyList<var> *var_in;
+                                var_in = StateList; 
+                                while (var_in) {
+                                    cg->mark_cpu_modified(var_in->data->sgfn);
+                                    cg->require_on_gpu(var_in->data->sgfn);
+                                    var_in = var_in->next;
+                                }
+                                var_in = MiscList; 
+                                while (var_in) {
+                                    cg->mark_cpu_modified(var_in->data->sgfn);
+                                    cg->require_on_gpu(var_in->data->sgfn);
+                                    var_in = var_in->next;
+                                }
+                                auto stream = GPUManager::getInstance().get_stream();
+                                gpu_compute_rhs_bssn_launch(
+                                    stream,
+                                    cg->shape, TRK4, cg->d_X[0], cg->d_X[1], cg->d_X[2],
+                                    cg->d_fgfs[phi0->sgfn], cg->d_fgfs[trK0->sgfn],
+                                    cg->d_fgfs[gxx0->sgfn], cg->d_fgfs[gxy0->sgfn], cg->d_fgfs[gxz0->sgfn], 
+                                    cg->d_fgfs[gyy0->sgfn], cg->d_fgfs[gyz0->sgfn], cg->d_fgfs[gzz0->sgfn],
+                                    cg->d_fgfs[Axx0->sgfn], cg->d_fgfs[Axy0->sgfn], cg->d_fgfs[Axz0->sgfn], 
+                                    cg->d_fgfs[Ayy0->sgfn], cg->d_fgfs[Ayz0->sgfn], cg->d_fgfs[Azz0->sgfn],
+                                    cg->d_fgfs[Gmx0->sgfn], cg->d_fgfs[Gmy0->sgfn], cg->d_fgfs[Gmz0->sgfn],
+                                    cg->d_fgfs[Lap0->sgfn], 
+                                    cg->d_fgfs[Sfx0->sgfn], cg->d_fgfs[Sfy0->sgfn], cg->d_fgfs[Sfz0->sgfn],
+                                    cg->d_fgfs[dtSfx0->sgfn], cg->d_fgfs[dtSfy0->sgfn], cg->d_fgfs[dtSfz0->sgfn],
+                                    cg->d_fgfs[phi_rhs->sgfn], cg->d_fgfs[trK_rhs->sgfn],
+                                    cg->d_fgfs[gxx_rhs->sgfn], cg->d_fgfs[gxy_rhs->sgfn], cg->d_fgfs[gxz_rhs->sgfn],
+                                    cg->d_fgfs[gyy_rhs->sgfn], cg->d_fgfs[gyz_rhs->sgfn], cg->d_fgfs[gzz_rhs->sgfn],
+                                    cg->d_fgfs[Axx_rhs->sgfn], cg->d_fgfs[Axy_rhs->sgfn], cg->d_fgfs[Axz_rhs->sgfn],
+                                    cg->d_fgfs[Ayy_rhs->sgfn], cg->d_fgfs[Ayz_rhs->sgfn], cg->d_fgfs[Azz_rhs->sgfn],
+                                    cg->d_fgfs[Gmx_rhs->sgfn], cg->d_fgfs[Gmy_rhs->sgfn], cg->d_fgfs[Gmz_rhs->sgfn],
+                                    cg->d_fgfs[Lap_rhs->sgfn],
+                                    cg->d_fgfs[Sfx_rhs->sgfn], cg->d_fgfs[Sfy_rhs->sgfn], cg->d_fgfs[Sfz_rhs->sgfn],
+                                    cg->d_fgfs[dtSfx_rhs->sgfn], cg->d_fgfs[dtSfy_rhs->sgfn], cg->d_fgfs[dtSfz_rhs->sgfn],
+                                    cg->d_fgfs[rho->sgfn], cg->d_fgfs[Sx->sgfn], cg->d_fgfs[Sy->sgfn], cg->d_fgfs[Sz->sgfn],
+                                    cg->d_fgfs[Sxx->sgfn], cg->d_fgfs[Sxy->sgfn], cg->d_fgfs[Sxz->sgfn], 
+                                    cg->d_fgfs[Syy->sgfn], cg->d_fgfs[Syz->sgfn], cg->d_fgfs[Szz->sgfn],
+                                    cg->d_fgfs[Gamxxx->sgfn], cg->d_fgfs[Gamxxy->sgfn], cg->d_fgfs[Gamxxz->sgfn],
+                                    cg->d_fgfs[Gamxyy->sgfn], cg->d_fgfs[Gamxyz->sgfn], cg->d_fgfs[Gamxzz->sgfn],
+                                    cg->d_fgfs[Gamyxx->sgfn], cg->d_fgfs[Gamyxy->sgfn], cg->d_fgfs[Gamyxz->sgfn],
+                                    cg->d_fgfs[Gamyyy->sgfn], cg->d_fgfs[Gamyyz->sgfn], cg->d_fgfs[Gamyzz->sgfn],
+                                    cg->d_fgfs[Gamzxx->sgfn], cg->d_fgfs[Gamzxy->sgfn], cg->d_fgfs[Gamzxz->sgfn],
+                                    cg->d_fgfs[Gamzyy->sgfn], cg->d_fgfs[Gamzyz->sgfn], cg->d_fgfs[Gamzzz->sgfn],
+                                    cg->d_fgfs[Rxx->sgfn], cg->d_fgfs[Rxy->sgfn], cg->d_fgfs[Rxz->sgfn], 
+                                    cg->d_fgfs[Ryy->sgfn], cg->d_fgfs[Ryz->sgfn], cg->d_fgfs[Rzz->sgfn],
+                                    cg->d_fgfs[Cons_Ham->sgfn],
+                                    cg->d_fgfs[Cons_Px->sgfn], cg->d_fgfs[Cons_Py->sgfn], cg->d_fgfs[Cons_Pz->sgfn],
+                                    cg->d_fgfs[Cons_Gx->sgfn], cg->d_fgfs[Cons_Gy->sgfn], cg->d_fgfs[Cons_Gz->sgfn],
+                                    Symmetry, lev, ndeps, pre
+                                );
+
+                                GPUManager::getInstance().synchronize_all();
+                                MyList<var> *var_out;
+                                var_out = RHSList; 
+                                while (var_out) {
+                                    cg->mark_gpu_modified(var_out->data->sgfn);
+                                    cg->require_on_cpu(var_out->data->sgfn);
+                                    var_out = var_out->next;
+                                }
+                                var_out = ConstraintList; 
+                                while (var_out) {
+                                    cg->mark_gpu_modified(var_out->data->sgfn);
+                                    cg->require_on_cpu(var_out->data->sgfn);
+                                    var_out = var_out->next;
+                                }
                             }
                             else
                                 f_compute_rhs_bssn(RHS_PARA_CALLED_Constraint_Out);
@@ -3222,15 +3085,73 @@ void bssn_class::Interp_Constraint(bool infg)
                         if (myrank == cg->rank)
                         {
                             if (use_gpu == 1) {
-                                // GPU_RHS_CONTEXT ctx = {CALLED_BY_CONSTRAINT, myrank, RHS_PARA_CALLED_Interp_Constraint};
-                                // gpu_init_meta(ctx);
-                                // gpu_to_device(ctx);
-                                // gpu_init_constant(ctx);
-                                // gpu_rhs(ctx);
-                                // gpu_back_to_host(ctx);
-                                // gpu_destroy_meta();
-                                // // gpu_rhs(CALLED_BY_CONSTRAINT, myrank, RHS_PARA_CALLED_Interp_Constraint);
-                                gpu_compute_rhs_bssn(RHS_PARA_CALLED_Interp_Constraint);
+                                // f_compute_rhs_bssn(RHS_PARA_CALLED_Interp_Constraint);
+                                MyList<var> *var_in;
+                                var_in = StateList; 
+                                while (var_in) {
+                                    cg->mark_cpu_modified(var_in->data->sgfn);
+                                    cg->require_on_gpu(var_in->data->sgfn);
+                                    var_in = var_in->next;
+                                }
+                                var_in = MiscList; 
+                                while (var_in) {
+                                    cg->mark_cpu_modified(var_in->data->sgfn);
+                                    cg->require_on_gpu(var_in->data->sgfn);
+                                    var_in = var_in->next;
+                                }
+                                auto stream = GPUManager::getInstance().get_stream();
+                                gpu_compute_rhs_bssn_launch(
+                                    stream,
+                                    cg->shape, TRK4, cg->d_X[0], cg->d_X[1], cg->d_X[2],
+                                    cg->d_fgfs[phi0->sgfn], cg->d_fgfs[trK0->sgfn],
+                                    cg->d_fgfs[gxx0->sgfn], cg->d_fgfs[gxy0->sgfn], cg->d_fgfs[gxz0->sgfn], 
+                                    cg->d_fgfs[gyy0->sgfn], cg->d_fgfs[gyz0->sgfn], cg->d_fgfs[gzz0->sgfn],
+                                    cg->d_fgfs[Axx0->sgfn], cg->d_fgfs[Axy0->sgfn], cg->d_fgfs[Axz0->sgfn], 
+                                    cg->d_fgfs[Ayy0->sgfn], cg->d_fgfs[Ayz0->sgfn], cg->d_fgfs[Azz0->sgfn],
+                                    cg->d_fgfs[Gmx0->sgfn], cg->d_fgfs[Gmy0->sgfn], cg->d_fgfs[Gmz0->sgfn],
+                                    cg->d_fgfs[Lap0->sgfn], 
+                                    cg->d_fgfs[Sfx0->sgfn], cg->d_fgfs[Sfy0->sgfn], cg->d_fgfs[Sfz0->sgfn],
+                                    cg->d_fgfs[dtSfx0->sgfn], cg->d_fgfs[dtSfy0->sgfn], cg->d_fgfs[dtSfz0->sgfn],
+                                    cg->d_fgfs[phi_rhs->sgfn], cg->d_fgfs[trK_rhs->sgfn],
+                                    cg->d_fgfs[gxx_rhs->sgfn], cg->d_fgfs[gxy_rhs->sgfn], cg->d_fgfs[gxz_rhs->sgfn],
+                                    cg->d_fgfs[gyy_rhs->sgfn], cg->d_fgfs[gyz_rhs->sgfn], cg->d_fgfs[gzz_rhs->sgfn],
+                                    cg->d_fgfs[Axx_rhs->sgfn], cg->d_fgfs[Axy_rhs->sgfn], cg->d_fgfs[Axz_rhs->sgfn],
+                                    cg->d_fgfs[Ayy_rhs->sgfn], cg->d_fgfs[Ayz_rhs->sgfn], cg->d_fgfs[Azz_rhs->sgfn],
+                                    cg->d_fgfs[Gmx_rhs->sgfn], cg->d_fgfs[Gmy_rhs->sgfn], cg->d_fgfs[Gmz_rhs->sgfn],
+                                    cg->d_fgfs[Lap_rhs->sgfn],
+                                    cg->d_fgfs[Sfx_rhs->sgfn], cg->d_fgfs[Sfy_rhs->sgfn], cg->d_fgfs[Sfz_rhs->sgfn],
+                                    cg->d_fgfs[dtSfx_rhs->sgfn], cg->d_fgfs[dtSfy_rhs->sgfn], cg->d_fgfs[dtSfz_rhs->sgfn],
+                                    cg->d_fgfs[rho->sgfn], cg->d_fgfs[Sx->sgfn], cg->d_fgfs[Sy->sgfn], cg->d_fgfs[Sz->sgfn],
+                                    cg->d_fgfs[Sxx->sgfn], cg->d_fgfs[Sxy->sgfn], cg->d_fgfs[Sxz->sgfn], 
+                                    cg->d_fgfs[Syy->sgfn], cg->d_fgfs[Syz->sgfn], cg->d_fgfs[Szz->sgfn],
+                                    cg->d_fgfs[Gamxxx->sgfn], cg->d_fgfs[Gamxxy->sgfn], cg->d_fgfs[Gamxxz->sgfn],
+                                    cg->d_fgfs[Gamxyy->sgfn], cg->d_fgfs[Gamxyz->sgfn], cg->d_fgfs[Gamxzz->sgfn],
+                                    cg->d_fgfs[Gamyxx->sgfn], cg->d_fgfs[Gamyxy->sgfn], cg->d_fgfs[Gamyxz->sgfn],
+                                    cg->d_fgfs[Gamyyy->sgfn], cg->d_fgfs[Gamyyz->sgfn], cg->d_fgfs[Gamyzz->sgfn],
+                                    cg->d_fgfs[Gamzxx->sgfn], cg->d_fgfs[Gamzxy->sgfn], cg->d_fgfs[Gamzxz->sgfn],
+                                    cg->d_fgfs[Gamzyy->sgfn], cg->d_fgfs[Gamzyz->sgfn], cg->d_fgfs[Gamzzz->sgfn],
+                                    cg->d_fgfs[Rxx->sgfn], cg->d_fgfs[Rxy->sgfn], cg->d_fgfs[Rxz->sgfn], 
+                                    cg->d_fgfs[Ryy->sgfn], cg->d_fgfs[Ryz->sgfn], cg->d_fgfs[Rzz->sgfn],
+                                    cg->d_fgfs[Cons_Ham->sgfn],
+                                    cg->d_fgfs[Cons_Px->sgfn], cg->d_fgfs[Cons_Py->sgfn], cg->d_fgfs[Cons_Pz->sgfn],
+                                    cg->d_fgfs[Cons_Gx->sgfn], cg->d_fgfs[Cons_Gy->sgfn], cg->d_fgfs[Cons_Gz->sgfn],
+                                    Symmetry, lev, ndeps, pre
+                                );
+
+                                GPUManager::getInstance().synchronize_all();
+                                MyList<var> *var_out;
+                                var_out = RHSList; 
+                                while (var_out) {
+                                    cg->mark_gpu_modified(var_out->data->sgfn);
+                                    cg->require_on_cpu(var_out->data->sgfn);
+                                    var_out = var_out->next;
+                                }
+                                var_out = ConstraintList; 
+                                while (var_out) {
+                                    cg->mark_gpu_modified(var_out->data->sgfn);
+                                    cg->require_on_cpu(var_out->data->sgfn);
+                                    var_out = var_out->next;
+                                }
                             }
                             else
                                 f_compute_rhs_bssn(RHS_PARA_CALLED_Interp_Constraint);
@@ -3337,40 +3258,71 @@ void bssn_class::Compute_Constraint()
                     Block *cg = BP->data;
                     if (myrank == cg->rank)
                     {
-                        gpu_compute_rhs_bssn(cg->shape, TRK4, cg->X[0], cg->X[1], cg->X[2],
-                                           cg->fgfs[phi0->sgfn], cg->fgfs[trK0->sgfn],
-                                           cg->fgfs[gxx0->sgfn], cg->fgfs[gxy0->sgfn], cg->fgfs[gxz0->sgfn], 
-                                           cg->fgfs[gyy0->sgfn], cg->fgfs[gyz0->sgfn], cg->fgfs[gzz0->sgfn],
-                                           cg->fgfs[Axx0->sgfn], cg->fgfs[Axy0->sgfn], cg->fgfs[Axz0->sgfn], 
-                                           cg->fgfs[Ayy0->sgfn], cg->fgfs[Ayz0->sgfn], cg->fgfs[Azz0->sgfn],
-                                           cg->fgfs[Gmx0->sgfn], cg->fgfs[Gmy0->sgfn], cg->fgfs[Gmz0->sgfn],
-                                           cg->fgfs[Lap0->sgfn], 
-                                           cg->fgfs[Sfx0->sgfn], cg->fgfs[Sfy0->sgfn], cg->fgfs[Sfz0->sgfn],
-                                           cg->fgfs[dtSfx0->sgfn], cg->fgfs[dtSfy0->sgfn], cg->fgfs[dtSfz0->sgfn],
-                                           cg->fgfs[phi_rhs->sgfn], cg->fgfs[trK_rhs->sgfn],
-                                           cg->fgfs[gxx_rhs->sgfn], cg->fgfs[gxy_rhs->sgfn], cg->fgfs[gxz_rhs->sgfn],
-                                           cg->fgfs[gyy_rhs->sgfn], cg->fgfs[gyz_rhs->sgfn], cg->fgfs[gzz_rhs->sgfn],
-                                           cg->fgfs[Axx_rhs->sgfn], cg->fgfs[Axy_rhs->sgfn], cg->fgfs[Axz_rhs->sgfn],
-                                           cg->fgfs[Ayy_rhs->sgfn], cg->fgfs[Ayz_rhs->sgfn], cg->fgfs[Azz_rhs->sgfn],
-                                           cg->fgfs[Gmx_rhs->sgfn], cg->fgfs[Gmy_rhs->sgfn], cg->fgfs[Gmz_rhs->sgfn],
-                                           cg->fgfs[Lap_rhs->sgfn], 
-                                           cg->fgfs[Sfx_rhs->sgfn], cg->fgfs[Sfy_rhs->sgfn], cg->fgfs[Sfz_rhs->sgfn],
-                                           cg->fgfs[dtSfx_rhs->sgfn], cg->fgfs[dtSfy_rhs->sgfn], cg->fgfs[dtSfz_rhs->sgfn],
-                                           cg->fgfs[rho->sgfn], cg->fgfs[Sx->sgfn], cg->fgfs[Sy->sgfn], cg->fgfs[Sz->sgfn],
-                                           cg->fgfs[Sxx->sgfn], cg->fgfs[Sxy->sgfn], cg->fgfs[Sxz->sgfn], 
-                                           cg->fgfs[Syy->sgfn], cg->fgfs[Syz->sgfn], cg->fgfs[Szz->sgfn],
-                                           cg->fgfs[Gamxxx->sgfn], cg->fgfs[Gamxxy->sgfn], cg->fgfs[Gamxxz->sgfn],
-                                           cg->fgfs[Gamxyy->sgfn], cg->fgfs[Gamxyz->sgfn], cg->fgfs[Gamxzz->sgfn],
-                                           cg->fgfs[Gamyxx->sgfn], cg->fgfs[Gamyxy->sgfn], cg->fgfs[Gamyxz->sgfn],
-                                           cg->fgfs[Gamyyy->sgfn], cg->fgfs[Gamyyz->sgfn], cg->fgfs[Gamyzz->sgfn],
-                                           cg->fgfs[Gamzxx->sgfn], cg->fgfs[Gamzxy->sgfn], cg->fgfs[Gamzxz->sgfn],
-                                           cg->fgfs[Gamzyy->sgfn], cg->fgfs[Gamzyz->sgfn], cg->fgfs[Gamzzz->sgfn],
-                                           cg->fgfs[Rxx->sgfn], cg->fgfs[Rxy->sgfn], cg->fgfs[Rxz->sgfn], 
-                                           cg->fgfs[Ryy->sgfn], cg->fgfs[Ryz->sgfn], cg->fgfs[Rzz->sgfn],
-                                           cg->fgfs[Cons_Ham->sgfn],
-                                           cg->fgfs[Cons_Px->sgfn], cg->fgfs[Cons_Py->sgfn], cg->fgfs[Cons_Pz->sgfn],
-                                           cg->fgfs[Cons_Gx->sgfn], cg->fgfs[Cons_Gy->sgfn], cg->fgfs[Cons_Gz->sgfn],
-                                           Symmetry, lev, ndeps, pre);
+                        MyList<var> *var_in;
+                        var_in = StateList; 
+                        while (var_in) {
+                            cg->mark_cpu_modified(var_in->data->sgfn);
+                            cg->require_on_gpu(var_in->data->sgfn);
+                            var_in = var_in->next;
+                        }
+                        var_in = MiscList; 
+                        while (var_in) {
+                            cg->mark_cpu_modified(var_in->data->sgfn);
+                            cg->require_on_gpu(var_in->data->sgfn);
+                            var_in = var_in->next;
+                        }
+                        auto stream = GPUManager::getInstance().get_stream();
+                        gpu_compute_rhs_bssn_launch(
+                            stream,
+                            cg->shape, TRK4, cg->d_X[0], cg->d_X[1], cg->d_X[2],
+                            cg->d_fgfs[phi0->sgfn], cg->d_fgfs[trK0->sgfn],
+                            cg->d_fgfs[gxx0->sgfn], cg->d_fgfs[gxy0->sgfn], cg->d_fgfs[gxz0->sgfn], 
+                            cg->d_fgfs[gyy0->sgfn], cg->d_fgfs[gyz0->sgfn], cg->d_fgfs[gzz0->sgfn],
+                            cg->d_fgfs[Axx0->sgfn], cg->d_fgfs[Axy0->sgfn], cg->d_fgfs[Axz0->sgfn], 
+                            cg->d_fgfs[Ayy0->sgfn], cg->d_fgfs[Ayz0->sgfn], cg->d_fgfs[Azz0->sgfn],
+                            cg->d_fgfs[Gmx0->sgfn], cg->d_fgfs[Gmy0->sgfn], cg->d_fgfs[Gmz0->sgfn],
+                            cg->d_fgfs[Lap0->sgfn], 
+                            cg->d_fgfs[Sfx0->sgfn], cg->d_fgfs[Sfy0->sgfn], cg->d_fgfs[Sfz0->sgfn],
+                            cg->d_fgfs[dtSfx0->sgfn], cg->d_fgfs[dtSfy0->sgfn], cg->d_fgfs[dtSfz0->sgfn],
+                            cg->d_fgfs[phi_rhs->sgfn], cg->d_fgfs[trK_rhs->sgfn],
+                            cg->d_fgfs[gxx_rhs->sgfn], cg->d_fgfs[gxy_rhs->sgfn], cg->d_fgfs[gxz_rhs->sgfn],
+                            cg->d_fgfs[gyy_rhs->sgfn], cg->d_fgfs[gyz_rhs->sgfn], cg->d_fgfs[gzz_rhs->sgfn],
+                            cg->d_fgfs[Axx_rhs->sgfn], cg->d_fgfs[Axy_rhs->sgfn], cg->d_fgfs[Axz_rhs->sgfn],
+                            cg->d_fgfs[Ayy_rhs->sgfn], cg->d_fgfs[Ayz_rhs->sgfn], cg->d_fgfs[Azz_rhs->sgfn],
+                            cg->d_fgfs[Gmx_rhs->sgfn], cg->d_fgfs[Gmy_rhs->sgfn], cg->d_fgfs[Gmz_rhs->sgfn],
+                            cg->d_fgfs[Lap_rhs->sgfn],
+                            cg->d_fgfs[Sfx_rhs->sgfn], cg->d_fgfs[Sfy_rhs->sgfn], cg->d_fgfs[Sfz_rhs->sgfn],
+                            cg->d_fgfs[dtSfx_rhs->sgfn], cg->d_fgfs[dtSfy_rhs->sgfn], cg->d_fgfs[dtSfz_rhs->sgfn],
+                            cg->d_fgfs[rho->sgfn], cg->d_fgfs[Sx->sgfn], cg->d_fgfs[Sy->sgfn], cg->d_fgfs[Sz->sgfn],
+                            cg->d_fgfs[Sxx->sgfn], cg->d_fgfs[Sxy->sgfn], cg->d_fgfs[Sxz->sgfn], 
+                            cg->d_fgfs[Syy->sgfn], cg->d_fgfs[Syz->sgfn], cg->d_fgfs[Szz->sgfn],
+                            cg->d_fgfs[Gamxxx->sgfn], cg->d_fgfs[Gamxxy->sgfn], cg->d_fgfs[Gamxxz->sgfn],
+                            cg->d_fgfs[Gamxyy->sgfn], cg->d_fgfs[Gamxyz->sgfn], cg->d_fgfs[Gamxzz->sgfn],
+                            cg->d_fgfs[Gamyxx->sgfn], cg->d_fgfs[Gamyxy->sgfn], cg->d_fgfs[Gamyxz->sgfn],
+                            cg->d_fgfs[Gamyyy->sgfn], cg->d_fgfs[Gamyyz->sgfn], cg->d_fgfs[Gamyzz->sgfn],
+                            cg->d_fgfs[Gamzxx->sgfn], cg->d_fgfs[Gamzxy->sgfn], cg->d_fgfs[Gamzxz->sgfn],
+                            cg->d_fgfs[Gamzyy->sgfn], cg->d_fgfs[Gamzyz->sgfn], cg->d_fgfs[Gamzzz->sgfn],
+                            cg->d_fgfs[Rxx->sgfn], cg->d_fgfs[Rxy->sgfn], cg->d_fgfs[Rxz->sgfn], 
+                            cg->d_fgfs[Ryy->sgfn], cg->d_fgfs[Ryz->sgfn], cg->d_fgfs[Rzz->sgfn],
+                            cg->d_fgfs[Cons_Ham->sgfn],
+                            cg->d_fgfs[Cons_Px->sgfn], cg->d_fgfs[Cons_Py->sgfn], cg->d_fgfs[Cons_Pz->sgfn],
+                            cg->d_fgfs[Cons_Gx->sgfn], cg->d_fgfs[Cons_Gy->sgfn], cg->d_fgfs[Cons_Gz->sgfn],
+                            Symmetry, lev, ndeps, pre
+                        );
+                        GPUManager::getInstance().synchronize_all();
+                        MyList<var> *var_out;
+                        var_out = RHSList; 
+                        while (var_out) {
+                            cg->mark_gpu_modified(var_out->data->sgfn);
+                            cg->require_on_cpu(var_out->data->sgfn);
+                            var_out = var_out->next;
+                        }
+                        var_out = ConstraintList; 
+                        while (var_out) {
+                            cg->mark_gpu_modified(var_out->data->sgfn);
+                            cg->require_on_cpu(var_out->data->sgfn);
+                            var_out = var_out->next;
+                        }
                     }
                     if (BP == Pp->data->ble)
                         break;
@@ -3384,97 +3336,6 @@ void bssn_class::Compute_Constraint()
     // prolong restrict constraint quantities
     for (lev = GH->levels - 1; lev > 0; lev--)
         RestrictProlong(lev, 1, false, ConstraintList, ConstraintList, ConstraintList);
-
-#ifdef WithShell
-    lev = 0;
-    {
-        MyList<ss_patch> *sPp;
-        sPp = SH->PatL;
-        while (sPp)
-        {
-            MyList<Block> *BP = sPp->data->blb;
-            int fngfs = sPp->data->fngfs;
-            while (BP)
-            {
-                Block *cg = BP->data;
-                if (myrank == cg->rank)
-                {
-                    f_compute_rhs_bssn_ss(cg->shape, TRK4, cg->X[0], cg->X[1], cg->X[2],
-                                                                cg->fgfs[fngfs + ShellPatch::gx], 
-                                                                cg->fgfs[fngfs + ShellPatch::gy], 
-                                                                cg->fgfs[fngfs + ShellPatch::gz],
-                                                                cg->fgfs[fngfs + ShellPatch::drhodx], 
-                                                                cg->fgfs[fngfs + ShellPatch::drhody], 
-                                                                cg->fgfs[fngfs + ShellPatch::drhodz],
-                                                                cg->fgfs[fngfs + ShellPatch::dsigmadx], 
-                                                                cg->fgfs[fngfs + ShellPatch::dsigmady], 
-                                                                cg->fgfs[fngfs + ShellPatch::dsigmadz],
-                                                                cg->fgfs[fngfs + ShellPatch::dRdx], 
-                                                                cg->fgfs[fngfs + ShellPatch::dRdy], 
-                                                                cg->fgfs[fngfs + ShellPatch::dRdz],
-                                                                cg->fgfs[fngfs + ShellPatch::drhodxx], 
-                                                                cg->fgfs[fngfs + ShellPatch::drhodxy], 
-                                                                cg->fgfs[fngfs + ShellPatch::drhodxz],
-                                                                cg->fgfs[fngfs + ShellPatch::drhodyy], 
-                                                                cg->fgfs[fngfs + ShellPatch::drhodyz], 
-                                                                cg->fgfs[fngfs + ShellPatch::drhodzz],
-                                                                cg->fgfs[fngfs + ShellPatch::dsigmadxx], 
-                                                                cg->fgfs[fngfs + ShellPatch::dsigmadxy], 
-                                                                cg->fgfs[fngfs + ShellPatch::dsigmadxz],
-                                                                cg->fgfs[fngfs + ShellPatch::dsigmadyy], 
-                                                                cg->fgfs[fngfs + ShellPatch::dsigmadyz], 
-                                                                cg->fgfs[fngfs + ShellPatch::dsigmadzz],
-                                                                cg->fgfs[fngfs + ShellPatch::dRdxx], 
-                                                                cg->fgfs[fngfs + ShellPatch::dRdxy], 
-                                                                cg->fgfs[fngfs + ShellPatch::dRdxz],
-                                                                cg->fgfs[fngfs + ShellPatch::dRdyy], 
-                                                                cg->fgfs[fngfs + ShellPatch::dRdyz], 
-                                                                cg->fgfs[fngfs + ShellPatch::dRdzz],
-                                                                cg->fgfs[phi0->sgfn], cg->fgfs[trK0->sgfn],
-                                                                cg->fgfs[gxx0->sgfn], cg->fgfs[gxy0->sgfn], cg->fgfs[gxz0->sgfn], 
-                                                                cg->fgfs[gyy0->sgfn], cg->fgfs[gyz0->sgfn], cg->fgfs[gzz0->sgfn],
-                                                                cg->fgfs[Axx0->sgfn], cg->fgfs[Axy0->sgfn], cg->fgfs[Axz0->sgfn], 
-                                                                cg->fgfs[Ayy0->sgfn], cg->fgfs[Ayz0->sgfn], cg->fgfs[Azz0->sgfn],
-                                                                cg->fgfs[Gmx0->sgfn], cg->fgfs[Gmy0->sgfn], cg->fgfs[Gmz0->sgfn],
-                                                                cg->fgfs[Lap0->sgfn], 
-                                                                cg->fgfs[Sfx0->sgfn], cg->fgfs[Sfy0->sgfn], cg->fgfs[Sfz0->sgfn],
-                                                                cg->fgfs[dtSfx0->sgfn], cg->fgfs[dtSfy0->sgfn], cg->fgfs[dtSfz0->sgfn],
-                                                                cg->fgfs[phi_rhs->sgfn], cg->fgfs[trK_rhs->sgfn],
-                                                                cg->fgfs[gxx_rhs->sgfn], cg->fgfs[gxy_rhs->sgfn], cg->fgfs[gxz_rhs->sgfn],
-                                                                cg->fgfs[gyy_rhs->sgfn], cg->fgfs[gyz_rhs->sgfn], cg->fgfs[gzz_rhs->sgfn],
-                                                                cg->fgfs[Axx_rhs->sgfn], cg->fgfs[Axy_rhs->sgfn], cg->fgfs[Axz_rhs->sgfn],
-                                                                cg->fgfs[Ayy_rhs->sgfn], cg->fgfs[Ayz_rhs->sgfn], cg->fgfs[Azz_rhs->sgfn],
-                                                                cg->fgfs[Gmx_rhs->sgfn], cg->fgfs[Gmy_rhs->sgfn], cg->fgfs[Gmz_rhs->sgfn],
-                                                                cg->fgfs[Lap_rhs->sgfn], 
-                                                                cg->fgfs[Sfx_rhs->sgfn], cg->fgfs[Sfy_rhs->sgfn], cg->fgfs[Sfz_rhs->sgfn],
-                                                                cg->fgfs[dtSfx_rhs->sgfn], cg->fgfs[dtSfy_rhs->sgfn], cg->fgfs[dtSfz_rhs->sgfn],
-                                                                cg->fgfs[rho->sgfn], cg->fgfs[Sx->sgfn], cg->fgfs[Sy->sgfn], cg->fgfs[Sz->sgfn],
-                                                                cg->fgfs[Sxx->sgfn], cg->fgfs[Sxy->sgfn], cg->fgfs[Sxz->sgfn], 
-                                                                cg->fgfs[Syy->sgfn], cg->fgfs[Syz->sgfn], cg->fgfs[Szz->sgfn],
-                                                                cg->fgfs[Gamxxx->sgfn], cg->fgfs[Gamxxy->sgfn], cg->fgfs[Gamxxz->sgfn],
-                                                                cg->fgfs[Gamxyy->sgfn], cg->fgfs[Gamxyz->sgfn], cg->fgfs[Gamxzz->sgfn],
-                                                                cg->fgfs[Gamyxx->sgfn], cg->fgfs[Gamyxy->sgfn], cg->fgfs[Gamyxz->sgfn],
-                                                                cg->fgfs[Gamyyy->sgfn], cg->fgfs[Gamyyz->sgfn], cg->fgfs[Gamyzz->sgfn],
-                                                                cg->fgfs[Gamzxx->sgfn], cg->fgfs[Gamzxy->sgfn], cg->fgfs[Gamzxz->sgfn],
-                                                                cg->fgfs[Gamzyy->sgfn], cg->fgfs[Gamzyz->sgfn], cg->fgfs[Gamzzz->sgfn],
-                                                                cg->fgfs[Rxx->sgfn], cg->fgfs[Rxy->sgfn], cg->fgfs[Rxz->sgfn], 
-                                                                cg->fgfs[Ryy->sgfn], cg->fgfs[Ryz->sgfn], cg->fgfs[Rzz->sgfn],
-                                                                cg->fgfs[Cons_Ham->sgfn],
-                                                                cg->fgfs[Cons_Px->sgfn], cg->fgfs[Cons_Py->sgfn], cg->fgfs[Cons_Pz->sgfn],
-                                                                cg->fgfs[Cons_Gx->sgfn], cg->fgfs[Cons_Gy->sgfn], cg->fgfs[Cons_Gz->sgfn],
-                                                                Symmetry, lev, numepsh, sPp->data->sst, pre);
-                }
-                if (BP == sPp->data->ble)
-                    break;
-                BP = BP->next;
-            }
-            sPp = sPp->next;
-        }
-    }
-    SH->Synch(ConstraintList, Symmetry);
-    // interpolate constraint quantities
-    SH->CS_Inter(ConstraintList, Symmetry);
-#endif
 }
 
 
@@ -3640,41 +3501,6 @@ void bssn_class::Enforce_algcon(int lev, int fg)
         }
         Pp = Pp->next;
     }
-
-#ifdef WithShell
-    if (lev == 0)
-    {
-        MyList<ss_patch> *sPp = SH->PatL;
-        while (sPp)
-        {
-            MyList<Block> *BP = sPp->data->blb;
-            int fngfs = sPp->data->fngfs;
-            while (BP)
-            {
-                Block *cg = BP->data;
-                if (myrank == cg->rank)
-                {
-                    if (fg == 0)
-                        f_enforce_ga(cg->shape,
-                                                 cg->fgfs[gxx0->sgfn], cg->fgfs[gxy0->sgfn], cg->fgfs[gxz0->sgfn], 
-                                                 cg->fgfs[gyy0->sgfn], cg->fgfs[gyz0->sgfn], cg->fgfs[gzz0->sgfn],
-                                                 cg->fgfs[Axx0->sgfn], cg->fgfs[Axy0->sgfn], cg->fgfs[Axz0->sgfn], 
-                                                 cg->fgfs[Ayy0->sgfn], cg->fgfs[Ayz0->sgfn], cg->fgfs[Azz0->sgfn]);
-                    else
-                        f_enforce_ga(cg->shape,
-                                                 cg->fgfs[gxx->sgfn], cg->fgfs[gxy->sgfn], cg->fgfs[gxz->sgfn], 
-                                                 cg->fgfs[gyy->sgfn], cg->fgfs[gyz->sgfn], cg->fgfs[gzz->sgfn],
-                                                 cg->fgfs[Axx->sgfn], cg->fgfs[Axy->sgfn], cg->fgfs[Axz->sgfn], 
-                                                 cg->fgfs[Ayy->sgfn], cg->fgfs[Ayz->sgfn], cg->fgfs[Azz->sgfn]);
-                }
-                if (BP == sPp->data->ble)
-                    break;
-                BP = BP->next;
-            }
-            sPp = sPp->next;
-        }
-    }
-#endif
 }
 
 // added by yangquan

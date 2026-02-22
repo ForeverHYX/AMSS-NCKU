@@ -36,6 +36,7 @@ export LD_LIBRARY_PATH=/home/jjsnam/spack/opt/spack/linux-icelake/cuda-13.0.2-nx
 # vtune -collect hotspots -result-dir ../../profile/TwoPunctureABE/${TS}/ -- ./TwoPunctureABE
 # ./TwoPunctureABE
 mpirun -bootstrap fork -np 1 ./ABEGPU
+# mpirun -bootstrap fork -np 1 compute-sanitizer --tool memcheck ./ABEGPU
 # mpirun -bootstrap fork -np 1 vtune -collect hotspots -trace-mpi -result-dir ../../profile/ABEGPU/${TS}/ -- ./ABEGPU
 echo quit | nvidia-cuda-mps-control
 # mpirun -bootstrap fork -np 2 ncu --target-processes all ./ABEGPU

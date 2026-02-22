@@ -1,5 +1,7 @@
 #include "Interp_Points_gpu.h"
 
+#include "gpu_manager.h"
+
 #include "fmisc.h"
 
 __global__ void Batch_Interp_Kernel(InterpTask* tasks, double* results, int num_tasks) {
@@ -114,7 +116,7 @@ void GpuBatchInterp::execute(double* Shellf_host) {
     int gridSize = (n + blockSize - 1) / blockSize;
 
     Batch_Interp_Kernel<<<gridSize, blockSize>>>(d_tasks, d_results, n);
-    cudaDeviceSynchronize();
+    CUDA_CHECK(cudaDeviceSynchronize());
 
     std::vector<double> host_results(n);
 

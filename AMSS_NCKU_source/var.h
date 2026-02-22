@@ -7,7 +7,7 @@ class var
 
 public:
    char name[20];
-   int sgfn;
+   int sgfn; // storage grid function number
    double SoA[3];
    double propspeed;
 

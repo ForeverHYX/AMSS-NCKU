@@ -6,6 +6,9 @@
 #include "macrodef.h" //need dim here; Vertex or Cell
 #include "var.h"
 #include "MyList.h"
+
+#include "gpu_manager.h"
+
 class Block
 {
 
@@ -17,7 +20,13 @@ public:
    int lev, cgpu;
    int ingfs, fngfs;
    int *(*igfs);
-   double *(*fgfs);
+   double *(*fgfs); // fine grid functions
+
+   // GPU Shadow pointers and valid flags
+   double *d_X[dim];
+   double *(*d_fgfs);
+   bool *cpu_valid;
+   bool *gpu_valid;
 
 public:
    Block() {};
@@ -29,6 +38,11 @@ public:
 
    double getdX(int dir);
    void swapList(MyList<var> *VarList1, MyList<var> *VarList2, int myrank);
+
+   void require_on_gpu(int var_index);
+   void require_on_cpu(int var_index);
+   void mark_gpu_modified(int var_index);
+   void mark_cpu_modified(int var_index);
 };
 
 #endif /* BLOCK_H */

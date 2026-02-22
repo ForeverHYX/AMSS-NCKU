@@ -1,9 +1,10 @@
-#include "bssn_rhs_gpu.h"
+#include "bssn_rhs.h"
 
 #include "fmisc.h"
 #include "derivatives.h"
 #include "kodiss.h"
 #include "lopsidediff.h"
+#include "gpu_manager.h"
 
 #include <cuda_runtime.h>
 #include <math.h>
@@ -33,53 +34,45 @@ constexpr double eta = 2.0;
 constexpr double F8 = 8.0;
 constexpr double F16 = 16.0;
 
-// ==========================================
-// Kernel 1: 导数、逆度规与连接系数
-// ==========================================
-__global__ void bssn_derivatives_kernel(
-    // 维度信息
-    const int ex0, const int ex1, const int ex2, 
-    const int symmetry, const int lev, const int co,
-    // 坐标
-    const double* __restrict__ X, const double* __restrict__ Y, const double* __restrict__ Z,
-    // 输入变量 (Metric, Gauge, Curvature)
-    const double* __restrict__ chi, const double* __restrict__ trK,
-    const double* __restrict__ dxx, const double* __restrict__ gxy, const double* __restrict__ gxz,
-    const double* __restrict__ dyy, const double* __restrict__ gyz, const double* __restrict__ dzz,
-    const double* __restrict__ Axx, const double* __restrict__ Axy, const double* __restrict__ Axz,
-    const double* __restrict__ Ayy, const double* __restrict__ Ayz, const double* __restrict__ Azz,
-    const double* __restrict__ Lap, 
-    const double* __restrict__ betax, const double* __restrict__ betay, const double* __restrict__ betaz,
-    const double* __restrict__ Gamx, const double* __restrict__ Gamy, const double* __restrict__ Gamz, // 用于 Res 计算
-    // 输出: RHS 部分 (chi_rhs, gij_rhs)
-    double* __restrict__ chi_rhs, 
-    double* __restrict__ gxx_rhs, double* __restrict__ gxy_rhs, double* __restrict__ gxz_rhs,
-    double* __restrict__ gyy_rhs, double* __restrict__ gyz_rhs, double* __restrict__ gzz_rhs,
-    // 输出: 中间导数 (Global Memory, 供后续 Kernel 使用)
-    double* __restrict__ chix_out, double* __restrict__ chiy_out, double* __restrict__ chiz_out,
-    double* __restrict__ betaxx_out, double* __restrict__ betaxy_out, double* __restrict__ betaxz_out,
-    double* __restrict__ betayx_out, double* __restrict__ betayy_out, double* __restrict__ betayz_out,
-    double* __restrict__ betazx_out, double* __restrict__ betazy_out, double* __restrict__ betazz_out,
-    // Metric 导数 (gij,k)
-    double* __restrict__ gxxx_out, double* __restrict__ gxxy_out, double* __restrict__ gxxz_out,
-    double* __restrict__ gxyx_out, double* __restrict__ gxyy_out, double* __restrict__ gxyz_out,
-    double* __restrict__ gxzx_out, double* __restrict__ gxzy_out, double* __restrict__ gxzz_out,
-    double* __restrict__ gyyx_out, double* __restrict__ gyyy_out, double* __restrict__ gyyz_out,
-    double* __restrict__ gyzx_out, double* __restrict__ gyzy_out, double* __restrict__ gyzz_out,
-    double* __restrict__ gzzx_out, double* __restrict__ gzzy_out, double* __restrict__ gzzz_out,
-    // 输出: 连接系数 (Gam^k_ij)
-    double* __restrict__ Gamxxx, double* __restrict__ Gamxxy, double* __restrict__ Gamxxz,
-    double* __restrict__ Gamxyy, double* __restrict__ Gamxyz, double* __restrict__ Gamxzz,
-    double* __restrict__ Gamyxx, double* __restrict__ Gamyxy, double* __restrict__ Gamyxz,
-    double* __restrict__ Gamyyy, double* __restrict__ Gamyyz, double* __restrict__ Gamyzz,
-    double* __restrict__ Gamzxx, double* __restrict__ Gamzxy, double* __restrict__ Gamzxz,
-    double* __restrict__ Gamzyy, double* __restrict__ Gamzyz, double* __restrict__ Gamzzz,
-    // 输出: 逆度规 (gup) 
-    double* __restrict__ gupxx_out, double* __restrict__ gupxy_out, double* __restrict__ gupxz_out,
-    double* __restrict__ gupyy_out, double* __restrict__ gupyz_out, double* __restrict__ gupzz_out,
-    // 输出: 约束残差 (仅当 co==0)
-    double* __restrict__ Gmx_Res, double* __restrict__ Gmy_Res, double* __restrict__ Gmz_Res
+__global__ void rhs_kernel(
+    int ex0, int ex1, int ex2, double T, double* X, double* Y, double* Z,
+    double* chi, double* trK,
+    double* dxx, double* gxy, double* gxz,
+    double* dyy, double* gyz, double* dzz,
+    double* Axx, double* Axy, double* Axz,
+    double* Ayy, double* Ayz, double* Azz,
+    double* Gamx, double* Gamy, double* Gamz,
+    double* Lap,
+    double* betax, double* betay, double* betaz,
+    double* dtSfx, double* dtSfy, double* dtSfz,
+    double* chi_rhs, double* trK_rhs,
+    double* gxx_rhs, double* gxy_rhs, double* gxz_rhs,
+    double* gyy_rhs, double* gyz_rhs, double* gzz_rhs,
+    double* Axx_rhs, double* Axy_rhs, double* Axz_rhs,
+    double* Ayy_rhs, double* Ayz_rhs, double* Azz_rhs,
+    double* Gamx_rhs, double* Gamy_rhs, double* Gamz_rhs,
+    double* Lap_rhs,
+    double* betax_rhs, double* betay_rhs, double* betaz_rhs,
+    double* dtSfx_rhs, double* dtSfy_rhs, double* dtSfz_rhs,
+    double* rho, double* Sx, double* Sy, double* Sz,
+    double* Sxx, double* Sxy, double* Sxz,
+    double* Syy, double* Syz, double* Szz,
+    double* Gamxxx, double* Gamxxy, double* Gamxxz,
+    double* Gamxyy, double* Gamxyz, double* Gamxzz,
+    double* Gamyxx, double* Gamyxy, double* Gamyxz,
+    double* Gamyyy, double* Gamyyz, double* Gamyzz,
+    double* Gamzxx, double* Gamzxy, double* Gamzxz,
+    double* Gamzyy, double* Gamzyz, double* Gamzzz,
+    double* Rxx, double* Rxy, double* Rxz,
+    double* Ryy, double* Ryz, double* Rzz,
+    double* ham_Res, double* movx_Res, double* movy_Res, double* movz_Res,
+    double* Gmx_Res, double* Gmy_Res, double* Gmz_Res,
+    int symmetry, int lev, double eps, int co
 ) {
+    // ------------------------------------------------------------------------------------
+    // bssn_derivatives_kernel
+    // ------------------------------------------------------------------------------------
+
     // 计算全局索引
     int i = blockIdx.x * blockDim.x + threadIdx.x;
     int j = blockIdx.y * blockDim.y + threadIdx.y;
@@ -121,33 +114,25 @@ __global__ void bssn_derivatives_kernel(
     double betayx, betayy, betayz;
     double betazx, betazy, betazz;
 
-    // Fortran: call fderivs(ex,betax,betaxx,betaxy,betaxz,X,Y,Z,ANTI, SYM, SYM,Symmetry,Lev)
     d_fderivs_point(dims, betax, &betaxx, &betaxy, &betaxz, X, Y, Z, ANTI, SYM, SYM, symmetry, lev, i, j, k);
-    // Fortran: call fderivs(ex,betay,betayx,betayy,betayz,X,Y,Z, SYM,ANTI, SYM,Symmetry,Lev)
     d_fderivs_point(dims, betay, &betayx, &betayy, &betayz, X, Y, Z, SYM, ANTI, SYM, symmetry, lev, i, j, k);
-    // Fortran: call fderivs(ex,betaz,betazx,betazy,betazz,X,Y,Z, SYM, SYM,ANTI,Symmetry,Lev)
     d_fderivs_point(dims, betaz, &betazx, &betazy, &betazz, X, Y, Z, SYM, SYM, ANTI, symmetry, lev, i, j, k);
 
-    // Fortran: div_beta = betaxx + betayy + betazz
     double div_beta = betaxx + betayy + betazz;
 
-    // 写回 beta 导数到 Global Memory
-    betaxx_out[idx] = betaxx; betaxy_out[idx] = betaxy; betaxz_out[idx] = betaxz;
-    betayx_out[idx] = betayx; betayy_out[idx] = betayy; betayz_out[idx] = betayz;
-    betazx_out[idx] = betazx; betazy_out[idx] = betazy; betazz_out[idx] = betazz;
+    // betaxx_out[idx] = betaxx; betaxy_out[idx] = betaxy; betaxz_out[idx] = betaxz;
+    // betayx_out[idx] = betayx; betayy_out[idx] = betayy; betayz_out[idx] = betayz;
+    // betazx_out[idx] = betazx; betazy_out[idx] = betazy; betazz_out[idx] = betazz;
 
     // ==========================================
     // 3. 计算 Chi 的导数与 RHS
     // ==========================================
     double chix, chiy, chiz;
-    // Fortran: call fderivs(ex,chi,chix,chiy,chiz,X,Y,Z,SYM,SYM,SYM,symmetry,Lev)
     d_fderivs_point(dims, chi, &chix, &chiy, &chiz, X, Y, Z, SYM, SYM, SYM, symmetry, lev, i, j, k);
 
-    // Fortran: chi_rhs = F2o3 *chin1*( alpn1 * trK - div_beta )
     chi_rhs[idx] = F2o3 * chin1 * (alpn1 * val_trK - div_beta);
     
-    // 写回 chi 导数
-    chix_out[idx] = chix; chiy_out[idx] = chiy; chiz_out[idx] = chiz;
+    // chix_out[idx] = chix; chiy_out[idx] = chiy; chiz_out[idx] = chiz;
 
     // ==========================================
     // 4. 计算 Metric (gij) 导数
@@ -159,31 +144,23 @@ __global__ void bssn_derivatives_kernel(
     double gyzx, gyzy, gyzz;
     double gzzx, gzzy, gzzz;
 
-    // Fortran: call fderivs(ex,dxx,gxxx,gxxy,gxxz,...)
     d_fderivs_point(dims, dxx, &gxxx, &gxxy, &gxxz, X, Y, Z, SYM, SYM, SYM, symmetry, lev, i, j, k);
-    // Fortran: call fderivs(ex,gxy,gxyx,gxyy,gxyz,...)
     d_fderivs_point(dims, gxy, &gxyx, &gxyy, &gxyz, X, Y, Z, ANTI, ANTI, SYM, symmetry, lev, i, j, k);
-    // Fortran: call fderivs(ex,gxz,gxzx,gxzy,gxzz,...)
     d_fderivs_point(dims, gxz, &gxzx, &gxzy, &gxzz, X, Y, Z, ANTI, SYM, ANTI, symmetry, lev, i, j, k);
-    // Fortran: call fderivs(ex,dyy,gyyx,gyyy,gyyz,...)
     d_fderivs_point(dims, dyy, &gyyx, &gyyy, &gyyz, X, Y, Z, SYM, SYM, SYM, symmetry, lev, i, j, k);
-    // Fortran: call fderivs(ex,gyz,gyzx,gyzy,gyzz,...)
     d_fderivs_point(dims, gyz, &gyzx, &gyzy, &gyzz, X, Y, Z, SYM, ANTI, ANTI, symmetry, lev, i, j, k);
-    // Fortran: call fderivs(ex,dzz,gzzx,gzzy,gzzz,...)
     d_fderivs_point(dims, dzz, &gzzx, &gzzy, &gzzz, X, Y, Z, SYM, SYM, SYM, symmetry, lev, i, j, k);
 
-    // 写回 Metric 导数
-    gxxx_out[idx] = gxxx; gxxy_out[idx] = gxxy; gxxz_out[idx] = gxxz;
-    gxyx_out[idx] = gxyx; gxyy_out[idx] = gxyy; gxyz_out[idx] = gxyz;
-    gxzx_out[idx] = gxzx; gxzy_out[idx] = gxzy; gxzz_out[idx] = gxzz;
-    gyyx_out[idx] = gyyx; gyyy_out[idx] = gyyy; gyyz_out[idx] = gyyz;
-    gyzx_out[idx] = gyzx; gyzy_out[idx] = gyzy; gyzz_out[idx] = gyzz;
-    gzzx_out[idx] = gzzx; gzzy_out[idx] = gzzy; gzzz_out[idx] = gzzz;
+    // gxxx_out[idx] = gxxx; gxxy_out[idx] = gxxy; gxxz_out[idx] = gxxz;
+    // gxyx_out[idx] = gxyx; gxyy_out[idx] = gxyy; gxyz_out[idx] = gxyz;
+    // gxzx_out[idx] = gxzx; gxzy_out[idx] = gxzy; gxzz_out[idx] = gxzz;
+    // gyyx_out[idx] = gyyx; gyyy_out[idx] = gyyy; gyyz_out[idx] = gyyz;
+    // gyzx_out[idx] = gyzx; gyzy_out[idx] = gyzy; gyzz_out[idx] = gyzz;
+    // gzzx_out[idx] = gzzx; gzzy_out[idx] = gzzy; gzzz_out[idx] = gzzz;
 
     // ==========================================
     // 5. 计算 gij_rhs (部分: 源项 + Lie 导数项)
     // ==========================================
-    // Fortran Line 21-28
     gxx_rhs[idx] = -TWO * alpn1 * val_Axx - F2o3 * val_gxx * div_beta + 
                     TWO * (val_gxx * betaxx + val_gxy * betayx + val_gxz * betazx);
 
@@ -208,7 +185,6 @@ __global__ void bssn_derivatives_kernel(
     // ==========================================
     // 6. 计算逆度规 (Invert Tilted Metric)
     // ==========================================
-    // Fortran Line 29-30
     double gupzz = val_gxx * val_gyy * val_gzz + val_gxy * val_gyz * val_gxz + val_gxz * val_gxy * val_gyz -
                    val_gxz * val_gyy * val_gxz - val_gxy * val_gxy * val_gzz - val_gxx * val_gyz * val_gyz;
     
@@ -220,13 +196,12 @@ __global__ void bssn_derivatives_kernel(
     gupzz = (val_gxx * val_gyy - val_gxy * val_gxy) / gupzz; // 更新 gupzz 为逆分量
 
     // 写回 gup
-    gupxx_out[idx] = gupxx; gupxy_out[idx] = gupxy; gupxz_out[idx] = gupxz;
-    gupyy_out[idx] = gupyy; gupyz_out[idx] = gupyz; gupzz_out[idx] = gupzz;
+    // gupxx_out[idx] = gupxx; gupxy_out[idx] = gupxy; gupxz_out[idx] = gupxz;
+    // gupyy_out[idx] = gupyy; gupyz_out[idx] = gupyz; gupzz_out[idx] = gupzz;
 
     // ==========================================
     // 7. 计算连接系数残差 (仅 co == 0)
     // ==========================================
-    // Fortran Line 31-35
     if (co == 0) {
         // Gmx_Res
         double term_x = gupxx*(gupxx*gxxx+gupxy*gxyx+gupxz*gxzx)
@@ -268,150 +243,95 @@ __global__ void bssn_derivatives_kernel(
     // ==========================================
     // 8. 计算第二类 Christoffel 符号 (Gam^k_ij)
     // ==========================================
-    // Fortran Line 36
-    Gamxxx[idx] = HALF * (gupxx * gxxx + gupxy * (TWO * gxyx - gxxy) + gupxz * (TWO * gxzx - gxxz));
-    Gamyxx[idx] = HALF * (gupxy * gxxx + gupyy * (TWO * gxyx - gxxy) + gupyz * (TWO * gxzx - gxxz));
-    Gamzxx[idx] = HALF * (gupxz * gxxx + gupyz * (TWO * gxyx - gxxy) + gupzz * (TWO * gxzx - gxxz));
+    double l_Gamxxx; double l_Gamxxy; double l_Gamxxz;
+    double l_Gamxyy; double l_Gamxyz; double l_Gamxzz;
+    double l_Gamyxx; double l_Gamyxy; double l_Gamyxz;
+    double l_Gamyyy; double l_Gamyyz; double l_Gamyzz;
+    double l_Gamzxx; double l_Gamzxy; double l_Gamzxz;
+    double l_Gamzyy; double l_Gamzyz; double l_Gamzzz;
 
-    Gamxyy[idx] = HALF * (gupxx * (TWO * gxyy - gyyx) + gupxy * gyyy + gupxz * (TWO * gyzy - gyyz));
-    Gamyyy[idx] = HALF * (gupxy * (TWO * gxyy - gyyx) + gupyy * gyyy + gupyz * (TWO * gyzy - gyyz));
-    Gamzyy[idx] = HALF * (gupxz * (TWO * gxyy - gyyx) + gupyz * gyyy + gupzz * (TWO * gyzy - gyyz));
+    l_Gamxxx = HALF * (gupxx * gxxx + gupxy * (TWO * gxyx - gxxy) + gupxz * (TWO * gxzx - gxxz));
+    l_Gamyxx = HALF * (gupxy * gxxx + gupyy * (TWO * gxyx - gxxy) + gupyz * (TWO * gxzx - gxxz));
+    l_Gamzxx = HALF * (gupxz * gxxx + gupyz * (TWO * gxyx - gxxy) + gupzz * (TWO * gxzx - gxxz));
 
-    // Fortran Line 37
-    Gamxzz[idx] = HALF * (gupxx * (TWO * gxzz - gzzx) + gupxy * (TWO * gyzz - gzzy) + gupxz * gzzz);
-    Gamyzz[idx] = HALF * (gupxy * (TWO * gxzz - gzzx) + gupyy * (TWO * gyzz - gzzy) + gupyz * gzzz);
-    Gamzzz[idx] = HALF * (gupxz * (TWO * gxzz - gzzx) + gupyz * (TWO * gyzz - gzzy) + gupzz * gzzz);
+    l_Gamxyy = HALF * (gupxx * (TWO * gxyy - gyyx) + gupxy * gyyy + gupxz * (TWO * gyzy - gyyz));
+    l_Gamyyy = HALF * (gupxy * (TWO * gxyy - gyyx) + gupyy * gyyy + gupyz * (TWO * gyzy - gyyz));
+    l_Gamzyy = HALF * (gupxz * (TWO * gxyy - gyyx) + gupyz * gyyy + gupzz * (TWO * gyzy - gyyz));
 
-    Gamxxy[idx] = HALF * (gupxx * gxxy + gupxy * gyyx + gupxz * (gxzy + gyzx - gxyz));
-    Gamyxy[idx] = HALF * (gupxy * gxxy + gupyy * gyyx + gupyz * (gxzy + gyzx - gxyz));
-    Gamzxy[idx] = HALF * (gupxz * gxxy + gupyz * gyyx + gupzz * (gxzy + gyzx - gxyz));
+    l_Gamxzz = HALF * (gupxx * (TWO * gxzz - gzzx) + gupxy * (TWO * gyzz - gzzy) + gupxz * gzzz);
+    l_Gamyzz = HALF * (gupxy * (TWO * gxzz - gzzx) + gupyy * (TWO * gyzz - gzzy) + gupyz * gzzz);
+    l_Gamzzz = HALF * (gupxz * (TWO * gxzz - gzzx) + gupyz * (TWO * gyzz - gzzy) + gupzz * gzzz);
 
-    // Fortran Line 38
-    Gamxxz[idx] = HALF * (gupxx * gxxz + gupxy * (gxyz + gyzx - gxzy) + gupxz * gzzx);
-    Gamyxz[idx] = HALF * (gupxy * gxxz + gupyy * (gxyz + gyzx - gxzy) + gupyz * gzzx);
-    Gamzxz[idx] = HALF * (gupxz * gxxz + gupyz * (gxyz + gyzx - gxzy) + gupzz * gzzx);
+    l_Gamxxy = HALF * (gupxx * gxxy + gupxy * gyyx + gupxz * (gxzy + gyzx - gxyz));
+    l_Gamyxy = HALF * (gupxy * gxxy + gupyy * gyyx + gupyz * (gxzy + gyzx - gxyz));
+    l_Gamzxy = HALF * (gupxz * gxxy + gupyz * gyyx + gupzz * (gxzy + gyzx - gxyz));
 
-    Gamxyz[idx] = HALF * (gupxx * (gxyz + gxzy - gyzx) + gupxy * gyyz + gupxz * gzzy);
-    Gamyyz[idx] = HALF * (gupxy * (gxyz + gxzy - gyzx) + gupyy * gyyz + gupyz * gzzy);
-    Gamzyz[idx] = HALF * (gupxz * (gxyz + gxzy - gyzx) + gupyz * gyyz + gupzz * gzzy);
-}
+    l_Gamxxz = HALF * (gupxx * gxxz + gupxy * (gxyz + gyzx - gxzy) + gupxz * gzzx);
+    l_Gamyxz = HALF * (gupxy * gxxz + gupyy * (gxyz + gyzx - gxzy) + gupyz * gzzx);
+    l_Gamzxz = HALF * (gupxz * gxxz + gupyz * (gxyz + gyzx - gxzy) + gupzz * gzzx);
 
+    l_Gamxyz = HALF * (gupxx * (gxyz + gxzy - gyzx) + gupxy * gyyz + gupxz * gzzy);
+    l_Gamyyz = HALF * (gupxy * (gxyz + gxzy - gyzx) + gupyy * gyyz + gupyz * gzzy);
+    l_Gamzyz = HALF * (gupxz * (gxyz + gxzy - gyzx) + gupyz * gyyz + gupzz * gzzy);
 
-
-__global__ void bssn_rhs_core_kernel(
-    const int ex0, const int ex1, const int ex2, 
-    const int symmetry, const int lev,
-    const double* __restrict__ X, const double* __restrict__ Y, const double* __restrict__ Z,
-    // 原始变量
-    const double* __restrict__ chi, const double* __restrict__ trK,
-    const double* __restrict__ dxx, const double* __restrict__ gxy, const double* __restrict__ gxz,
-    const double* __restrict__ dyy, const double* __restrict__ gyz, const double* __restrict__ dzz,
-    const double* __restrict__ Axx, const double* __restrict__ Axy, const double* __restrict__ Axz,
-    const double* __restrict__ Ayy, const double* __restrict__ Ayz, const double* __restrict__ Azz,
-    const double* __restrict__ Gamx, const double* __restrict__ Gamy, const double* __restrict__ Gamz,
-    const double* __restrict__ Lap, 
-    const double* __restrict__ betax, const double* __restrict__ betay, const double* __restrict__ betaz,
-    const double* __restrict__ dtSfx, const double* __restrict__ dtSfy, const double* __restrict__ dtSfz,
-    const double* __restrict__ rho, const double* __restrict__ Sx, const double* __restrict__ Sy, const double* __restrict__ Sz,
-    const double* __restrict__ Sxx, const double* __restrict__ Sxy, const double* __restrict__ Sxz, 
-    const double* __restrict__ Syy, const double* __restrict__ Syz, const double* __restrict__ Szz,
-    // Kernel 1 中间输出 (Input)
-    const double* __restrict__ chix_in, const double* __restrict__ chiy_in, const double* __restrict__ chiz_in,
-    const double* __restrict__ gxxx_in, const double* __restrict__ gxxy_in, const double* __restrict__ gxxz_in,
-    const double* __restrict__ gxyx_in, const double* __restrict__ gxyy_in, const double* __restrict__ gxyz_in,
-    const double* __restrict__ gxzx_in, const double* __restrict__ gxzy_in, const double* __restrict__ gxzz_in,
-    const double* __restrict__ gyyx_in, const double* __restrict__ gyyy_in, const double* __restrict__ gyyz_in,
-    const double* __restrict__ gyzx_in, const double* __restrict__ gyzy_in, const double* __restrict__ gyzz_in,
-    const double* __restrict__ gzzx_in, const double* __restrict__ gzzy_in, const double* __restrict__ gzzz_in,
-    const double* __restrict__ gupxx_in, const double* __restrict__ gupxy_in, const double* __restrict__ gupxz_in,
-    const double* __restrict__ gupyy_in, const double* __restrict__ gupyz_in, const double* __restrict__ gupzz_in,
-    // Kernel 1 计算出的 Gam (Input & Output - 需原地更新为物理 Gam)
-    double* __restrict__ Gamxxx, double* __restrict__ Gamxxy, double* __restrict__ Gamxxz,
-    double* __restrict__ Gamxyy, double* __restrict__ Gamxyz, double* __restrict__ Gamxzz,
-    double* __restrict__ Gamyxx, double* __restrict__ Gamyxy, double* __restrict__ Gamyxz,
-    double* __restrict__ Gamyyy, double* __restrict__ Gamyyz, double* __restrict__ Gamyzz,
-    double* __restrict__ Gamzxx, double* __restrict__ Gamzxy, double* __restrict__ Gamzxz,
-    double* __restrict__ Gamzyy, double* __restrict__ Gamzyz, double* __restrict__ Gamzzz,
-    // 输出 RHS (累计结果)
-    double* __restrict__ trK_rhs,
-    double* __restrict__ Axx_rhs, double* __restrict__ Axy_rhs, double* __restrict__ Axz_rhs,
-    double* __restrict__ Ayy_rhs, double* __restrict__ Ayz_rhs, double* __restrict__ Azz_rhs,
-    double* __restrict__ Gamx_rhs, double* __restrict__ Gamy_rhs, double* __restrict__ Gamz_rhs,
-    double* __restrict__ Lap_rhs, 
-    double* __restrict__ betax_rhs, double* __restrict__ betay_rhs, double* __restrict__ betaz_rhs,
-    double* __restrict__ dtSfx_rhs, double* __restrict__ dtSfy_rhs, double* __restrict__ dtSfz_rhs,
-    // Debug Output (可选)
-    double* __restrict__ Rxx_out, double* __restrict__ Rxy_out, double* __restrict__ Rxz_out,
-    double* __restrict__ Ryy_out, double* __restrict__ Ryz_out, double* __restrict__ Rzz_out
-) {
-    int i = blockIdx.x * blockDim.x + threadIdx.x;
-    int j = blockIdx.y * blockDim.y + threadIdx.y;
-    int k = blockIdx.z * blockDim.z + threadIdx.z;
-
-    if (i >= ex0 || j >= ex1 || k >= ex2) return;
-
-    int idx = IDX3D(i, j, k, ex0, ex1, ex2);
-    int dims[3] = {ex0, ex1, ex2};
+    // ------------------------------------------------------------------------------------
+    // bssn_rhs_core_kernel
+    // ------------------------------------------------------------------------------------
 
     // ==========================================
     // 0. 加载数据至寄存器 (Locals)
     // ==========================================
     double l_gxx = dxx[idx] + ONE; double l_gxy = gxy[idx]; double l_gxz = gxz[idx];
     double l_gyy = dyy[idx] + ONE; double l_gyz = gyz[idx]; double l_gzz = dzz[idx] + ONE;
-    
-    double gupxx = gupxx_in[idx]; double gupxy = gupxy_in[idx]; double gupxz = gupxz_in[idx];
-    double gupyy = gupyy_in[idx]; double gupyz = gupyz_in[idx]; double gupzz = gupzz_in[idx];
 
-    double l_Gamxxx = Gamxxx[idx]; double l_Gamxxy = Gamxxy[idx]; double l_Gamxxz = Gamxxz[idx];
-    double l_Gamxyy = Gamxyy[idx]; double l_Gamxyz = Gamxyz[idx]; double l_Gamxzz = Gamxzz[idx];
-    double l_Gamyxx = Gamyxx[idx]; double l_Gamyxy = Gamyxy[idx]; double l_Gamyxz = Gamyxz[idx];
-    double l_Gamyyy = Gamyyy[idx]; double l_Gamyyz = Gamyyz[idx]; double l_Gamyzz = Gamyzz[idx];
-    double l_Gamzxx = Gamzxx[idx]; double l_Gamzxy = Gamzxy[idx]; double l_Gamzxz = Gamzxz[idx];
-    double l_Gamzyy = Gamzyy[idx]; double l_Gamzyz = Gamzyz[idx]; double l_Gamzzz = Gamzzz[idx];
+    // double gupxx = gupxx_in[idx]; double gupxy = gupxy_in[idx]; double gupxz = gupxz_in[idx];
+    // double gupyy = gupyy_in[idx]; double gupyz = gupyz_in[idx]; double gupzz = gupzz_in[idx];
 
-    double l_gxxx = gxxx_in[idx]; double l_gxxy = gxxy_in[idx]; double l_gxxz = gxxz_in[idx];
-    double l_gxyx = gxyx_in[idx]; double l_gxyy = gxyy_in[idx]; double l_gxzy = gxzy_in[idx]; // 注意: Fortran代码中命名不一致，这里对应 gxy_z
-    double l_gxzx = gxzx_in[idx]; double l_gxzz = gxzz_in[idx]; 
+    // double l_Gamxxx = l_Gamxxx; double l_Gamxxy = l_Gamxxy; double l_Gamxxz = l_Gamxxz;
+    // double l_Gamxyy = l_Gamxyy; double l_Gamxyz = l_Gamxyz; double l_Gamxzz = l_Gamxzz;
+    // double l_Gamyxx = l_Gamyxx; double l_Gamyxy = l_Gamyxy; double l_Gamyxz = l_Gamyxz;
+    // double l_Gamyyy = l_Gamyyy; double l_Gamyyz = l_Gamyyz; double l_Gamyzz = l_Gamyzz;
+    // double l_Gamzxx = l_Gamzxx; double l_Gamzxy = l_Gamzxy; double l_Gamzxz = l_Gamzxz;
+    // double l_Gamzyy = l_Gamzyy; double l_Gamzyz = l_Gamzyz; double l_Gamzzz = l_Gamzzz;
 
-    double l_gxyz = gxyz_in[idx]; double l_gyyx = gyyx_in[idx]; double l_gyyy = gyyy_in[idx];
-    double l_gyyz = gyyz_in[idx]; double l_gyzx = gyzx_in[idx]; double l_gyzy = gyzy_in[idx];
-    double l_gyzz = gyzz_in[idx]; double l_gzzx = gzzx_in[idx]; double l_gzzy = gzzy_in[idx];
-    double l_gzzz = gzzz_in[idx];
+    // double gxxx = gxxx_in[idx]; double gxxy = gxxy_in[idx]; double gxxz = gxxz_in[idx];
+    // double gxyx = gxyx_in[idx]; double gxyy = gxyy_in[idx]; double gxzy = gxzy_in[idx]; // 注意: Fortran代码中命名不一致，这里对应 gxy_z
+    // double gxzx = gxzx_in[idx]; double gxzz = gxzz_in[idx]; 
+
+    // double gxyz = gxyz_in[idx]; double gyyx = gyyx_in[idx]; double gyyy = gyyy_in[idx];
+    // double gyyz = gyyz_in[idx]; double gyzx = gyzx_in[idx]; double gyzy = gyzy_in[idx];
+    // double gyzz = gyzz_in[idx]; double gzzx = gzzx_in[idx]; double gzzy = gzzy_in[idx];
+    // double gzzz = gzzz_in[idx];
 
     double l_Axx = Axx[idx]; double l_Axy = Axy[idx]; double l_Axz = Axz[idx];
     double l_Ayy = Ayy[idx]; double l_Ayz = Ayz[idx]; double l_Azz = Azz[idx];
     
-    double val_Lap = Lap[idx];
-    double val_chi = chi[idx];
-    double val_trK = trK[idx];
-    double alpn1 = val_Lap + ONE;
-    double chin1 = val_chi + ONE;
 
     // ==========================================
     // Step 1: 初始化 Ricci Tensor (Aij 贡献)
     // ==========================================
-    double Rxx, Rxy, Rxz, Ryy, Ryz, Rzz;
+    double l_Rxx, l_Rxy, l_Rxz, l_Ryy, l_Ryz, l_Rzz;
 
-    Rxx = gupxx * gupxx * l_Axx + gupxy * gupxy * l_Ayy + gupxz * gupxz * l_Azz + 
+    l_Rxx = gupxx * gupxx * l_Axx + gupxy * gupxy * l_Ayy + gupxz * gupxz * l_Azz + 
           TWO*(gupxx * gupxy * l_Axy + gupxx * gupxz * l_Axz + gupxy * gupxz * l_Ayz);
 
-    Ryy = gupxy * gupxy * l_Axx + gupyy * gupyy * l_Ayy + gupyz * gupyz * l_Azz + 
+    l_Ryy = gupxy * gupxy * l_Axx + gupyy * gupyy * l_Ayy + gupyz * gupyz * l_Azz + 
           TWO*(gupxy * gupyy * l_Axy + gupxy * gupyz * l_Axz + gupyy * gupyz * l_Ayz);
 
-    Rzz = gupxz * gupxz * l_Axx + gupyz * gupyz * l_Ayy + gupzz * gupzz * l_Azz + 
+    l_Rzz = gupxz * gupxz * l_Axx + gupyz * gupyz * l_Ayy + gupzz * gupzz * l_Azz + 
           TWO*(gupxz * gupyz * l_Axy + gupxz * gupzz * l_Axz + gupyz * gupzz * l_Ayz);
 
-    Rxy = gupxx * gupxy * l_Axx + gupxy * gupyy * l_Ayy + gupxz * gupyz * l_Azz + 
+    l_Rxy = gupxx * gupxy * l_Axx + gupxy * gupyy * l_Ayy + gupxz * gupyz * l_Azz + 
           (gupxx * gupyy + gupxy * gupxy)* l_Axy + 
           (gupxx * gupyz + gupxz * gupxy)* l_Axz + 
           (gupxy * gupyz + gupxz * gupyy)* l_Ayz;
 
-    Rxz = gupxx * gupxz * l_Axx + gupxy * gupyz * l_Ayy + gupxz * gupzz * l_Azz + 
+    l_Rxz = gupxx * gupxz * l_Axx + gupxy * gupyz * l_Ayy + gupxz * gupzz * l_Azz + 
           (gupxx * gupyz + gupxy * gupxz)* l_Axy + 
           (gupxx * gupzz + gupxz * gupxz)* l_Axz + 
           (gupxy * gupzz + gupxz * gupyz)* l_Ayz;
 
-    Ryz = gupxy * gupxz * l_Axx + gupyy * gupyz * l_Ayy + gupyz * gupzz * l_Azz + 
+    l_Ryz = gupxy * gupxz * l_Axx + gupyy * gupyz * l_Ayy + gupyz * gupzz * l_Azz + 
           (gupxy * gupyz + gupyy * gupxz)* l_Axy + 
           (gupxy * gupzz + gupyz * gupxz)* l_Axz + 
           (gupyy * gupzz + gupyz * gupyz)* l_Ayz;
@@ -423,38 +343,38 @@ __global__ void bssn_rhs_core_kernel(
     d_fderivs_point(dims, Lap, &Lapx, &Lapy, &Lapz, X, Y, Z, SYM, SYM, SYM, symmetry, lev, i, j, k);
     d_fderivs_point(dims, trK, &Kx, &Ky, &Kz, X, Y, Z, SYM, SYM, SYM, symmetry, lev, i, j, k);
 
-    double val_chix = chix_in[idx]; double val_chiy = chiy_in[idx]; double val_chiz = chiz_in[idx];
+    // double chix = chix_in[idx]; double chiy = chiy_in[idx]; double chiz = chiz_in[idx];
     double val_Sx = Sx[idx]; double val_Sy = Sy[idx]; double val_Sz = Sz[idx];
 
     // Gamx_rhs
-    double val_Gamx_rhs = - TWO * (Lapx * Rxx + Lapy * Rxy + Lapz * Rxz) + 
+    double val_Gamx_rhs = - TWO * (Lapx * l_Rxx + Lapy * l_Rxy + Lapz * l_Rxz) + 
         TWO * alpn1 * (
-        -F3o2/chin1 * (val_chix * Rxx + val_chiy * Rxy + val_chiz * Rxz) - 
+        -F3o2/chin1 * (chix * l_Rxx + chiy * l_Rxy + chiz * l_Rxz) - 
         gupxx * (F2o3 * Kx + EIGHT * PI * val_Sx) - 
         gupxy * (F2o3 * Ky + EIGHT * PI * val_Sy) - 
         gupxz * (F2o3 * Kz + EIGHT * PI * val_Sz) + 
-        l_Gamxxx * Rxx + l_Gamxyy * Ryy + l_Gamxzz * Rzz + 
-        TWO * (l_Gamxxy * Rxy + l_Gamxxz * Rxz + l_Gamxyz * Ryz));
+        l_Gamxxx * l_Rxx + l_Gamxyy * l_Ryy + l_Gamxzz * l_Rzz + 
+        TWO * (l_Gamxxy * l_Rxy + l_Gamxxz * l_Rxz + l_Gamxyz * l_Ryz));
 
     // Gamy_rhs
-    double val_Gamy_rhs = - TWO * (Lapx * Rxy + Lapy * Ryy + Lapz * Ryz) + 
+    double val_Gamy_rhs = - TWO * (Lapx * l_Rxy + Lapy * l_Ryy + Lapz * l_Ryz) + 
         TWO * alpn1 * (
-        -F3o2/chin1 * (val_chix * Rxy + val_chiy * Ryy + val_chiz * Ryz) - 
+        -F3o2/chin1 * (chix * l_Rxy + chiy * l_Ryy + chiz * l_Ryz) - 
         gupxy * (F2o3 * Kx + EIGHT * PI * val_Sx) - 
         gupyy * (F2o3 * Ky + EIGHT * PI * val_Sy) - 
         gupyz * (F2o3 * Kz + EIGHT * PI * val_Sz) + 
-        l_Gamyxx * Rxx + l_Gamyyy * Ryy + l_Gamyzz * Rzz + 
-        TWO * (l_Gamyxy * Rxy + l_Gamyxz * Rxz + l_Gamyyz * Ryz));
+        l_Gamyxx * l_Rxx + l_Gamyyy * l_Ryy + l_Gamyzz * l_Rzz + 
+        TWO * (l_Gamyxy * l_Rxy + l_Gamyxz * l_Rxz + l_Gamyyz * l_Ryz));
 
     // Gamz_rhs
-    double val_Gamz_rhs = - TWO * (Lapx * Rxz + Lapy * Ryz + Lapz * Rzz) + 
+    double val_Gamz_rhs = - TWO * (Lapx * l_Rxz + Lapy * l_Ryz + Lapz * l_Rzz) + 
         TWO * alpn1 * (
-        -F3o2/chin1 * (val_chix * Rxz + val_chiy * Ryz + val_chiz * Rzz) - 
+        -F3o2/chin1 * (chix * l_Rxz + chiy * l_Ryz + chiz * l_Rzz) - 
         gupxz * (F2o3 * Kx + EIGHT * PI * val_Sx) - 
         gupyz * (F2o3 * Ky + EIGHT * PI * val_Sy) - 
         gupzz * (F2o3 * Kz + EIGHT * PI * val_Sz) + 
-        l_Gamzxx * Rxx + l_Gamzyy * Ryy + l_Gamzzz * Rzz + 
-        TWO * (l_Gamzxy * Rxy + l_Gamzxz * Rxz + l_Gamzyz * Ryz));
+        l_Gamzxx * l_Rxx + l_Gamzyy * l_Ryy + l_Gamzzz * l_Rzz + 
+        TWO * (l_Gamzxy * l_Rxy + l_Gamzxz * l_Rxz + l_Gamzyz * l_Ryz));
 
     
     // betax 二阶导
@@ -493,11 +413,11 @@ __global__ void bssn_rhs_core_kernel(
     d_fderivs_point(dims, Gamy, &dGamyx, &dGamyy, &dGamyz, X, Y, Z, SYM, ANTI, SYM, symmetry, lev, i, j, k);
     d_fderivs_point(dims, Gamz, &dGamzx, &dGamzy, &dGamzz, X, Y, Z, SYM, SYM, ANTI, symmetry, lev, i, j, k);
 
-    double betaxx, betaxy, betaxz, betayx, betayy, betayz, betazx, betazy, betazz;
-    d_fderivs_point(dims, betax, &betaxx, &betaxy, &betaxz, X, Y, Z, ANTI, SYM, SYM, symmetry, lev, i, j, k);
-    d_fderivs_point(dims, betay, &betayx, &betayy, &betayz, X, Y, Z, SYM, ANTI, SYM, symmetry, lev, i, j, k);
-    d_fderivs_point(dims, betaz, &betazx, &betazy, &betazz, X, Y, Z, SYM, SYM, ANTI, symmetry, lev, i, j, k);
-    double div_beta = betaxx + betayy + betazz;
+    // double betaxx, betaxy, betaxz, betayx, betayy, betayz, betazx, betazy, betazz;
+    // d_fderivs_point(dims, betax, &betaxx, &betaxy, &betaxz, X, Y, Z, ANTI, SYM, SYM, symmetry, lev, i, j, k);
+    // d_fderivs_point(dims, betay, &betayx, &betayy, &betayz, X, Y, Z, SYM, ANTI, SYM, symmetry, lev, i, j, k);
+    // d_fderivs_point(dims, betaz, &betazx, &betazy, &betazz, X, Y, Z, SYM, SYM, ANTI, symmetry, lev, i, j, k);
+    // double div_beta = betaxx + betayy + betazz;
 
     // Gamx_rhs (Fortran line 170)
     val_Gamx_rhs += F2o3 * Gamxa * div_beta
@@ -523,129 +443,129 @@ __global__ void bssn_rhs_core_kernel(
     // ==========================================
     // Step 3: Ricci (Metric 二阶导数部分)
     // ==========================================
-    l_gxxx = l_gxx * l_Gamxxx + l_gxy * l_Gamyxx + l_gxz * l_Gamzxx;
-    l_gxyx = l_gxx * l_Gamxxy + l_gxy * l_Gamyxy + l_gxz * l_Gamzxy;
-    l_gxzx = l_gxx * l_Gamxxz + l_gxy * l_Gamyxz + l_gxz * l_Gamzxz;
-    l_gyyx = l_gxx * l_Gamxyy + l_gxy * l_Gamyyy + l_gxz * l_Gamzyy;
-    l_gyzx = l_gxx * l_Gamxyz + l_gxy * l_Gamyyz + l_gxz * l_Gamzyz;
-    l_gzzx = l_gxx * l_Gamxzz + l_gxy * l_Gamyzz + l_gxz * l_Gamzzz;
+    gxxx = l_gxx * l_Gamxxx + l_gxy * l_Gamyxx + l_gxz * l_Gamzxx;
+    gxyx = l_gxx * l_Gamxxy + l_gxy * l_Gamyxy + l_gxz * l_Gamzxy;
+    gxzx = l_gxx * l_Gamxxz + l_gxy * l_Gamyxz + l_gxz * l_Gamzxz;
+    gyyx = l_gxx * l_Gamxyy + l_gxy * l_Gamyyy + l_gxz * l_Gamzyy;
+    gyzx = l_gxx * l_Gamxyz + l_gxy * l_Gamyyz + l_gxz * l_Gamzyz;
+    gzzx = l_gxx * l_Gamxzz + l_gxy * l_Gamyzz + l_gxz * l_Gamzzz;
 
-    l_gxxy = l_gxy * l_Gamxxx + l_gyy * l_Gamyxx + l_gyz * l_Gamzxx;
-    l_gxyy = l_gxy * l_Gamxxy + l_gyy * l_Gamyxy + l_gyz * l_Gamzxy;
-    l_gxzy = l_gxy * l_Gamxxz + l_gyy * l_Gamyxz + l_gyz * l_Gamzxz;
-    l_gyyy = l_gxy * l_Gamxyy + l_gyy * l_Gamyyy + l_gyz * l_Gamzyy;
-    l_gyzy = l_gxy * l_Gamxyz + l_gyy * l_Gamyyz + l_gyz * l_Gamzyz;
-    l_gzzy = l_gxy * l_Gamxzz + l_gyy * l_Gamyzz + l_gyz * l_Gamzzz;
+    gxxy = l_gxy * l_Gamxxx + l_gyy * l_Gamyxx + l_gyz * l_Gamzxx;
+    gxyy = l_gxy * l_Gamxxy + l_gyy * l_Gamyxy + l_gyz * l_Gamzxy;
+    gxzy = l_gxy * l_Gamxxz + l_gyy * l_Gamyxz + l_gyz * l_Gamzxz;
+    gyyy = l_gxy * l_Gamxyy + l_gyy * l_Gamyyy + l_gyz * l_Gamzyy;
+    gyzy = l_gxy * l_Gamxyz + l_gyy * l_Gamyyz + l_gyz * l_Gamzyz;
+    gzzy = l_gxy * l_Gamxzz + l_gyy * l_Gamyzz + l_gyz * l_Gamzzz;
 
-    l_gxxz = l_gxz * l_Gamxxx + l_gyz * l_Gamyxx + l_gzz * l_Gamzxx;
-    l_gxyz = l_gxz * l_Gamxxy + l_gyz * l_Gamyxy + l_gzz * l_Gamzxy;
-    l_gxzz = l_gxz * l_Gamxxz + l_gyz * l_Gamyxz + l_gzz * l_Gamzxz;
-    l_gyyz = l_gxz * l_Gamxyy + l_gyz * l_Gamyyy + l_gzz * l_Gamzyy;
-    l_gyzz = l_gxz * l_Gamxyz + l_gyz * l_Gamyyz + l_gzz * l_Gamzyz;
-    l_gzzz = l_gxz * l_Gamxzz + l_gyz * l_Gamyzz + l_gzz * l_Gamzzz;
+    gxxz = l_gxz * l_Gamxxx + l_gyz * l_Gamyxx + l_gzz * l_Gamzxx;
+    gxyz = l_gxz * l_Gamxxy + l_gyz * l_Gamyxy + l_gzz * l_Gamzxy;
+    gxzz = l_gxz * l_Gamxxz + l_gyz * l_Gamyxz + l_gzz * l_Gamzxz;
+    gyyz = l_gxz * l_Gamxyy + l_gyz * l_Gamyyy + l_gzz * l_Gamzyy;
+    gyzz = l_gxz * l_Gamxyz + l_gyz * l_Gamyyz + l_gzz * l_Gamzyz;
+    gzzz = l_gxz * l_Gamxzz + l_gyz * l_Gamyzz + l_gzz * l_Gamzzz;
     
     // Rxx
     d_fdderivs_point(dims, dxx, &fxx, &fxy, &fxz, &fyy, &fyz, &fzz, X, Y, Z, SYM, SYM, SYM, symmetry, lev, i, j, k);
-    Rxx = gupxx * fxx + gupyy * fyy + gupzz * fzz + (gupxy * fxy + gupxz * fxz + gupyz * fyz) * TWO;
+    l_Rxx = gupxx * fxx + gupyy * fyy + gupzz * fzz + (gupxy * fxy + gupxz * fxz + gupyz * fyz) * TWO;
     // Ryy
     d_fdderivs_point(dims, dyy, &fxx, &fxy, &fxz, &fyy, &fyz, &fzz, X, Y, Z, SYM, SYM, SYM, symmetry, lev, i, j, k);
-    Ryy = gupxx * fxx + gupyy * fyy + gupzz * fzz + (gupxy * fxy + gupxz * fxz + gupyz * fyz) * TWO;
+    l_Ryy = gupxx * fxx + gupyy * fyy + gupzz * fzz + (gupxy * fxy + gupxz * fxz + gupyz * fyz) * TWO;
 
     // Rzz
     d_fdderivs_point(dims, dzz, &fxx, &fxy, &fxz, &fyy, &fyz, &fzz, X, Y, Z, SYM, SYM, SYM, symmetry, lev, i, j, k);
-    Rzz = gupxx * fxx + gupyy * fyy + gupzz * fzz + (gupxy * fxy + gupxz * fxz + gupyz * fyz) * TWO;
+    l_Rzz = gupxx * fxx + gupyy * fyy + gupzz * fzz + (gupxy * fxy + gupxz * fxz + gupyz * fyz) * TWO;
 
     // Rxy
     d_fdderivs_point(dims, gxy, &fxx, &fxy, &fxz, &fyy, &fyz, &fzz, X, Y, Z, ANTI, ANTI, SYM, symmetry, lev, i, j, k);
-    Rxy = gupxx * fxx + gupyy * fyy + gupzz * fzz + (gupxy * fxy + gupxz * fxz + gupyz * fyz) * TWO;
+    l_Rxy = gupxx * fxx + gupyy * fyy + gupzz * fzz + (gupxy * fxy + gupxz * fxz + gupyz * fyz) * TWO;
 
     // Rxz
     d_fdderivs_point(dims, gxz, &fxx, &fxy, &fxz, &fyy, &fyz, &fzz, X, Y, Z, ANTI, SYM, ANTI, symmetry, lev, i, j, k);
-    Rxz = gupxx * fxx + gupyy * fyy + gupzz * fzz + (gupxy * fxy + gupxz * fxz + gupyz * fyz) * TWO;
+    l_Rxz = gupxx * fxx + gupyy * fyy + gupzz * fzz + (gupxy * fxy + gupxz * fxz + gupyz * fyz) * TWO;
 
     // Ryz
     d_fdderivs_point(dims, gyz, &fxx, &fxy, &fxz, &fyy, &fyz, &fzz, X, Y, Z, SYM, ANTI, ANTI, symmetry, lev, i, j, k);
-    Ryz = gupxx * fxx + gupyy * fyy + gupzz * fzz + (gupxy * fxy + gupxz * fxz + gupyz * fyz) * TWO;
+    l_Ryz = gupxx * fxx + gupyy * fyy + gupzz * fzz + (gupxy * fxy + gupxz * fxz + gupyz * fyz) * TWO;
 
     // ==========================================
     // Step 4: Ricci (连接系数项) - 完整展开
     // ==========================================
 
-    // double Gam_dot_dg_xx = Gamxa * l_gxxx + Gamya * l_gxyx + Gamza * l_gxzx;
-    // double Gam_dot_dg_yy = Gamxa * l_gxyy + Gamya * l_gyyy + Gamza * l_gyzy;
-    // double Gam_dot_dg_zz = Gamxa * l_gxzz + Gamya * l_gyzz + Gamza * l_gzzz;
+    // double Gam_dot_dg_xx = Gamxa * gxxx + Gamya * gxyx + Gamza * gxzx;
+    // double Gam_dot_dg_yy = Gamxa * gxyy + Gamya * gyyy + Gamza * gyzy;
+    // double Gam_dot_dg_zz = Gamxa * gxzz + Gamya * gyzz + Gamza * gzzz;
 
     // Rxx Correction
-    Rxx = -HALF * Rxx + 
+    l_Rxx = -HALF * l_Rxx + 
           l_gxx * dGamxx + l_gxy * dGamyx + l_gxz * dGamzx + 
-          Gamxa * l_gxxx + Gamya * l_gxyx + Gamza * l_gxzx + 
-          gupxx * (TWO*(l_Gamxxx*l_gxxx + l_Gamyxx*l_gxyx + l_Gamzxx*l_gxzx) + l_Gamxxx*l_gxxx + l_Gamyxx*l_gxxy + l_Gamzxx*l_gxxz) +
-          gupxy * (TWO*(l_Gamxxx*l_gxyx + l_Gamyxx*l_gyyx + l_Gamzxx*l_gyzx + l_Gamxxy*l_gxxx + l_Gamyxy*l_gxyx + l_Gamzxy*l_gxzx) + l_Gamxxy*l_gxxx + l_Gamyxy*l_gxxy + l_Gamzxy*l_gxxz + l_Gamxxx*l_gxyx + l_Gamyxx*l_gxyy + l_Gamzxx*l_gxyz) + 
-          gupxz * (TWO*(l_Gamxxx*l_gxzx + l_Gamyxx*l_gyzx + l_Gamzxx*l_gzzx + l_Gamxxz*l_gxxx + l_Gamyxz*l_gxyx + l_Gamzxz*l_gxzx) + l_Gamxxz*l_gxxx + l_Gamyxz*l_gxxy + l_Gamzxz*l_gxxz + l_Gamxxx*l_gxzx + l_Gamyxx*l_gxzy + l_Gamzxx*l_gxzz) + 
-          gupyy * (TWO*(l_Gamxxy*l_gxyx + l_Gamyxy*l_gyyx + l_Gamzxy*l_gyzx) + l_Gamxxy*l_gxyx + l_Gamyxy*l_gxyy + l_Gamzxy*l_gxyz) + 
-          gupyz * (TWO*(l_Gamxxy*l_gxzx + l_Gamyxy*l_gyzx + l_Gamzxy*l_gzzx + l_Gamxxz*l_gxyx + l_Gamyxz*l_gyyx + l_Gamzxz*l_gyzx) + l_Gamxxz*l_gxyx + l_Gamyxz*l_gxyy + l_Gamzxz*l_gxyz + l_Gamxxy*l_gxzx + l_Gamyxy*l_gxzy + l_Gamzxy*l_gxzz) + 
-          gupzz * (TWO*(l_Gamxxz*l_gxzx + l_Gamyxz*l_gyzx + l_Gamzxz*l_gzzx) + l_Gamxxz*l_gxzx + l_Gamyxz*l_gxzy + l_Gamzxz*l_gxzz);
+          Gamxa * gxxx + Gamya * gxyx + Gamza * gxzx + 
+          gupxx * (TWO*(l_Gamxxx*gxxx + l_Gamyxx*gxyx + l_Gamzxx*gxzx) + l_Gamxxx*gxxx + l_Gamyxx*gxxy + l_Gamzxx*gxxz) +
+          gupxy * (TWO*(l_Gamxxx*gxyx + l_Gamyxx*gyyx + l_Gamzxx*gyzx + l_Gamxxy*gxxx + l_Gamyxy*gxyx + l_Gamzxy*gxzx) + l_Gamxxy*gxxx + l_Gamyxy*gxxy + l_Gamzxy*gxxz + l_Gamxxx*gxyx + l_Gamyxx*gxyy + l_Gamzxx*gxyz) + 
+          gupxz * (TWO*(l_Gamxxx*gxzx + l_Gamyxx*gyzx + l_Gamzxx*gzzx + l_Gamxxz*gxxx + l_Gamyxz*gxyx + l_Gamzxz*gxzx) + l_Gamxxz*gxxx + l_Gamyxz*gxxy + l_Gamzxz*gxxz + l_Gamxxx*gxzx + l_Gamyxx*gxzy + l_Gamzxx*gxzz) + 
+          gupyy * (TWO*(l_Gamxxy*gxyx + l_Gamyxy*gyyx + l_Gamzxy*gyzx) + l_Gamxxy*gxyx + l_Gamyxy*gxyy + l_Gamzxy*gxyz) + 
+          gupyz * (TWO*(l_Gamxxy*gxzx + l_Gamyxy*gyzx + l_Gamzxy*gzzx + l_Gamxxz*gxyx + l_Gamyxz*gyyx + l_Gamzxz*gyzx) + l_Gamxxz*gxyx + l_Gamyxz*gxyy + l_Gamzxz*gxyz + l_Gamxxy*gxzx + l_Gamyxy*gxzy + l_Gamzxy*gxzz) + 
+          gupzz * (TWO*(l_Gamxxz*gxzx + l_Gamyxz*gyzx + l_Gamzxz*gzzx) + l_Gamxxz*gxzx + l_Gamyxz*gxzy + l_Gamzxz*gxzz);
 
     // Ryy Correction
-    Ryy = -HALF * Ryy + 
+    l_Ryy = -HALF * l_Ryy + 
           l_gxy * dGamxy + l_gyy * dGamyy + l_gyz * dGamzy + 
-          Gamxa * l_gxyy + Gamya * l_gyyy + Gamza * l_gyzy + 
-          gupxx * (TWO*(l_Gamxxy*l_gxxy + l_Gamyxy*l_gxyy + l_Gamzxy*l_gxzy) + l_Gamxxy*l_gxyx + l_Gamyxy*l_gxyy + l_Gamzxy*l_gxyz) + 
-          gupxy * (TWO*(l_Gamxxy*l_gxyy + l_Gamyxy*l_gyyy + l_Gamzxy*l_gyzy + l_Gamxyy*l_gxxy + l_Gamyyy*l_gxyy + l_Gamzyy*l_gxzy) + l_Gamxyy*l_gxyx + l_Gamyyy*l_gxyy + l_Gamzyy*l_gxyz + l_Gamxxy*l_gyyx + l_Gamyxy*l_gyyy + l_Gamzxy*l_gyyz) + 
-          gupxz * (TWO*(l_Gamxxy*l_gxzy + l_Gamyxy*l_gyzy + l_Gamzxy*l_gzzy + l_Gamxyz*l_gxxy + l_Gamyyz*l_gxyy + l_Gamzyz*l_gxzy) + l_Gamxyz*l_gxyx + l_Gamyyz*l_gxyy + l_Gamzyz*l_gxyz + l_Gamxxy*l_gyzx + l_Gamyxy*l_gyzy + l_Gamzxy*l_gyzz) + 
-          gupyy * (TWO*(l_Gamxyy*l_gxyy + l_Gamyyy*l_gyyy + l_Gamzyy*l_gyzy) + l_Gamxyy*l_gyyx + l_Gamyyy*l_gyyy + l_Gamzyy*l_gyyz) + 
-          gupyz * (TWO*(l_Gamxyy*l_gxzy + l_Gamyyy*l_gyzy + l_Gamzyy*l_gzzy + l_Gamxyz*l_gxyy + l_Gamyyz*l_gyyy + l_Gamzyz*l_gyzy) + l_Gamxyz*l_gyyx + l_Gamyyz*l_gyyy + l_Gamzyz*l_gyyz + l_Gamxyy*l_gyzx + l_Gamyyy*l_gyzy + l_Gamzyy*l_gyzz) + 
-          gupzz * (TWO*(l_Gamxyz*l_gxzy + l_Gamyyz*l_gyzy + l_Gamzyz*l_gzzy) + l_Gamxyz*l_gyzx + l_Gamyyz*l_gyzy + l_Gamzyz*l_gyzz);
+          Gamxa * gxyy + Gamya * gyyy + Gamza * gyzy + 
+          gupxx * (TWO*(l_Gamxxy*gxxy + l_Gamyxy*gxyy + l_Gamzxy*gxzy) + l_Gamxxy*gxyx + l_Gamyxy*gxyy + l_Gamzxy*gxyz) + 
+          gupxy * (TWO*(l_Gamxxy*gxyy + l_Gamyxy*gyyy + l_Gamzxy*gyzy + l_Gamxyy*gxxy + l_Gamyyy*gxyy + l_Gamzyy*gxzy) + l_Gamxyy*gxyx + l_Gamyyy*gxyy + l_Gamzyy*gxyz + l_Gamxxy*gyyx + l_Gamyxy*gyyy + l_Gamzxy*gyyz) + 
+          gupxz * (TWO*(l_Gamxxy*gxzy + l_Gamyxy*gyzy + l_Gamzxy*gzzy + l_Gamxyz*gxxy + l_Gamyyz*gxyy + l_Gamzyz*gxzy) + l_Gamxyz*gxyx + l_Gamyyz*gxyy + l_Gamzyz*gxyz + l_Gamxxy*gyzx + l_Gamyxy*gyzy + l_Gamzxy*gyzz) + 
+          gupyy * (TWO*(l_Gamxyy*gxyy + l_Gamyyy*gyyy + l_Gamzyy*gyzy) + l_Gamxyy*gyyx + l_Gamyyy*gyyy + l_Gamzyy*gyyz) + 
+          gupyz * (TWO*(l_Gamxyy*gxzy + l_Gamyyy*gyzy + l_Gamzyy*gzzy + l_Gamxyz*gxyy + l_Gamyyz*gyyy + l_Gamzyz*gyzy) + l_Gamxyz*gyyx + l_Gamyyz*gyyy + l_Gamzyz*gyyz + l_Gamxyy*gyzx + l_Gamyyy*gyzy + l_Gamzyy*gyzz) + 
+          gupzz * (TWO*(l_Gamxyz*gxzy + l_Gamyyz*gyzy + l_Gamzyz*gzzy) + l_Gamxyz*gyzx + l_Gamyyz*gyzy + l_Gamzyz*gyzz);
 
     // Rzz Correction
-    Rzz = -HALF * Rzz + 
+    l_Rzz = -HALF * l_Rzz + 
           l_gxz * dGamxz + l_gyz * dGamyz + l_gzz * dGamzz + 
-          Gamxa * l_gxzz + Gamya * l_gyzz + Gamza * l_gzzz + 
-          gupxx * (TWO*(l_Gamxxz*l_gxxz + l_Gamyxz*l_gxyz + l_Gamzxz*l_gxzz) + l_Gamxxz*l_gxzx + l_Gamyxz*l_gxzy + l_Gamzxz*l_gxzz) + 
-          gupxy * (TWO*(l_Gamxxz*l_gxyz + l_Gamyxz*l_gyyz + l_Gamzxz*l_gyzz + l_Gamxyz*l_gxxz + l_Gamyyz*l_gxyz + l_Gamzyz*l_gxzz) + l_Gamxyz*l_gxzx + l_Gamyyz*l_gxzy + l_Gamzyz*l_gxzz + l_Gamxxz*l_gyzx + l_Gamyxz*l_gyzy + l_Gamzxz*l_gyzz) + 
-          gupxz * (TWO*(l_Gamxxz*l_gxzz + l_Gamyxz*l_gyzz + l_Gamzxz*l_gzzz + l_Gamxzz*l_gxxz + l_Gamyzz*l_gxyz + l_Gamzzz*l_gxzz) + l_Gamxzz*l_gxzx + l_Gamyzz*l_gxzy + l_Gamzzz*l_gxzz + l_Gamxxz*l_gzzx + l_Gamyxz*l_gzzy + l_Gamzxz*l_gzzz) + 
-          gupyy * (TWO*(l_Gamxyz*l_gxyz + l_Gamyyz*l_gyyz + l_Gamzyz*l_gyzz) + l_Gamxyz*l_gyzx + l_Gamyyz*l_gyzy + l_Gamzyz*l_gyzz) + 
-          gupyz * (TWO*(l_Gamxyz*l_gxzz + l_Gamyyz*l_gyzz + l_Gamzyz*l_gzzz + l_Gamxzz*l_gxyz + l_Gamyzz*l_gyyz + l_Gamzzz*l_gyzz) + l_Gamxzz*l_gyzx + l_Gamyzz*l_gyzy + l_Gamzzz*l_gyzz + l_Gamxyz*l_gzzx + l_Gamyyz*l_gzzy + l_Gamzyz*l_gzzz) + 
-          gupzz * (TWO*(l_Gamxzz*l_gxzz + l_Gamyzz*l_gyzz + l_Gamzzz*l_gzzz) + l_Gamxzz*l_gzzx + l_Gamyzz*l_gzzy + l_Gamzzz*l_gzzz);
+          Gamxa * gxzz + Gamya * gyzz + Gamza * gzzz + 
+          gupxx * (TWO*(l_Gamxxz*gxxz + l_Gamyxz*gxyz + l_Gamzxz*gxzz) + l_Gamxxz*gxzx + l_Gamyxz*gxzy + l_Gamzxz*gxzz) + 
+          gupxy * (TWO*(l_Gamxxz*gxyz + l_Gamyxz*gyyz + l_Gamzxz*gyzz + l_Gamxyz*gxxz + l_Gamyyz*gxyz + l_Gamzyz*gxzz) + l_Gamxyz*gxzx + l_Gamyyz*gxzy + l_Gamzyz*gxzz + l_Gamxxz*gyzx + l_Gamyxz*gyzy + l_Gamzxz*gyzz) + 
+          gupxz * (TWO*(l_Gamxxz*gxzz + l_Gamyxz*gyzz + l_Gamzxz*gzzz + l_Gamxzz*gxxz + l_Gamyzz*gxyz + l_Gamzzz*gxzz) + l_Gamxzz*gxzx + l_Gamyzz*gxzy + l_Gamzzz*gxzz + l_Gamxxz*gzzx + l_Gamyxz*gzzy + l_Gamzxz*gzzz) + 
+          gupyy * (TWO*(l_Gamxyz*gxyz + l_Gamyyz*gyyz + l_Gamzyz*gyzz) + l_Gamxyz*gyzx + l_Gamyyz*gyzy + l_Gamzyz*gyzz) + 
+          gupyz * (TWO*(l_Gamxyz*gxzz + l_Gamyyz*gyzz + l_Gamzyz*gzzz + l_Gamxzz*gxyz + l_Gamyzz*gyyz + l_Gamzzz*gyzz) + l_Gamxzz*gyzx + l_Gamyzz*gyzy + l_Gamzzz*gyzz + l_Gamxyz*gzzx + l_Gamyyz*gzzy + l_Gamzyz*gzzz) + 
+          gupzz * (TWO*(l_Gamxzz*gxzz + l_Gamyzz*gyzz + l_Gamzzz*gzzz) + l_Gamxzz*gzzx + l_Gamyzz*gzzy + l_Gamzzz*gzzz);
 
     // Rxy Correction
-    Rxy = HALF * ( - Rxy + 
+    l_Rxy = HALF * ( - l_Rxy + 
           l_gxx * dGamxy + l_gxy * dGamyy + l_gxz * dGamzy + 
           l_gxy * dGamxx + l_gyy * dGamyx + l_gyz * dGamzx + 
-          Gamxa * l_gxyx + Gamya * l_gyyx + Gamza * l_gyzx + 
-          Gamxa * l_gxxy + Gamya * l_gxyy + Gamza * l_gxzy) + 
-          gupxx * (l_Gamxxx*l_gxxy + l_Gamyxx*l_gxyy + l_Gamzxx*l_gxzy + l_Gamxxy*l_gxxx + l_Gamyxy*l_gxyx + l_Gamzxy*l_gxzx + l_Gamxxx*l_gxyx + l_Gamyxx*l_gxyy + l_Gamzxx*l_gxyz) + 
-          gupxy * (l_Gamxxx*l_gxyy + l_Gamyxx*l_gyyy + l_Gamzxx*l_gyzy + l_Gamxxy*l_gxyx + l_Gamyxy*l_gyyx + l_Gamzxy*l_gyzx + l_Gamxxy*l_gxyx + l_Gamyxy*l_gxyy + l_Gamzxy*l_gxyz + l_Gamxxy*l_gxxy + l_Gamyxy*l_gxyy + l_Gamzxy*l_gxzy + l_Gamxyy*l_gxxx + l_Gamyyy*l_gxyx + l_Gamzyy*l_gxzx + l_Gamxxx*l_gyyx + l_Gamyxx*l_gyyy + l_Gamzxx*l_gyyz) + 
-          gupxz * (l_Gamxxx*l_gxzy + l_Gamyxx*l_gyzy + l_Gamzxx*l_gzzy + l_Gamxxy*l_gxzx + l_Gamyxy*l_gyzx + l_Gamzxy*l_gzzx + l_Gamxxz*l_gxyx + l_Gamyxz*l_gxyy + l_Gamzxz*l_gxyz + l_Gamxxz*l_gxxy + l_Gamyxz*l_gxyy + l_Gamzxz*l_gxzy + l_Gamxyz*l_gxxx + l_Gamyyz*l_gxyx + l_Gamzyz*l_gxzx + l_Gamxxx*l_gyzx + l_Gamyxx*l_gyzy + l_Gamzxx*l_gyzz) + 
-          gupyy * (l_Gamxxy*l_gxyy + l_Gamyxy*l_gyyy + l_Gamzxy*l_gyzy + l_Gamxyy*l_gxyx + l_Gamyyy*l_gyyx + l_Gamzyy*l_gyzx + l_Gamxxy*l_gyyx + l_Gamyxy*l_gyyy + l_Gamzxy*l_gyyz) + 
-          gupyz * (l_Gamxxy*l_gxzy + l_Gamyxy*l_gyzy + l_Gamzxy*l_gzzy + l_Gamxyy*l_gxzx + l_Gamyyy*l_gyzx + l_Gamzyy*l_gzzx + l_Gamxxz*l_gyyx + l_Gamyxz*l_gyyy + l_Gamzxz*l_gyyz + l_Gamxxz*l_gxyy + l_Gamyxz*l_gyyy + l_Gamzxz*l_gyzy + l_Gamxyz*l_gxyx + l_Gamyyz*l_gyyx + l_Gamzyz*l_gyzx + l_Gamxxy*l_gyzx + l_Gamyxy*l_gyzy + l_Gamzxy*l_gyzz) + 
-          gupzz * (l_Gamxxz*l_gxzy + l_Gamyxz*l_gyzy + l_Gamzxz*l_gzzy + l_Gamxyz*l_gxzx + l_Gamyyz*l_gyzx + l_Gamzyz*l_gzzx + l_Gamxxz*l_gyzx + l_Gamyxz*l_gyzy + l_Gamzxz*l_gyzz);
+          Gamxa * gxyx + Gamya * gyyx + Gamza * gyzx + 
+          Gamxa * gxxy + Gamya * gxyy + Gamza * gxzy) + 
+          gupxx * (l_Gamxxx*gxxy + l_Gamyxx*gxyy + l_Gamzxx*gxzy + l_Gamxxy*gxxx + l_Gamyxy*gxyx + l_Gamzxy*gxzx + l_Gamxxx*gxyx + l_Gamyxx*gxyy + l_Gamzxx*gxyz) + 
+          gupxy * (l_Gamxxx*gxyy + l_Gamyxx*gyyy + l_Gamzxx*gyzy + l_Gamxxy*gxyx + l_Gamyxy*gyyx + l_Gamzxy*gyzx + l_Gamxxy*gxyx + l_Gamyxy*gxyy + l_Gamzxy*gxyz + l_Gamxxy*gxxy + l_Gamyxy*gxyy + l_Gamzxy*gxzy + l_Gamxyy*gxxx + l_Gamyyy*gxyx + l_Gamzyy*gxzx + l_Gamxxx*gyyx + l_Gamyxx*gyyy + l_Gamzxx*gyyz) + 
+          gupxz * (l_Gamxxx*gxzy + l_Gamyxx*gyzy + l_Gamzxx*gzzy + l_Gamxxy*gxzx + l_Gamyxy*gyzx + l_Gamzxy*gzzx + l_Gamxxz*gxyx + l_Gamyxz*gxyy + l_Gamzxz*gxyz + l_Gamxxz*gxxy + l_Gamyxz*gxyy + l_Gamzxz*gxzy + l_Gamxyz*gxxx + l_Gamyyz*gxyx + l_Gamzyz*gxzx + l_Gamxxx*gyzx + l_Gamyxx*gyzy + l_Gamzxx*gyzz) + 
+          gupyy * (l_Gamxxy*gxyy + l_Gamyxy*gyyy + l_Gamzxy*gyzy + l_Gamxyy*gxyx + l_Gamyyy*gyyx + l_Gamzyy*gyzx + l_Gamxxy*gyyx + l_Gamyxy*gyyy + l_Gamzxy*gyyz) + 
+          gupyz * (l_Gamxxy*gxzy + l_Gamyxy*gyzy + l_Gamzxy*gzzy + l_Gamxyy*gxzx + l_Gamyyy*gyzx + l_Gamzyy*gzzx + l_Gamxxz*gyyx + l_Gamyxz*gyyy + l_Gamzxz*gyyz + l_Gamxxz*gxyy + l_Gamyxz*gyyy + l_Gamzxz*gyzy + l_Gamxyz*gxyx + l_Gamyyz*gyyx + l_Gamzyz*gyzx + l_Gamxxy*gyzx + l_Gamyxy*gyzy + l_Gamzxy*gyzz) + 
+          gupzz * (l_Gamxxz*gxzy + l_Gamyxz*gyzy + l_Gamzxz*gzzy + l_Gamxyz*gxzx + l_Gamyyz*gyzx + l_Gamzyz*gzzx + l_Gamxxz*gyzx + l_Gamyxz*gyzy + l_Gamzxz*gyzz);
 
     // Rxz Correction
-    Rxz = HALF * ( - Rxz + 
+    l_Rxz = HALF * ( - l_Rxz + 
           l_gxx * dGamxz + l_gxy * dGamyz + l_gxz * dGamzz + 
           l_gxz * dGamxx + l_gyz * dGamyx + l_gzz * dGamzx + 
-          Gamxa * l_gxzx + Gamya * l_gyzx + Gamza * l_gzzx + 
-          Gamxa * l_gxxz + Gamya * l_gxyz + Gamza * l_gxzz) + 
-          gupxx * (l_Gamxxx*l_gxxz + l_Gamyxx*l_gxyz + l_Gamzxx*l_gxzz + l_Gamxxz*l_gxxx + l_Gamyxz*l_gxyx + l_Gamzxz*l_gxzx + l_Gamxxx*l_gxzx + l_Gamyxx*l_gxzy + l_Gamzxx*l_gxzz) + 
-          gupxy * (l_Gamxxx*l_gxyz + l_Gamyxx*l_gyyz + l_Gamzxx*l_gyzz + l_Gamxxz*l_gxyx + l_Gamyxz*l_gyyx + l_Gamzxz*l_gyzx + l_Gamxxy*l_gxzx + l_Gamyxy*l_gxzy + l_Gamzxy*l_gxzz + l_Gamxxy*l_gxxz + l_Gamyxy*l_gxyz + l_Gamzxy*l_gxzz + l_Gamxyz*l_gxxx + l_Gamyyz*l_gxyx + l_Gamzyz*l_gxzx + l_Gamxxx*l_gyzx + l_Gamyxx*l_gyzy + l_Gamzxx*l_gyzz) + 
-          gupxz * (l_Gamxxx*l_gxzz + l_Gamyxx*l_gyzz + l_Gamzxx*l_gzzz + l_Gamxxz*l_gxzx + l_Gamyxz*l_gyzx + l_Gamzxz*l_gzzx + l_Gamxxz*l_gxzx + l_Gamyxz*l_gxzy + l_Gamzxz*l_gxzz + l_Gamxxz*l_gxxz + l_Gamyxz*l_gxyz + l_Gamzxz*l_gxzz + l_Gamxzz*l_gxxx + l_Gamyzz*l_gxyx + l_Gamzzz*l_gxzx + l_Gamxxx*l_gzzx + l_Gamyxx*l_gzzy + l_Gamzxx*l_gzzz) + 
-          gupyy * (l_Gamxxy*l_gxyz + l_Gamyxy*l_gyyz + l_Gamzxy*l_gyzz + l_Gamxyz*l_gxyx + l_Gamyyz*l_gyyx + l_Gamzyz*l_gyzx + l_Gamxxy*l_gyzx + l_Gamyxy*l_gyzy + l_Gamzxy*l_gyzz) + 
-          gupyz * (l_Gamxxy*l_gxzz + l_Gamyxy*l_gyzz + l_Gamzxy*l_gzzz + l_Gamxyz*l_gxzx + l_Gamyyz*l_gyzx + l_Gamzyz*l_gzzx + l_Gamxxz*l_gyzx + l_Gamyxz*l_gyzy + l_Gamzxz*l_gyzz + l_Gamxxz*l_gxyz + l_Gamyxz*l_gyyz + l_Gamzxz*l_gyzz + l_Gamxzz*l_gxyx + l_Gamyzz*l_gyyx + l_Gamzzz*l_gyzx + l_Gamxxy*l_gzzx + l_Gamyxy*l_gzzy + l_Gamzxy*l_gzzz) + 
-          gupzz * (l_Gamxxz*l_gxzz + l_Gamyxz*l_gyzz + l_Gamzxz*l_gzzz + l_Gamxzz*l_gxzx + l_Gamyzz*l_gyzx + l_Gamzzz*l_gzzx + l_Gamxxz*l_gzzx + l_Gamyxz*l_gzzy + l_Gamzxz*l_gzzz);
+          Gamxa * gxzx + Gamya * gyzx + Gamza * gzzx + 
+          Gamxa * gxxz + Gamya * gxyz + Gamza * gxzz) + 
+          gupxx * (l_Gamxxx*gxxz + l_Gamyxx*gxyz + l_Gamzxx*gxzz + l_Gamxxz*gxxx + l_Gamyxz*gxyx + l_Gamzxz*gxzx + l_Gamxxx*gxzx + l_Gamyxx*gxzy + l_Gamzxx*gxzz) + 
+          gupxy * (l_Gamxxx*gxyz + l_Gamyxx*gyyz + l_Gamzxx*gyzz + l_Gamxxz*gxyx + l_Gamyxz*gyyx + l_Gamzxz*gyzx + l_Gamxxy*gxzx + l_Gamyxy*gxzy + l_Gamzxy*gxzz + l_Gamxxy*gxxz + l_Gamyxy*gxyz + l_Gamzxy*gxzz + l_Gamxyz*gxxx + l_Gamyyz*gxyx + l_Gamzyz*gxzx + l_Gamxxx*gyzx + l_Gamyxx*gyzy + l_Gamzxx*gyzz) + 
+          gupxz * (l_Gamxxx*gxzz + l_Gamyxx*gyzz + l_Gamzxx*gzzz + l_Gamxxz*gxzx + l_Gamyxz*gyzx + l_Gamzxz*gzzx + l_Gamxxz*gxzx + l_Gamyxz*gxzy + l_Gamzxz*gxzz + l_Gamxxz*gxxz + l_Gamyxz*gxyz + l_Gamzxz*gxzz + l_Gamxzz*gxxx + l_Gamyzz*gxyx + l_Gamzzz*gxzx + l_Gamxxx*gzzx + l_Gamyxx*gzzy + l_Gamzxx*gzzz) + 
+          gupyy * (l_Gamxxy*gxyz + l_Gamyxy*gyyz + l_Gamzxy*gyzz + l_Gamxyz*gxyx + l_Gamyyz*gyyx + l_Gamzyz*gyzx + l_Gamxxy*gyzx + l_Gamyxy*gyzy + l_Gamzxy*gyzz) + 
+          gupyz * (l_Gamxxy*gxzz + l_Gamyxy*gyzz + l_Gamzxy*gzzz + l_Gamxyz*gxzx + l_Gamyyz*gyzx + l_Gamzyz*gzzx + l_Gamxxz*gyzx + l_Gamyxz*gyzy + l_Gamzxz*gyzz + l_Gamxxz*gxyz + l_Gamyxz*gyyz + l_Gamzxz*gyzz + l_Gamxzz*gxyx + l_Gamyzz*gyyx + l_Gamzzz*gyzx + l_Gamxxy*gzzx + l_Gamyxy*gzzy + l_Gamzxy*gzzz) + 
+          gupzz * (l_Gamxxz*gxzz + l_Gamyxz*gyzz + l_Gamzxz*gzzz + l_Gamxzz*gxzx + l_Gamyzz*gyzx + l_Gamzzz*gzzx + l_Gamxxz*gzzx + l_Gamyxz*gzzy + l_Gamzxz*gzzz);
 
     // Ryz Correction
-    Ryz = HALF * ( - Ryz + 
+    l_Ryz = HALF * ( - l_Ryz + 
           l_gxy * dGamxz + l_gyy * dGamyz + l_gyz * dGamzz + 
           l_gxz * dGamxy + l_gyz * dGamyy + l_gzz * dGamzy + 
-          Gamxa * l_gxzy + Gamya * l_gyzy + Gamza * l_gzzy + 
-          Gamxa * l_gxyz + Gamya * l_gyyz + Gamza * l_gyzz) + 
-          gupxx * (l_Gamxxy*l_gxxz + l_Gamyxy*l_gxyz + l_Gamzxy*l_gxzz + l_Gamxxz*l_gxxy + l_Gamyxz*l_gxyy + l_Gamzxz*l_gxzy + l_Gamxxy*l_gxzx + l_Gamyxy*l_gxzy + l_Gamzxy*l_gxzz) + 
-          gupxy * (l_Gamxxy*l_gxyz + l_Gamyxy*l_gyyz + l_Gamzxy*l_gyzz + l_Gamxxz*l_gxyy + l_Gamyxz*l_gyyy + l_Gamzxz*l_gyzy + l_Gamxyy*l_gxzx + l_Gamyyy*l_gxzy + l_Gamzyy*l_gxzz + l_Gamxyy*l_gxxz + l_Gamyyy*l_gxyz + l_Gamzyy*l_gxzz + l_Gamxyz*l_gxxy + l_Gamyyz*l_gxyy + l_Gamzyz*l_gxzy + l_Gamxxy*l_gyzx + l_Gamyxy*l_gyzy + l_Gamzxy*l_gyzz) + 
-          gupxz * (l_Gamxxy*l_gxzz + l_Gamyxy*l_gyzz + l_Gamzxy*l_gzzz + l_Gamxxz*l_gxzy + l_Gamyxz*l_gyzy + l_Gamzxz*l_gzzy + l_Gamxyz*l_gxzx + l_Gamyyz*l_gxzy + l_Gamzyz*l_gxzz + l_Gamxyz*l_gxxz + l_Gamyyz*l_gxyz + l_Gamzyz*l_gxzz + l_Gamxzz*l_gxxy + l_Gamyzz*l_gxyy + l_Gamzzz*l_gxzy + l_Gamxxy*l_gzzx + l_Gamyxy*l_gzzy + l_Gamzxy*l_gzzz) + 
-          gupyy * (l_Gamxyy*l_gxyz + l_Gamyyy*l_gyyz + l_Gamzyy*l_gyzz + l_Gamxyz*l_gxyy + l_Gamyyz*l_gyyy + l_Gamzyz*l_gyzy + l_Gamxyy*l_gyzx + l_Gamyyy*l_gyzy + l_Gamzyy*l_gyzz) + 
-          gupyz * (l_Gamxyy*l_gxzz + l_Gamyyy*l_gyzz + l_Gamzyy*l_gzzz + l_Gamxyz*l_gxzy + l_Gamyyz*l_gyzy + l_Gamzyz*l_gzzy + l_Gamxyz*l_gyzx + l_Gamyyz*l_gyzy + l_Gamzyz*l_gyzz + l_Gamxyz*l_gxyz + l_Gamyyz*l_gyyz + l_Gamzyz*l_gyzz + l_Gamxzz*l_gxyy + l_Gamyzz*l_gyyy + l_Gamzzz*l_gyzy + l_Gamxyy*l_gzzx + l_Gamyyy*l_gzzy + l_Gamzyy*l_gzzz) + 
-          gupzz * (l_Gamxyz*l_gxzz + l_Gamyyz*l_gyzz + l_Gamzyz*l_gzzz + l_Gamxzz*l_gxzy + l_Gamyzz*l_gyzy + l_Gamzzz*l_gzzy + l_Gamxyz*l_gzzx + l_Gamyyz*l_gzzy + l_Gamzyz*l_gzzz);
+          Gamxa * gxzy + Gamya * gyzy + Gamza * gzzy + 
+          Gamxa * gxyz + Gamya * gyyz + Gamza * gyzz) + 
+          gupxx * (l_Gamxxy*gxxz + l_Gamyxy*gxyz + l_Gamzxy*gxzz + l_Gamxxz*gxxy + l_Gamyxz*gxyy + l_Gamzxz*gxzy + l_Gamxxy*gxzx + l_Gamyxy*gxzy + l_Gamzxy*gxzz) + 
+          gupxy * (l_Gamxxy*gxyz + l_Gamyxy*gyyz + l_Gamzxy*gyzz + l_Gamxxz*gxyy + l_Gamyxz*gyyy + l_Gamzxz*gyzy + l_Gamxyy*gxzx + l_Gamyyy*gxzy + l_Gamzyy*gxzz + l_Gamxyy*gxxz + l_Gamyyy*gxyz + l_Gamzyy*gxzz + l_Gamxyz*gxxy + l_Gamyyz*gxyy + l_Gamzyz*gxzy + l_Gamxxy*gyzx + l_Gamyxy*gyzy + l_Gamzxy*gyzz) + 
+          gupxz * (l_Gamxxy*gxzz + l_Gamyxy*gyzz + l_Gamzxy*gzzz + l_Gamxxz*gxzy + l_Gamyxz*gyzy + l_Gamzxz*gzzy + l_Gamxyz*gxzx + l_Gamyyz*gxzy + l_Gamzyz*gxzz + l_Gamxyz*gxxz + l_Gamyyz*gxyz + l_Gamzyz*gxzz + l_Gamxzz*gxxy + l_Gamyzz*gxyy + l_Gamzzz*gxzy + l_Gamxxy*gzzx + l_Gamyxy*gzzy + l_Gamzxy*gzzz) + 
+          gupyy * (l_Gamxyy*gxyz + l_Gamyyy*gyyz + l_Gamzyy*gyzz + l_Gamxyz*gxyy + l_Gamyyz*gyyy + l_Gamzyz*gyzy + l_Gamxyy*gyzx + l_Gamyyy*gyzy + l_Gamzyy*gyzz) + 
+          gupyz * (l_Gamxyy*gxzz + l_Gamyyy*gyzz + l_Gamzyy*gzzz + l_Gamxyz*gxzy + l_Gamyyz*gyzy + l_Gamzyz*gzzy + l_Gamxyz*gyzx + l_Gamyyz*gyzy + l_Gamzyz*gyzz + l_Gamxyz*gxyz + l_Gamyyz*gyyz + l_Gamzyz*gyzz + l_Gamxzz*gxyy + l_Gamyzz*gyyy + l_Gamzzz*gyzy + l_Gamxyy*gzzx + l_Gamyyy*gzzy + l_Gamzyy*gzzz) + 
+          gupzz * (l_Gamxyz*gxzz + l_Gamyyz*gyzz + l_Gamzyz*gzzz + l_Gamxzz*gxzy + l_Gamyzz*gyzy + l_Gamzzz*gzzy + l_Gamxyz*gzzx + l_Gamyyz*gzzy + l_Gamzyz*gzzz);
 
     // ==========================================
     // Step 6: Chi 二阶导数与 Ricci 修正
@@ -653,27 +573,27 @@ __global__ void bssn_rhs_core_kernel(
     d_fdderivs_point(dims, chi, &fxx, &fxy, &fxz, &fyy, &fyz, &fzz, X, Y, Z, SYM, SYM, SYM, symmetry, lev, i, j, k);
     
     // 协变导数修正
-    fxx -= l_Gamxxx * val_chix + l_Gamyxx * val_chiy + l_Gamzxx * val_chiz;
-    fxy -= l_Gamxxy * val_chix + l_Gamyxy * val_chiy + l_Gamzxy * val_chiz;
-    fxz -= l_Gamxxz * val_chix + l_Gamyxz * val_chiy + l_Gamzxz * val_chiz;
-    fyy -= l_Gamxyy * val_chix + l_Gamyyy * val_chiy + l_Gamzyy * val_chiz;
-    fyz -= l_Gamxyz * val_chix + l_Gamyyz * val_chiy + l_Gamzyz * val_chiz;
-    fzz -= l_Gamxzz * val_chix + l_Gamyzz * val_chiy + l_Gamzzz * val_chiz;
+    fxx -= l_Gamxxx * chix + l_Gamyxx * chiy + l_Gamzxx * chiz;
+    fxy -= l_Gamxxy * chix + l_Gamyxy * chiy + l_Gamzxy * chiz;
+    fxz -= l_Gamxxz * chix + l_Gamyxz * chiy + l_Gamzxz * chiz;
+    fyy -= l_Gamxyy * chix + l_Gamyyy * chiy + l_Gamzyy * chiz;
+    fyz -= l_Gamxyz * chix + l_Gamyyz * chiy + l_Gamzyz * chiz;
+    fzz -= l_Gamxzz * chix + l_Gamyzz * chiy + l_Gamzzz * chiz;
 
-    double f_scalar = gupxx * (fxx - F3o2/chin1 * val_chix * val_chix) + 
-                      gupyy * (fyy - F3o2/chin1 * val_chiy * val_chiy) + 
-                      gupzz * (fzz - F3o2/chin1 * val_chiz * val_chiz) + 
-                      TWO * (gupxy * (fxy - F3o2/chin1 * val_chix * val_chiy) + 
-                             gupxz * (fxz - F3o2/chin1 * val_chix * val_chiz) + 
-                             gupyz * (fyz - F3o2/chin1 * val_chiy * val_chiz));
+    double f_scalar = gupxx * (fxx - F3o2/chin1 * chix * chix) + 
+                      gupyy * (fyy - F3o2/chin1 * chiy * chiy) + 
+                      gupzz * (fzz - F3o2/chin1 * chiz * chiz) + 
+                      TWO * (gupxy * (fxy - F3o2/chin1 * chix * chiy) + 
+                             gupxz * (fxz - F3o2/chin1 * chix * chiz) + 
+                             gupyz * (fyz - F3o2/chin1 * chiy * chiz));
     
     // Add to Ricci
-    Rxx += (fxx - val_chix*val_chix/chin1/TWO + l_gxx * f_scalar)/chin1/TWO;
-    Ryy += (fyy - val_chiy*val_chiy/chin1/TWO + l_gyy * f_scalar)/chin1/TWO;
-    Rzz += (fzz - val_chiz*val_chiz/chin1/TWO + l_gzz * f_scalar)/chin1/TWO;
-    Rxy += (fxy - val_chix*val_chiy/chin1/TWO + l_gxy * f_scalar)/chin1/TWO;
-    Rxz += (fxz - val_chix*val_chiz/chin1/TWO + l_gxz * f_scalar)/chin1/TWO;
-    Ryz += (fyz - val_chiy*val_chiz/chin1/TWO + l_gyz * f_scalar)/chin1/TWO;
+    l_Rxx += (fxx - chix*chix/chin1/TWO + l_gxx * f_scalar)/chin1/TWO;
+    l_Ryy += (fyy - chiy*chiy/chin1/TWO + l_gyy * f_scalar)/chin1/TWO;
+    l_Rzz += (fzz - chiz*chiz/chin1/TWO + l_gzz * f_scalar)/chin1/TWO;
+    l_Rxy += (fxy - chix*chiy/chin1/TWO + l_gxy * f_scalar)/chin1/TWO;
+    l_Rxz += (fxz - chix*chiz/chin1/TWO + l_gxz * f_scalar)/chin1/TWO;
+    l_Ryz += (fyz - chiy*chiz/chin1/TWO + l_gyz * f_scalar)/chin1/TWO;
 
     // ==========================================
     // Step 7: Lapse 二阶导数 & trK_rhs
@@ -681,30 +601,30 @@ __global__ void bssn_rhs_core_kernel(
     d_fdderivs_point(dims, Lap, &fxx, &fxy, &fxz, &fyy, &fyz, &fzz, X, Y, Z, SYM, SYM, SYM, symmetry, lev, i, j, k);
 
     // 计算物理连接系数 (暂存到 Gam 数组中以节省寄存器，最后会写回 Global)
-    double gx_phy = (gupxx * val_chix + gupxy * val_chiy + gupxz * val_chiz)/chin1;
-    double gy_phy = (gupxy * val_chix + gupyy * val_chiy + gupyz * val_chiz)/chin1;
-    double gz_phy = (gupxz * val_chix + gupyz * val_chiy + gupzz * val_chiz)/chin1;
+    double gx_phy = (gupxx * chix + gupxy * chiy + gupxz * chiz)/chin1;
+    double gy_phy = (gupxy * chix + gupyy * chiy + gupyz * chiz)/chin1;
+    double gz_phy = (gupxz * chix + gupyz * chiy + gupzz * chiz)/chin1;
     
     // 更新为物理连接系数 (对应 Fortran 241-258)
-    l_Gamxxx -= ((val_chix + val_chix)/chin1 - l_gxx * gx_phy)*HALF; // Gamxxx[idx] = l_Gamxxx;
-    l_Gamyxx -= (                            - l_gxx * gy_phy)*HALF; // Gamyxx[idx] = l_Gamyxx;
-    l_Gamzxx -= (                            - l_gxx * gz_phy)*HALF; // Gamzxx[idx] = l_Gamzxx;
-    l_Gamxyy -= (                            - l_gyy * gx_phy)*HALF; // Gamxyy[idx] = l_Gamxyy;
-    l_Gamyyy -= ((val_chiy + val_chiy)/chin1 - l_gyy * gy_phy)*HALF; // Gamyyy[idx] = l_Gamyyy;
-    l_Gamzyy -= (                            - l_gyy * gz_phy)*HALF; // Gamzyy[idx] = l_Gamzyy;
-    l_Gamxzz -= (                            - l_gzz * gx_phy)*HALF; // Gamxzz[idx] = l_Gamxzz;
-    l_Gamyzz -= (                            - l_gzz * gy_phy)*HALF; // Gamyzz[idx] = l_Gamyzz;
-    l_Gamzzz -= ((val_chiz + val_chiz)/chin1 - l_gzz * gz_phy)*HALF; // Gamzzz[idx] = l_Gamzzz;
+    l_Gamxxx -= ((chix + chix)/chin1 - l_gxx * gx_phy)*HALF; // l_Gamxxx = l_Gamxxx;
+    l_Gamyxx -= (                            - l_gxx * gy_phy)*HALF; // l_Gamyxx = l_Gamyxx;
+    l_Gamzxx -= (                            - l_gxx * gz_phy)*HALF; // l_Gamzxx = l_Gamzxx;
+    l_Gamxyy -= (                            - l_gyy * gx_phy)*HALF; // l_Gamxyy = l_Gamxyy;
+    l_Gamyyy -= ((chiy + chiy)/chin1 - l_gyy * gy_phy)*HALF; // l_Gamyyy = l_Gamyyy;
+    l_Gamzyy -= (                            - l_gyy * gz_phy)*HALF; // l_Gamzyy = l_Gamzyy;
+    l_Gamxzz -= (                            - l_gzz * gx_phy)*HALF; // l_Gamxzz = l_Gamxzz;
+    l_Gamyzz -= (                            - l_gzz * gy_phy)*HALF; // l_Gamyzz = l_Gamyzz;
+    l_Gamzzz -= ((chiz + chiz)/chin1 - l_gzz * gz_phy)*HALF; // l_Gamzzz = l_Gamzzz;
 
-    l_Gamxxy -= (val_chiy/chin1 - l_gxy * gx_phy)*HALF; // Gamxxy[idx] = l_Gamxxy;
-    l_Gamyxy -= (val_chix/chin1 - l_gxy * gy_phy)*HALF; // Gamyxy[idx] = l_Gamyxy;
-    l_Gamzxy -= (                 - l_gxy * gz_phy)*HALF; // Gamzxy[idx] = l_Gamzxy;
-    l_Gamxxz -= (val_chiz/chin1 - l_gxz * gx_phy)*HALF; // Gamxxz[idx] = l_Gamxxz;
-    l_Gamyxz -= (                 - l_gxz * gy_phy)*HALF; // Gamyxz[idx] = l_Gamyxz;
-    l_Gamzxz -= (val_chix/chin1 - l_gxz * gz_phy)*HALF; // Gamzxz[idx] = l_Gamzxz;
-    l_Gamxyz -= (                 - l_gyz * gx_phy)*HALF; // Gamxyz[idx] = l_Gamxyz;
-    l_Gamyyz -= (val_chiz/chin1 - l_gyz * gy_phy)*HALF; // Gamyyz[idx] = l_Gamyyz;
-    l_Gamzyz -= (val_chiy/chin1 - l_gyz * gz_phy)*HALF; // Gamzyz[idx] = l_Gamzyz;
+    l_Gamxxy -= (chiy/chin1 - l_gxy * gx_phy)*HALF; // l_Gamxxy = l_Gamxxy;
+    l_Gamyxy -= (chix/chin1 - l_gxy * gy_phy)*HALF; // l_Gamyxy = l_Gamyxy;
+    l_Gamzxy -= (                 - l_gxy * gz_phy)*HALF; // l_Gamzxy = l_Gamzxy;
+    l_Gamxxz -= (chiz/chin1 - l_gxz * gx_phy)*HALF; // l_Gamxxz = l_Gamxxz;
+    l_Gamyxz -= (                 - l_gxz * gy_phy)*HALF; // l_Gamyxz = l_Gamyxz;
+    l_Gamzxz -= (chix/chin1 - l_gxz * gz_phy)*HALF; // l_Gamzxz = l_Gamzxz;
+    l_Gamxyz -= (                 - l_gyz * gx_phy)*HALF; // l_Gamxyz = l_Gamxyz;
+    l_Gamyyz -= (chiz/chin1 - l_gyz * gy_phy)*HALF; // l_Gamyyz = l_Gamyyz;
+    l_Gamzyz -= (chiy/chin1 - l_gyz * gz_phy)*HALF; // l_Gamzyz = l_Gamzyz;
 
     // Lapse 的协变导数 D_i D_j alpha
     fxx = fxx - l_Gamxxx*Lapx - l_Gamyxx*Lapy - l_Gamzxx*Lapz;
@@ -735,12 +655,12 @@ __global__ void bssn_rhs_core_kernel(
     double f_trace = -F1o3 * (trK_rhs_val + alpn1/chin1 * f);
 
     // 计算 Aij 源项
-    double src_xx = alpn1 * (Rxx - EIGHT*PI*Sxx[idx]) - fxx; // fxx is D_i D_j Lap
-    double src_yy = alpn1 * (Ryy - EIGHT*PI*Syy[idx]) - fyy;
-    double src_zz = alpn1 * (Rzz - EIGHT*PI*Szz[idx]) - fzz;
-    double src_xy = alpn1 * (Rxy - EIGHT*PI*Sxy[idx]) - fxy;
-    double src_xz = alpn1 * (Rxz - EIGHT*PI*Sxz[idx]) - fxz;
-    double src_yz = alpn1 * (Ryz - EIGHT*PI*Syz[idx]) - fyz;
+    double src_xx = alpn1 * (l_Rxx - EIGHT*PI*Sxx[idx]) - fxx; // fxx is D_i D_j Lap
+    double src_yy = alpn1 * (l_Ryy - EIGHT*PI*Syy[idx]) - fyy;
+    double src_zz = alpn1 * (l_Rzz - EIGHT*PI*Szz[idx]) - fzz;
+    double src_xy = alpn1 * (l_Rxy - EIGHT*PI*Sxy[idx]) - fxy;
+    double src_xz = alpn1 * (l_Rxz - EIGHT*PI*Sxz[idx]) - fxz;
+    double src_yz = alpn1 * (l_Ryz - EIGHT*PI*Syz[idx]) - fyz;
 
     double Axx_rhs_val = src_xx - l_gxx * f_trace;
     double Ayy_rhs_val = src_yy - l_gyy * f_trace;
@@ -758,8 +678,6 @@ __global__ void bssn_rhs_core_kernel(
     Ayz_rhs[idx] = chin1 * Ayz_rhs_val + alpn1 * (val_trK * l_Ayz - TWO * term_yz) + l_Axy * betaxz + l_Ayy * betayz + l_Axz * betaxy + l_Azz * betazy - l_Ayz * betaxx + F1o3 * l_Ayz * div_beta;
     Axz_rhs[idx] = chin1 * Axz_rhs_val + alpn1 * (val_trK * l_Axz - TWO * term_xz) + l_Axx * betaxz + l_Axy * betayz + l_Ayz * betayx + l_Azz * betazx - l_Axz * betayy + F1o3 * l_Axz * div_beta;
 
-    S = chin1 * (gupxx * Sxx[idx] + gupyy * Syy[idx] + gupzz * Szz[idx] + TWO * (gupxy * Sxy[idx] + gupxz * Sxz[idx] + gupyz * Syz[idx]));
-
     trK_rhs[idx] = -chin1 * trK_rhs_val + alpn1 * (F1o3 * val_trK * val_trK + trA2 + FOUR * PI * (rho[idx] + S));
 
     // Gauge vars RHS
@@ -776,61 +694,21 @@ __global__ void bssn_rhs_core_kernel(
     Gamy_rhs[idx] = val_Gamy_rhs;
     Gamz_rhs[idx] = val_Gamz_rhs;
 
-    Gamxxx[idx] = l_Gamxxx; Gamxxy[idx] = l_Gamxxy; Gamxxz[idx] = l_Gamxxz;
-    Gamxyy[idx] = l_Gamxyy; Gamxyz[idx] = l_Gamxyz; Gamxzz[idx] = l_Gamxzz;
+    // l_Gamxxx = l_Gamxxx; l_Gamxxy = l_Gamxxy; l_Gamxxz = l_Gamxxz;
+    // l_Gamxyy = l_Gamxyy; l_Gamxyz = l_Gamxyz; l_Gamxzz = l_Gamxzz;
 
-    Gamyxx[idx] = l_Gamyxx; Gamyxy[idx] = l_Gamyxy; Gamyxz[idx] = l_Gamyxz;
-    Gamyyy[idx] = l_Gamyyy; Gamyyz[idx] = l_Gamyyz; Gamyzz[idx] = l_Gamyzz;
+    // l_Gamyxx = l_Gamyxx; l_Gamyxy = l_Gamyxy; l_Gamyxz = l_Gamyxz;
+    // l_Gamyyy = l_Gamyyy; l_Gamyyz = l_Gamyyz; l_Gamyzz = l_Gamyzz;
 
-    Gamzxx[idx] = l_Gamzxx; Gamzxy[idx] = l_Gamzxy; Gamzxz[idx] = l_Gamzxz;
-    Gamzyy[idx] = l_Gamzyy; Gamzyz[idx] = l_Gamzyz; Gamzzz[idx] = l_Gamzzz;
+    // l_Gamzxx = l_Gamzxx; l_Gamzxy = l_Gamzxy; l_Gamzxz = l_Gamzxz;
+    // l_Gamzyy = l_Gamzyy; l_Gamzyz = l_Gamzyz; l_Gamzzz = l_Gamzzz;
 
-    Rxx_out[idx] = Rxx; Ryy_out[idx] = Ryy; Rzz_out[idx] = Rzz;
-    Rxy_out[idx] = Rxy; Rxz_out[idx] = Rxz; Ryz_out[idx] = Ryz;
-}
+    // Rxx[idx] = l_Rxx; Ryy[idx] = l_Ryy; Rzz[idx] = l_Rzz;
+    // Rxy[idx] = l_Rxy; Rxz[idx] = l_Rxz; Ryz[idx] = l_Ryz;
 
-
-
-// ==========================================
-// Kernel 3: 平流 (Advection) 与 耗散 (Dissipation)
-// ==========================================
-__global__ void bssn_advection_dissipation_kernel(
-    // 维度与参数
-    const int ex0, const int ex1, const int ex2,
-    const int symmetry, const int lev,
-    const double eps,
-    // 坐标网格
-    const double* __restrict__ X, const double* __restrict__ Y, const double* __restrict__ Z,
-    // Shift Vector (用于平流速度场)
-    const double* __restrict__ betax, const double* __restrict__ betay, const double* __restrict__ betaz,
-    // 演化变量输入 (用于计算微分)
-    const double* __restrict__ dxx, const double* __restrict__ gxy, const double* __restrict__ gxz,
-    const double* __restrict__ dyy, const double* __restrict__ gyz, const double* __restrict__ dzz,
-    const double* __restrict__ Axx, const double* __restrict__ Axy, const double* __restrict__ Axz,
-    const double* __restrict__ Ayy, const double* __restrict__ Ayz, const double* __restrict__ Azz,
-    const double* __restrict__ chi, const double* __restrict__ trK,
-    const double* __restrict__ Gamx, const double* __restrict__ Gamy, const double* __restrict__ Gamz,
-    const double* __restrict__ Lap,
-    const double* __restrict__ dtSfx, const double* __restrict__ dtSfy, const double* __restrict__ dtSfz,
-    // RHS 输出变量 (累加更新: In/Out)
-    double* __restrict__ gxx_rhs, double* __restrict__ gxy_rhs, double* __restrict__ gxz_rhs,
-    double* __restrict__ gyy_rhs, double* __restrict__ gyz_rhs, double* __restrict__ gzz_rhs,
-    double* __restrict__ Axx_rhs, double* __restrict__ Axy_rhs, double* __restrict__ Axz_rhs,
-    double* __restrict__ Ayy_rhs, double* __restrict__ Ayz_rhs, double* __restrict__ Azz_rhs,
-    double* __restrict__ chi_rhs, double* __restrict__ trK_rhs,
-    double* __restrict__ Gamx_rhs, double* __restrict__ Gamy_rhs, double* __restrict__ Gamz_rhs,
-    double* __restrict__ Lap_rhs,
-    double* __restrict__ betax_rhs, double* __restrict__ betay_rhs, double* __restrict__ betaz_rhs,
-    double* __restrict__ dtSfx_rhs, double* __restrict__ dtSfy_rhs, double* __restrict__ dtSfz_rhs
-) {
-    int i = blockIdx.x * blockDim.x + threadIdx.x;
-    int j = blockIdx.y * blockDim.y + threadIdx.y;
-    int k = blockIdx.z * blockDim.z + threadIdx.z;
-
-    if (i >= ex0 || j >= ex1 || k >= ex2) return;
-
-    int idx = IDX3D(i, j, k, ex0, ex1, ex2);
-    int dims[3] = {ex0, ex1, ex2};
+    // ------------------------------------------------------------------------------------
+    // bssn_advection_dissipation_kernel
+    // ------------------------------------------------------------------------------------
 
     // 准备平流所需的速度场 (Shift)
     // lopsided 需要传入 shift 的指针来判断上风方向
@@ -966,67 +844,25 @@ __global__ void bssn_advection_dissipation_kernel(
     // dtSfz (SSA)
     dtSfz_rhs[idx] += d_lopsided_point(dims, dtSfz, dtSfz_rhs, betax, betay, betaz, X, Y, Z, symmetry, SYM, SYM, ANTI, i, j, k);
     if (eps > 0.0) dtSfz_rhs[idx] += d_kodis_point(dims, dtSfz, X, Y, Z, SYM, SYM, ANTI, symmetry, eps, i, j, k);
-}
 
-// ==========================================
-// Kernel 4: 约束求解 (Constraints)
-// ==========================================
-__global__ void bssn_constraints_kernel(
-    // 维度与参数
-    const int ex0, const int ex1, const int ex2,
-    const int symmetry, const int lev,
-    // 坐标
-    const double* __restrict__ X, const double* __restrict__ Y, const double* __restrict__ Z,
-    // 输入变量
-    const double* __restrict__ chi, const double* __restrict__ trK,
-    const double* __restrict__ Axx, const double* __restrict__ Axy, const double* __restrict__ Axz,
-    const double* __restrict__ Ayy, const double* __restrict__ Ayz, const double* __restrict__ Azz,
-    const double* __restrict__ rho, 
-    const double* __restrict__ Sx, const double* __restrict__ Sy, const double* __restrict__ Sz,
-    // 输入：逆度规 (需从 Kernel 1 输出中读取)
-    const double* __restrict__ gupxx_in, const double* __restrict__ gupxy_in, const double* __restrict__ gupxz_in,
-    const double* __restrict__ gupyy_in, const double* __restrict__ gupyz_in, const double* __restrict__ gupzz_in,
-    // 输入：Ricci Tensor (需从 Kernel 2 输出中读取，或者如果未保存则需重算，这里假设已保存)
-    // Fortran 代码中 Rxx 等是在 compute_rhs_bssn 过程中计算并被后续使用的。
-    const double* __restrict__ Rxx_in, const double* __restrict__ Rxy_in, const double* __restrict__ Rxz_in,
-    const double* __restrict__ Ryy_in, const double* __restrict__ Ryz_in, const double* __restrict__ Rzz_in,
-    // 输入：连接系数 (物理 Gam, 需从 Kernel 2 输出或 Kernel 1 输出读取)
-    const double* __restrict__ Gamxxx, const double* __restrict__ Gamxxy, const double* __restrict__ Gamxxz,
-    const double* __restrict__ Gamxyy, const double* __restrict__ Gamxyz, const double* __restrict__ Gamxzz,
-    const double* __restrict__ Gamyxx, const double* __restrict__ Gamyxy, const double* __restrict__ Gamyxz,
-    const double* __restrict__ Gamyyy, const double* __restrict__ Gamyyz, const double* __restrict__ Gamyzz,
-    const double* __restrict__ Gamzxx, const double* __restrict__ Gamzxy, const double* __restrict__ Gamzxz,
-    const double* __restrict__ Gamzyy, const double* __restrict__ Gamzyz, const double* __restrict__ Gamzzz,
-    // 输入：Chi 的导数 (从 Kernel 1 读取)
-    const double* __restrict__ chix_in, const double* __restrict__ chiy_in, const double* __restrict__ chiz_in,
-    // 输出：约束违反值
-    double* __restrict__ ham_Res, 
-    double* __restrict__ movx_Res, double* __restrict__ movy_Res, double* __restrict__ movz_Res
-) {
-    int i = blockIdx.x * blockDim.x + threadIdx.x;
-    int j = blockIdx.y * blockDim.y + threadIdx.y;
-    int k = blockIdx.z * blockDim.z + threadIdx.z;
+    // ------------------------------------------------------------------------------------
+    // bssn_constraints_kernel
+    // ------------------------------------------------------------------------------------
 
-    if (i >= ex0 || j >= ex1 || k >= ex2) return;
-
-    int idx = IDX3D(i, j, k, ex0, ex1, ex2);
-    int dims[3] = {ex0, ex1, ex2};
+    if (co != 0) return;
 
     // ==========================================
     // 0. 加载数据
     // ==========================================
-    double val_chi = chi[idx];
-    double chin1 = val_chi + ONE;
-    double val_trK = trK[idx];
 
-    double gupxx = gupxx_in[idx]; double gupxy = gupxy_in[idx]; double gupxz = gupxz_in[idx];
-    double gupyy = gupyy_in[idx]; double gupyz = gupyz_in[idx]; double gupzz = gupzz_in[idx];
+    // double gupxx = gupxx_in[idx]; double gupxy = gupxy_in[idx]; double gupxz = gupxz_in[idx];
+    // double gupyy = gupyy_in[idx]; double gupyz = gupyz_in[idx]; double gupzz = gupzz_in[idx];
 
-    double l_Axx = Axx[idx]; double l_Axy = Axy[idx]; double l_Axz = Axz[idx];
-    double l_Ayy = Ayy[idx]; double l_Ayz = Ayz[idx]; double l_Azz = Azz[idx];
+    // double l_Axx = Axx[idx]; double l_Axy = Axy[idx]; double l_Axz = Axz[idx];
+    // double l_Ayy = Ayy[idx]; double l_Ayz = Ayz[idx]; double l_Azz = Azz[idx];
 
-    double l_Rxx = Rxx_in[idx]; double l_Rxy = Rxy_in[idx]; double l_Rxz = Rxz_in[idx];
-    double l_Ryy = Ryy_in[idx]; double l_Ryz = Ryz_in[idx]; double l_Rzz = Rzz_in[idx];
+    // double l_Rxx = Rxx_in[idx]; double l_Rxy = Rxy_in[idx]; double l_Rxz = Rxz_in[idx];
+    // double l_Ryy = Ryy_in[idx]; double l_Ryz = Ryz_in[idx]; double l_Rzz = Rzz_in[idx];
 
     // ==========================================
     // 1. Hamiltonian Constraint
@@ -1038,15 +874,15 @@ __global__ void bssn_constraints_kernel(
     double ham_val = gupxx * l_Rxx + gupyy * l_Ryy + gupzz * l_Rzz + 
                TWO * (gupxy * l_Rxy + gupxz * l_Rxz + gupyz * l_Ryz);
 
-    double term_xx = gupxx * l_Axx * l_Axx + gupyy * l_Axy * l_Axy + gupzz * l_Axz * l_Axz + TWO * (gupxy * l_Axx * l_Axy + gupxz * l_Axx * l_Axz + gupyz * l_Axy * l_Axz);
-    double term_yy = gupxx * l_Axy * l_Axy + gupyy * l_Ayy * l_Ayy + gupzz * l_Ayz * l_Ayz + TWO * (gupxy * l_Axy * l_Ayy + gupxz * l_Axy * l_Ayz + gupyz * l_Ayy * l_Ayz);
-    double term_zz = gupxx * l_Axz * l_Axz + gupyy * l_Ayz * l_Ayz + gupzz * l_Azz * l_Azz + TWO * (gupxy * l_Axz * l_Ayz + gupxz * l_Axz * l_Azz + gupyz * l_Ayz * l_Azz);
+    // double term_xx = gupxx * l_Axx * l_Axx + gupyy * l_Axy * l_Axy + gupzz * l_Axz * l_Axz + TWO * (gupxy * l_Axx * l_Axy + gupxz * l_Axx * l_Axz + gupyz * l_Axy * l_Axz);
+    // double term_yy = gupxx * l_Axy * l_Axy + gupyy * l_Ayy * l_Ayy + gupzz * l_Ayz * l_Ayz + TWO * (gupxy * l_Axy * l_Ayy + gupxz * l_Axy * l_Ayz + gupyz * l_Ayy * l_Ayz);
+    // double term_zz = gupxx * l_Axz * l_Axz + gupyy * l_Ayz * l_Ayz + gupzz * l_Azz * l_Azz + TWO * (gupxy * l_Axz * l_Ayz + gupxz * l_Axz * l_Azz + gupyz * l_Ayz * l_Azz);
     
-    double term_xy = gupxx * l_Axx * l_Axy + gupyy * l_Axy * l_Ayy + gupzz * l_Axz * l_Ayz + gupxy * (l_Axx * l_Ayy + l_Axy * l_Axy) + gupxz * (l_Axx * l_Ayz + l_Axz * l_Axy) + gupyz * (l_Axy * l_Ayz + l_Axz * l_Ayy);
-    double term_xz = gupxx * l_Axx * l_Axz + gupyy * l_Axy * l_Ayz + gupzz * l_Axz * l_Azz + gupxy * (l_Axx * l_Ayz + l_Axy * l_Axz) + gupxz * (l_Axx * l_Azz + l_Axz * l_Axz) + gupyz * (l_Axy * l_Azz + l_Axz * l_Ayz);
-    double term_yz = gupxx * l_Axy * l_Axz + gupyy * l_Ayy * l_Ayz + gupzz * l_Ayz * l_Azz + gupxy * (l_Axy * l_Ayz + l_Ayy * l_Axz) + gupxz * (l_Axy * l_Azz + l_Ayz * l_Axz) + gupyz * (l_Ayy * l_Azz + l_Ayz * l_Ayz);
+    // double term_xy = gupxx * l_Axx * l_Axy + gupyy * l_Axy * l_Ayy + gupzz * l_Axz * l_Ayz + gupxy * (l_Axx * l_Ayy + l_Axy * l_Axy) + gupxz * (l_Axx * l_Ayz + l_Axz * l_Axy) + gupyz * (l_Axy * l_Ayz + l_Axz * l_Ayy);
+    // double term_xz = gupxx * l_Axx * l_Axz + gupyy * l_Axy * l_Ayz + gupzz * l_Axz * l_Azz + gupxy * (l_Axx * l_Ayz + l_Axy * l_Axz) + gupxz * (l_Axx * l_Azz + l_Axz * l_Axz) + gupyz * (l_Axy * l_Azz + l_Axz * l_Ayz);
+    // double term_yz = gupxx * l_Axy * l_Axz + gupyy * l_Ayy * l_Ayz + gupzz * l_Ayz * l_Azz + gupxy * (l_Axy * l_Ayz + l_Ayy * l_Axz) + gupxz * (l_Axy * l_Azz + l_Ayz * l_Axz) + gupyz * (l_Ayy * l_Azz + l_Ayz * l_Ayz);
 
-    double trA2 = gupxx * term_xx + gupyy * term_yy + gupzz * term_zz + TWO * (gupxy * term_xy + gupxz * term_xz + gupyz * term_yz);
+    // double trA2 = gupxx * term_xx + gupyy * term_yy + gupzz * term_zz + TWO * (gupxy * term_xy + gupxz * term_xz + gupyz * term_yz);
 
     // Final Hamiltonian Calculation
     // Fortran Line 375
@@ -1057,15 +893,15 @@ __global__ void bssn_constraints_kernel(
     // mov_Res_j = D_k A^k_j - 2/3 d_j trK - 8 PI S_j
 
     // 需要 trK 的导数
-    double Kx, Ky, Kz;
+    // double Kx, Ky, Kz;
     d_fderivs_point(dims, trK, &Kx, &Ky, &Kz, X, Y, Z, SYM, SYM, SYM, symmetry, lev, i, j, k);
 
     // 需要 Aij 的导数 (Fortran calls fderivs 6 times)
     // 为了节省寄存器和避免创建大数组，我们分量计算并直接应用 Covariant 修正
     
-    double val_chix = chix_in[idx];
-    double val_chiy = chiy_in[idx];
-    double val_chiz = chiz_in[idx];
+    // double chix = chix_in[idx];
+    // double chiy = chiy_in[idx];
+    // double chiz = chiz_in[idx];
 
     // --- Compute D_i A_jk stored in variables named like `dA_xxx` (meaning D_x A_xx) ---
     
@@ -1084,42 +920,42 @@ __global__ void bssn_constraints_kernel(
     d_fderivs_point(dims, Azz, &d_Azz_x, &d_Azz_y, &d_Azz_z, X, Y, Z, SYM, SYM, SYM, symmetry, lev, i, j, k);
 
 
-    double DA_xxx = d_Axx_x - (Gamxxx[idx] * l_Axx + Gamyxx[idx] * l_Axy + Gamzxx[idx] * l_Axz 
-                             + Gamxxx[idx] * l_Axx + Gamyxx[idx] * l_Axy + Gamzxx[idx] * l_Axz) - val_chix * l_Axx / chin1;
-    double DA_xyx = d_Axy_x - (Gamxxy[idx] * l_Axx + Gamyxy[idx] * l_Axy + Gamzxy[idx] * l_Axz
-                             + Gamxxx[idx] * l_Axy + Gamyxx[idx] * l_Ayy + Gamzxx[idx] * l_Ayz) - val_chix * l_Axy / chin1;
-    double DA_xzx = d_Axz_x - (Gamxxz[idx] * l_Axx + Gamyxz[idx] * l_Axy + Gamzxz[idx] * l_Axz
-                             + Gamxxx[idx] * l_Axz + Gamyxx[idx] * l_Ayz + Gamzxx[idx] * l_Azz) - val_chix * l_Axz / chin1;
-    double DA_yyx = d_Ayy_x - (Gamxxy[idx] * l_Axy + Gamyxy[idx] * l_Ayy + Gamzxy[idx] * l_Ayz
-                             + Gamxxy[idx] * l_Axy + Gamyxy[idx] * l_Ayy + Gamzxy[idx] * l_Ayz) - val_chix * l_Ayy / chin1;
-    double DA_yzx = d_Ayz_x - (Gamxxz[idx] * l_Axy + Gamyxz[idx] * l_Ayy + Gamzxz[idx] * l_Ayz
-                             + Gamxxy[idx] * l_Axz + Gamyxy[idx] * l_Ayz + Gamzxy[idx] * l_Azz) - val_chix * l_Ayz / chin1;
-    double DA_zzx = d_Azz_x - (Gamxxz[idx] * l_Axz + Gamyxz[idx] * l_Ayz + Gamzxz[idx] * l_Azz
-                             + Gamxxz[idx] * l_Axz + Gamyxz[idx] * l_Ayz + Gamzxz[idx] * l_Azz) - val_chix * l_Azz / chin1;
-    double DA_xxy = d_Axx_y - (Gamxxy[idx] * l_Axx + Gamyxy[idx] * l_Axy + Gamzxy[idx] * l_Axz
-                             + Gamxxy[idx] * l_Axx + Gamyxy[idx] * l_Axy + Gamzxy[idx] * l_Axz) - val_chiy * l_Axx / chin1;
-    double DA_xyy = d_Axy_y - (Gamxyy[idx] * l_Axx + Gamyyy[idx] * l_Axy + Gamzyy[idx] * l_Axz
-                             + Gamxxy[idx] * l_Axy + Gamyxy[idx] * l_Ayy + Gamzxy[idx] * l_Ayz) - val_chiy * l_Axy / chin1;
-    double DA_xzy = d_Axz_y - (Gamxyz[idx] * l_Axx + Gamyyz[idx] * l_Axy + Gamzyz[idx] * l_Axz
-                             + Gamxxy[idx] * l_Axz + Gamyxy[idx] * l_Ayz + Gamzxy[idx] * l_Azz) - val_chiy * l_Axz / chin1;
-    double DA_yyy = d_Ayy_y - (Gamxyy[idx] * l_Axy + Gamyyy[idx] * l_Ayy + Gamzyy[idx] * l_Ayz
-                             + Gamxyy[idx] * l_Axy + Gamyyy[idx] * l_Ayy + Gamzyy[idx] * l_Ayz) - val_chiy * l_Ayy / chin1; 
-    double DA_yzy = d_Ayz_y - (Gamxyz[idx] * l_Axy + Gamyyz[idx] * l_Ayy + Gamzyz[idx] * l_Ayz
-                             + Gamxyy[idx] * l_Axz + Gamyyy[idx] * l_Ayz + Gamzyy[idx] * l_Azz) - val_chiy * l_Ayz / chin1;
-    double DA_zzy = d_Azz_y - (Gamxyz[idx] * l_Axz + Gamyyz[idx] * l_Ayz + Gamzyz[idx] * l_Azz
-                             + Gamxyz[idx] * l_Axz + Gamyyz[idx] * l_Ayz + Gamzyz[idx] * l_Azz) - val_chiy * l_Azz / chin1;
-    double DA_xxz = d_Axx_z - (Gamxxz[idx] * l_Axx + Gamyxz[idx] * l_Axy + Gamzxz[idx] * l_Axz
-                             + Gamxxz[idx] * l_Axx + Gamyxz[idx] * l_Axy + Gamzxz[idx] * l_Axz) - val_chiz * l_Axx / chin1;
-    double DA_xyz = d_Axy_z - (Gamxyz[idx] * l_Axx + Gamyyz[idx] * l_Axy + Gamzyz[idx] * l_Axz
-                             + Gamxxz[idx] * l_Axy + Gamyxz[idx] * l_Ayy + Gamzxz[idx] * l_Ayz) - val_chiz * l_Axy / chin1;
-    double DA_xzz = d_Axz_z - (Gamxzz[idx] * l_Axx + Gamyzz[idx] * l_Axy + Gamzzz[idx] * l_Axz
-                             + Gamxxz[idx] * l_Axz + Gamyxz[idx] * l_Ayz + Gamzxz[idx] * l_Azz) - val_chiz * l_Axz / chin1;
-    double DA_yyz = d_Ayy_z - (Gamxyz[idx] * l_Axy + Gamyyz[idx] * l_Ayy + Gamzyz[idx] * l_Ayz
-                             + Gamxyz[idx] * l_Axy + Gamyyz[idx] * l_Ayy + Gamzyz[idx] * l_Ayz) - val_chiz * l_Ayy / chin1;
-    double DA_yzz = d_Ayz_z - (Gamxzz[idx] * l_Axy + Gamyzz[idx] * l_Ayy + Gamzzz[idx] * l_Ayz
-                             + Gamxyz[idx] * l_Axz + Gamyyz[idx] * l_Ayz + Gamzyz[idx] * l_Azz) - val_chiz * l_Ayz / chin1;
-    double DA_zzz = d_Azz_z - (Gamxzz[idx] * l_Axz + Gamyzz[idx] * l_Ayz + Gamzzz[idx] * l_Azz
-                             + Gamxzz[idx] * l_Axz + Gamyzz[idx] * l_Ayz + Gamzzz[idx] * l_Azz) - val_chiz * l_Azz / chin1;
+    double DA_xxx = d_Axx_x - (l_Gamxxx * l_Axx + l_Gamyxx * l_Axy + l_Gamzxx * l_Axz 
+                             + l_Gamxxx * l_Axx + l_Gamyxx * l_Axy + l_Gamzxx * l_Axz) - chix * l_Axx / chin1;
+    double DA_xyx = d_Axy_x - (l_Gamxxy * l_Axx + l_Gamyxy * l_Axy + l_Gamzxy * l_Axz
+                             + l_Gamxxx * l_Axy + l_Gamyxx * l_Ayy + l_Gamzxx * l_Ayz) - chix * l_Axy / chin1;
+    double DA_xzx = d_Axz_x - (l_Gamxxz * l_Axx + l_Gamyxz * l_Axy + l_Gamzxz * l_Axz
+                             + l_Gamxxx * l_Axz + l_Gamyxx * l_Ayz + l_Gamzxx * l_Azz) - chix * l_Axz / chin1;
+    double DA_yyx = d_Ayy_x - (l_Gamxxy * l_Axy + l_Gamyxy * l_Ayy + l_Gamzxy * l_Ayz
+                             + l_Gamxxy * l_Axy + l_Gamyxy * l_Ayy + l_Gamzxy * l_Ayz) - chix * l_Ayy / chin1;
+    double DA_yzx = d_Ayz_x - (l_Gamxxz * l_Axy + l_Gamyxz * l_Ayy + l_Gamzxz * l_Ayz
+                             + l_Gamxxy * l_Axz + l_Gamyxy * l_Ayz + l_Gamzxy * l_Azz) - chix * l_Ayz / chin1;
+    double DA_zzx = d_Azz_x - (l_Gamxxz * l_Axz + l_Gamyxz * l_Ayz + l_Gamzxz * l_Azz
+                             + l_Gamxxz * l_Axz + l_Gamyxz * l_Ayz + l_Gamzxz * l_Azz) - chix * l_Azz / chin1;
+    double DA_xxy = d_Axx_y - (l_Gamxxy * l_Axx + l_Gamyxy * l_Axy + l_Gamzxy * l_Axz
+                             + l_Gamxxy * l_Axx + l_Gamyxy * l_Axy + l_Gamzxy * l_Axz) - chiy * l_Axx / chin1;
+    double DA_xyy = d_Axy_y - (l_Gamxyy * l_Axx + l_Gamyyy * l_Axy + l_Gamzyy * l_Axz
+                             + l_Gamxxy * l_Axy + l_Gamyxy * l_Ayy + l_Gamzxy * l_Ayz) - chiy * l_Axy / chin1;
+    double DA_xzy = d_Axz_y - (l_Gamxyz * l_Axx + l_Gamyyz * l_Axy + l_Gamzyz * l_Axz
+                             + l_Gamxxy * l_Axz + l_Gamyxy * l_Ayz + l_Gamzxy * l_Azz) - chiy * l_Axz / chin1;
+    double DA_yyy = d_Ayy_y - (l_Gamxyy * l_Axy + l_Gamyyy * l_Ayy + l_Gamzyy * l_Ayz
+                             + l_Gamxyy * l_Axy + l_Gamyyy * l_Ayy + l_Gamzyy * l_Ayz) - chiy * l_Ayy / chin1; 
+    double DA_yzy = d_Ayz_y - (l_Gamxyz * l_Axy + l_Gamyyz * l_Ayy + l_Gamzyz * l_Ayz
+                             + l_Gamxyy * l_Axz + l_Gamyyy * l_Ayz + l_Gamzyy * l_Azz) - chiy * l_Ayz / chin1;
+    double DA_zzy = d_Azz_y - (l_Gamxyz * l_Axz + l_Gamyyz * l_Ayz + l_Gamzyz * l_Azz
+                             + l_Gamxyz * l_Axz + l_Gamyyz * l_Ayz + l_Gamzyz * l_Azz) - chiy * l_Azz / chin1;
+    double DA_xxz = d_Axx_z - (l_Gamxxz * l_Axx + l_Gamyxz * l_Axy + l_Gamzxz * l_Axz
+                             + l_Gamxxz * l_Axx + l_Gamyxz * l_Axy + l_Gamzxz * l_Axz) - chiz * l_Axx / chin1;
+    double DA_xyz = d_Axy_z - (l_Gamxyz * l_Axx + l_Gamyyz * l_Axy + l_Gamzyz * l_Axz
+                             + l_Gamxxz * l_Axy + l_Gamyxz * l_Ayy + l_Gamzxz * l_Ayz) - chiz * l_Axy / chin1;
+    double DA_xzz = d_Axz_z - (l_Gamxzz * l_Axx + l_Gamyzz * l_Axy + l_Gamzzz * l_Axz
+                             + l_Gamxxz * l_Axz + l_Gamyxz * l_Ayz + l_Gamzxz * l_Azz) - chiz * l_Axz / chin1;
+    double DA_yyz = d_Ayy_z - (l_Gamxyz * l_Axy + l_Gamyyz * l_Ayy + l_Gamzyz * l_Ayz
+                             + l_Gamxyz * l_Axy + l_Gamyyz * l_Ayy + l_Gamzyz * l_Ayz) - chiz * l_Ayy / chin1;
+    double DA_yzz = d_Ayz_z - (l_Gamxzz * l_Axy + l_Gamyzz * l_Ayy + l_Gamzzz * l_Ayz
+                             + l_Gamxyz * l_Axz + l_Gamyyz * l_Ayz + l_Gamzyz * l_Azz) - chiz * l_Ayz / chin1;
+    double DA_zzz = d_Azz_z - (l_Gamxzz * l_Axz + l_Gamyzz * l_Ayz + l_Gamzzz * l_Azz
+                             + l_Gamxzz * l_Axz + l_Gamyzz * l_Ayz + l_Gamzzz * l_Azz) - chiz * l_Azz / chin1;
 
 
     // ==========================================
@@ -1156,4 +992,85 @@ __global__ void bssn_constraints_kernel(
     movx_Res[idx] = movx_Res[idx] - F2o3 * Kx - F8 * PI * Sx[idx];
     movy_Res[idx] = movy_Res[idx] - F2o3 * Ky - F8 * PI * Sy[idx];
     movz_Res[idx] = movz_Res[idx] - F2o3 * Kz - F8 * PI * Sz[idx];
+}
+
+void gpu_compute_rhs_bssn_launch( // launch kernel with device pointers
+    cudaStream_t &stream,
+    int* ex, double T, double* d_X, double* d_Y, double* d_Z,
+    double* d_chi, double* d_trK,
+    double* d_dxx, double* d_gxy, double* d_gxz,
+    double* d_dyy, double* d_gyz, double* d_dzz,
+    double* d_Axx, double* d_Axy, double* d_Axz,
+    double* d_Ayy, double* d_Ayz, double* d_Azz,
+    double* d_Gamx, double* d_Gamy, double* d_Gamz,
+    double* d_Lap,
+    double* d_betax, double* d_betay, double* d_betaz,
+    double* d_dtSfx, double* d_dtSfy, double* d_dtSfz,
+    double* d_chi_rhs, double* d_trK_rhs,
+    double* d_gxx_rhs, double* d_gxy_rhs, double* d_gxz_rhs,
+    double* d_gyy_rhs, double* d_gyz_rhs, double* d_gzz_rhs,
+    double* d_Axx_rhs, double* d_Axy_rhs, double* d_Axz_rhs,
+    double* d_Ayy_rhs, double* d_Ayz_rhs, double* d_Azz_rhs,
+    double* d_Gamx_rhs, double* d_Gamy_rhs, double* d_Gamz_rhs,
+    double* d_Lap_rhs,
+    double* d_betax_rhs, double* d_betay_rhs, double* d_betaz_rhs,
+    double* d_dtSfx_rhs, double* d_dtSfy_rhs, double* d_dtSfz_rhs,
+    double* d_rho, double* d_Sx, double* d_Sy, double* d_Sz,
+    double* d_Sxx, double* d_Sxy, double* d_Sxz,
+    double* d_Syy, double* d_Syz, double* d_Szz,
+    double* d_Gamxxx, double* d_Gamxxy, double* d_Gamxxz,
+    double* d_Gamxyy, double* d_Gamxyz, double* d_Gamxzz,
+    double* d_Gamyxx, double* d_Gamyxy, double* d_Gamyxz,
+    double* d_Gamyyy, double* d_Gamyyz, double* d_Gamyzz,
+    double* d_Gamzxx, double* d_Gamzxy, double* d_Gamzxz,
+    double* d_Gamzyy, double* d_Gamzyz, double* d_Gamzzz,
+    double* d_Rxx, double* d_Rxy, double* d_Rxz,
+    double* d_Ryy, double* d_Ryz, double* d_Rzz,
+    double* d_ham_Res, double* d_movx_Res, double* d_movy_Res, double* d_movz_Res,
+    double* d_Gmx_Res, double* d_Gmy_Res, double* d_Gmz_Res,
+    int symmetry, int lev, double eps, int co
+) {
+    dim3 block(8, 8, 4); // 调整 block size 以适应架构
+    dim3 grid(
+        (ex[0] + block.x - 1) / block.x,
+        (ex[1] + block.y - 1) / block.y,
+        (ex[2] + block.z - 1) / block.z
+    );
+
+    // 1. Kernel 1: Derivatives & Connection Coefficients
+    rhs_kernel<<<grid, block, 0, stream>>>(
+        ex[0], ex[1], ex[2], T, d_X, d_Y, d_Z,
+        d_chi, d_trK,
+        d_dxx, d_gxy, d_gxz,
+        d_dyy, d_gyz, d_dzz,
+        d_Axx, d_Axy, d_Axz,
+        d_Ayy, d_Ayz, d_Azz,
+        d_Gamx, d_Gamy, d_Gamz,
+        d_Lap,
+        d_betax, d_betay, d_betaz,
+        d_dtSfx, d_dtSfy, d_dtSfz,
+        d_chi_rhs, d_trK_rhs,
+        d_gxx_rhs, d_gxy_rhs, d_gxz_rhs,
+        d_gyy_rhs, d_gyz_rhs, d_gzz_rhs,
+        d_Axx_rhs, d_Axy_rhs, d_Axz_rhs,
+        d_Ayy_rhs, d_Ayz_rhs, d_Azz_rhs,
+        d_Gamx_rhs, d_Gamy_rhs, d_Gamz_rhs,
+        d_Lap_rhs,
+        d_betax_rhs, d_betay_rhs, d_betaz_rhs,
+        d_dtSfx_rhs, d_dtSfy_rhs, d_dtSfz_rhs,
+        d_rho, d_Sx, d_Sy, d_Sz,
+        d_Sxx, d_Sxy, d_Sxz,
+        d_Syy, d_Syz, d_Szz,
+        d_Gamxxx, d_Gamxxy, d_Gamxxz,
+        d_Gamxyy, d_Gamxyz, d_Gamxzz,
+        d_Gamyxx, d_Gamyxy, d_Gamyxz,
+        d_Gamyyy, d_Gamyyz, d_Gamyzz,
+        d_Gamzxx, d_Gamzxy, d_Gamzxz,
+        d_Gamzyy, d_Gamzyz, d_Gamzzz,
+        d_Rxx, d_Rxy, d_Rxz,
+        d_Ryy, d_Ryz, d_Rzz,
+        d_ham_Res, d_movx_Res, d_movy_Res, d_movz_Res,
+        d_Gmx_Res, d_Gmy_Res, d_Gmz_Res,
+        symmetry, lev, eps, co
+    );
 }

@@ -382,6 +382,9 @@ void Patch::Interp_Points(MyList<var> *VarList,
         for (int i = 0; i < dim; i++)
         {
             pox[i] = XX[i][j];
+			if (isnan(pox[i])) {
+				puts("Error: Patch::Interp_Points encounters NaN in input point coordinates.");
+			}
             // [Original Logic] 边界检查，保持不变
             if (myrank == 0 && (XX[i][j] < bbox[i] + lli[i] * DH[i] || XX[i][j] > bbox[dim + i] - uui[i] * DH[i]))
             {

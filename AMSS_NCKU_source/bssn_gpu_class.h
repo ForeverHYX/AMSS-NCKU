@@ -80,6 +80,7 @@ public:
        double *Mass, *Pmom, *Spin;
        double ADMMass;
 
+       // OldStateList
        var *phio, *trKo;
        var *gxxo, *gxyo, *gxzo, *gyyo, *gyzo, *gzzo;
        var *Axxo, *Axyo, *Axzo, *Ayyo, *Ayzo, *Azzo;
@@ -87,6 +88,7 @@ public:
        var *Lapo, *Sfxo, *Sfyo, *Sfzo;
        var *dtSfxo, *dtSfyo, *dtSfzo;
 
+       // StateList
        var *phi0, *trK0;
        var *gxx0, *gxy0, *gxz0, *gyy0, *gyz0, *gzz0;
        var *Axx0, *Axy0, *Axz0, *Ayy0, *Ayz0, *Azz0;
@@ -94,6 +96,7 @@ public:
        var *Lap0, *Sfx0, *Sfy0, *Sfz0;
        var *dtSfx0, *dtSfy0, *dtSfz0;
 
+       // SynchList_pre
        var *phi, *trK;
        var *gxx, *gxy, *gxz, *gyy, *gyz, *gzz;
        var *Axx, *Axy, *Axz, *Ayy, *Ayz, *Azz;
@@ -101,6 +104,7 @@ public:
        var *Lap, *Sfx, *Sfy, *Sfz;
        var *dtSfx, *dtSfy, *dtSfz;
 
+       // SynchList_cor
        var *phi1, *trK1;
        var *gxx1, *gxy1, *gxz1, *gyy1, *gyz1, *gzz1;
        var *Axx1, *Axy1, *Axz1, *Ayy1, *Ayz1, *Azz1;
@@ -108,6 +112,7 @@ public:
        var *Lap1, *Sfx1, *Sfy1, *Sfz1;
        var *dtSfx1, *dtSfy1, *dtSfz1;
 
+       // RHSList
        var *phi_rhs, *trK_rhs;
        var *gxx_rhs, *gxy_rhs, *gxz_rhs, *gyy_rhs, *gyz_rhs, *gzz_rhs;
        var *Axx_rhs, *Axy_rhs, *Axz_rhs, *Ayy_rhs, *Ayz_rhs, *Azz_rhs;
@@ -126,6 +131,7 @@ public:
        var *Rpsi4, *Ipsi4;
        var *t1Rpsi4, *t1Ipsi4, *t2Rpsi4, *t2Ipsi4;
 
+       // ConstraintList
        var *Cons_Ham, *Cons_Px, *Cons_Py, *Cons_Pz, *Cons_Gx, *Cons_Gy, *Cons_Gz;
 
 #ifdef Point_Psi4
@@ -142,6 +148,7 @@ public:
        MyList<var> *StateList, *SynchList_pre, *SynchList_cor, *RHSList;
        MyList<var> *OldStateList, *DumpList;
        MyList<var> *ConstraintList;
+       MyList<var> *MiscList;
 
        monitor *ErrorMonitor, *Psi4Monitor, *BHMonitor, *MAPMonitor;
        monitor *ConVMonitor;

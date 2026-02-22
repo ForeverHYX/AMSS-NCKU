@@ -2,6 +2,8 @@
 
 #include "prolongrestrict.h"
 
+#include "gpu_manager.h"
+
 #include <cstdio>
 #include <iostream>
 
@@ -280,6 +282,7 @@ void ProlongRestrictManager::ExecuteBatch() {
 
     // 5. 启动 Kernel
     batched_prolong_restrict_kernel<<<num_tasks, 256>>>(d_tasks_, num_tasks);
+    CUDA_CHECK(cudaDeviceSynchronize());
 
     // 6. D2H: 拷贝输出结果 (Device -> Staging)
     h_output_staging_.resize(total_out_doubles); // 确保 CPU buffer 够大

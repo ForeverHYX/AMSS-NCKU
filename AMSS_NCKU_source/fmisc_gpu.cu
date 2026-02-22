@@ -1,6 +1,8 @@
 #include <cuda_runtime.h>
 #include <math.h>
 
+#include <iostream>
+
 #define MAX_ORDN 6
 #ifndef GPU_DEBUG_PRINT
 #define GPU_DEBUG_PRINT 0

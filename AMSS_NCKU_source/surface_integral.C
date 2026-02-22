@@ -2302,6 +2302,11 @@ void surface_integral::surf_MassPAng(double rex, int lev, cgh *GH, var *chi, var
     pox[0][n] = rex * nx_g[n];
     pox[1][n] = rex * ny_g[n];
     pox[2][n] = rex * nz_g[n];
+    if (isnan(nx_g[n]) || isnan(ny_g[n]) || isnan(nz_g[n]))
+    {
+      cout << "ERROR: surface integral with NaN coordinates" << endl;
+      exit(1);
+    }
   }
 
   double *shellf;
