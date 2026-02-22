@@ -54,4 +54,10 @@ extern "C"
 					 double *, double *, double *);
 }
 
+void gpu_rungekutta4_rout_launch(
+    cudaStream_t &stream,
+    int ex[3], double dT,
+    double* d_f0, double* d_f1, double* d_f_rhs, int RK4
+);
+
 #endif /* RUNGEKUTTA4_H */

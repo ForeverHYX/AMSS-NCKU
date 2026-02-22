@@ -28,7 +28,13 @@ extern "C"
 					  double *, double *, double *, double *, double *, double *);
 }
 
-// #include "bssn_gpu_rhs.h"
-// void gpu_enforce_ga(GPU_RHS_CONTEXT &ctx);
+void gpu_enforce_ga_launch(
+    cudaStream_t &stream,
+    int ex[3],
+    double* d_dxx, double* d_gxy, double* d_gxz,
+    double* d_dyy, double* d_gyz, double* d_dzz,
+    double* d_Axx, double* d_Axy, double* d_Axz,
+    double* d_Ayy, double* d_Ayz, double* d_Azz
+);
 
 #endif /* ENFORCE_ALGEBRA_H */

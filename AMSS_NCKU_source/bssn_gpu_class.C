@@ -2947,19 +2947,9 @@ void bssn_class::Constraint_Out()
                         {
                             if (use_gpu == 1) {
                                 // f_compute_rhs_bssn(RHS_PARA_CALLED_Constraint_Out);
-                                MyList<var> *var_in;
-                                var_in = StateList; 
-                                while (var_in) {
-                                    cg->mark_cpu_modified(var_in->data->sgfn);
-                                    cg->require_on_gpu(var_in->data->sgfn);
-                                    var_in = var_in->next;
-                                }
-                                var_in = MiscList; 
-                                while (var_in) {
-                                    cg->mark_cpu_modified(var_in->data->sgfn);
-                                    cg->require_on_gpu(var_in->data->sgfn);
-                                    var_in = var_in->next;
-                                }
+                                cg->move_to_gpu(StateList);
+                                cg->move_to_gpu(MiscList);
+                                
                                 auto stream = GPUManager::getInstance().get_stream();
                                 gpu_compute_rhs_bssn_launch(
                                     stream,
@@ -3000,19 +2990,9 @@ void bssn_class::Constraint_Out()
                                 );
 
                                 GPUManager::getInstance().synchronize_all();
-                                MyList<var> *var_out;
-                                var_out = RHSList; 
-                                while (var_out) {
-                                    cg->mark_gpu_modified(var_out->data->sgfn);
-                                    cg->require_on_cpu(var_out->data->sgfn);
-                                    var_out = var_out->next;
-                                }
-                                var_out = ConstraintList; 
-                                while (var_out) {
-                                    cg->mark_gpu_modified(var_out->data->sgfn);
-                                    cg->require_on_cpu(var_out->data->sgfn);
-                                    var_out = var_out->next;
-                                }
+
+                                cg->move_to_cpu(RHSList);
+                                cg->move_to_cpu(ConstraintList);
                             }
                             else
                                 f_compute_rhs_bssn(RHS_PARA_CALLED_Constraint_Out);
@@ -3086,19 +3066,9 @@ void bssn_class::Interp_Constraint(bool infg)
                         {
                             if (use_gpu == 1) {
                                 // f_compute_rhs_bssn(RHS_PARA_CALLED_Interp_Constraint);
-                                MyList<var> *var_in;
-                                var_in = StateList; 
-                                while (var_in) {
-                                    cg->mark_cpu_modified(var_in->data->sgfn);
-                                    cg->require_on_gpu(var_in->data->sgfn);
-                                    var_in = var_in->next;
-                                }
-                                var_in = MiscList; 
-                                while (var_in) {
-                                    cg->mark_cpu_modified(var_in->data->sgfn);
-                                    cg->require_on_gpu(var_in->data->sgfn);
-                                    var_in = var_in->next;
-                                }
+                                cg->move_to_gpu(StateList);
+                                cg->move_to_gpu(MiscList);
+
                                 auto stream = GPUManager::getInstance().get_stream();
                                 gpu_compute_rhs_bssn_launch(
                                     stream,
@@ -3139,19 +3109,9 @@ void bssn_class::Interp_Constraint(bool infg)
                                 );
 
                                 GPUManager::getInstance().synchronize_all();
-                                MyList<var> *var_out;
-                                var_out = RHSList; 
-                                while (var_out) {
-                                    cg->mark_gpu_modified(var_out->data->sgfn);
-                                    cg->require_on_cpu(var_out->data->sgfn);
-                                    var_out = var_out->next;
-                                }
-                                var_out = ConstraintList; 
-                                while (var_out) {
-                                    cg->mark_gpu_modified(var_out->data->sgfn);
-                                    cg->require_on_cpu(var_out->data->sgfn);
-                                    var_out = var_out->next;
-                                }
+
+                                cg->move_to_cpu(RHSList);
+                                cg->move_to_cpu(ConstraintList);
                             }
                             else
                                 f_compute_rhs_bssn(RHS_PARA_CALLED_Interp_Constraint);
@@ -3258,19 +3218,8 @@ void bssn_class::Compute_Constraint()
                     Block *cg = BP->data;
                     if (myrank == cg->rank)
                     {
-                        MyList<var> *var_in;
-                        var_in = StateList; 
-                        while (var_in) {
-                            cg->mark_cpu_modified(var_in->data->sgfn);
-                            cg->require_on_gpu(var_in->data->sgfn);
-                            var_in = var_in->next;
-                        }
-                        var_in = MiscList; 
-                        while (var_in) {
-                            cg->mark_cpu_modified(var_in->data->sgfn);
-                            cg->require_on_gpu(var_in->data->sgfn);
-                            var_in = var_in->next;
-                        }
+                        cg->move_to_gpu(StateList);
+                        cg->move_to_gpu(MiscList);
                         auto stream = GPUManager::getInstance().get_stream();
                         gpu_compute_rhs_bssn_launch(
                             stream,
@@ -3310,19 +3259,8 @@ void bssn_class::Compute_Constraint()
                             Symmetry, lev, ndeps, pre
                         );
                         GPUManager::getInstance().synchronize_all();
-                        MyList<var> *var_out;
-                        var_out = RHSList; 
-                        while (var_out) {
-                            cg->mark_gpu_modified(var_out->data->sgfn);
-                            cg->require_on_cpu(var_out->data->sgfn);
-                            var_out = var_out->next;
-                        }
-                        var_out = ConstraintList; 
-                        while (var_out) {
-                            cg->mark_gpu_modified(var_out->data->sgfn);
-                            cg->require_on_cpu(var_out->data->sgfn);
-                            var_out = var_out->next;
-                        }
+                        cg->move_to_cpu(RHSList);
+                        cg->move_to_cpu(ConstraintList);
                     }
                     if (BP == Pp->data->ble)
                         break;

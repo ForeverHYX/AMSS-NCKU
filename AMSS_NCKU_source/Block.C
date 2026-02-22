@@ -217,3 +217,23 @@ void Block::mark_cpu_modified(int var_index) {
     cpu_valid[var_index] = true;
     gpu_valid[var_index] = false; 
 }
+
+void Block::move_to_gpu(MyList<var> *VarList) {
+	MyList<var> *iter = VarList;
+	while (iter) {
+		int var_index = iter->data->sgfn;
+		mark_cpu_modified(var_index);
+		require_on_gpu(var_index);
+		iter = iter->next;
+	}
+}
+
+void Block::move_to_cpu(MyList<var> *VarList) {
+	MyList<var> *iter = VarList;
+	while (iter) {
+		int var_index = iter->data->sgfn;
+		mark_gpu_modified(var_index);
+		require_on_cpu(var_index);
+		iter = iter->next;
+	}
+}

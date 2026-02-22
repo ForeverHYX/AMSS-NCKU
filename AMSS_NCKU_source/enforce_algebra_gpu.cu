@@ -3,70 +3,81 @@
 #include <cuda_runtime.h>
 #include <math.h>
 
-#include "gpu_rhs_mem.h"
-// #include "bssn_gpu_rhs.h"
-// #include "bssn_gpu_rhs_constant.h"
+#include "gpu_manager.h"
 
-// __global__ void enforce_ga_kernel(
-//     int n,
-//     double* dxx, double* gxy, double* gxz,
-//     double* dyy, double* gyz, double* dzz,
-//     double* Axx, double* Axy, double* Axz,
-//     double* Ayy, double* Ayz, double* Azz
-// ) {
-//     int tid = blockIdx.x * blockDim.x + threadIdx.x;
+__global__ void enforce_ga_kernel(
+    int n,
+    double* dxx, double* gxy, double* gxz,
+    double* dyy, double* gyz, double* dzz,
+    double* Axx, double* Axy, double* Axz,
+    double* Ayy, double* Ayz, double* Azz
+) {
+    constexpr double ONE = 1.0;
+    constexpr double F1o3 = 1.0/3.0;
+    constexpr double TWO = 2.0;
 
-//     while (tid < n) {
-//         double gxx = dxx[tid] + ONE;
-//         double gyy = dyy[tid] + ONE;
-//         double gzz = dzz[tid] + ONE;
-//         double gxyv = gxy[tid];
-//         double gxzv = gxz[tid];
-//         double gyzv = gyz[tid];
+    int idx = blockIdx.x * blockDim.x + threadIdx.x;
 
-//         double detg = gxx * gyy * gzz + gxyv * gyzv * gxzv + gxzv * gxyv * gyzv
-//                     - gxzv * gyy * gxzv - gxyv * gxyv * gzz - gxx * gyzv * gyzv;
+    if (idx >= n) return;
 
-//         double scale = ONE / pow(detg, F1o3);
+    double gxx = dxx[idx] + ONE;
+    double gyy = dyy[idx] + ONE;
+    double gzz = dzz[idx] + ONE;
+    double gxyv = gxy[idx];
+    double gxzv = gxz[idx];
+    double gyzv = gyz[idx];
 
-//         gxx *= scale; gxyv *= scale; gxzv *= scale;
-//         gyy *= scale; gyzv *= scale; gzz *= scale;
+    double detg = gxx * gyy * gzz + gxyv * gyzv * gxzv + gxzv * gxyv * gyzv
+                - gxzv * gyy * gxzv - gxyv * gxyv * gzz - gxx * gyzv * gyzv;
 
-//         dxx[tid] = gxx - ONE;
-//         dyy[tid] = gyy - ONE;
-//         dzz[tid] = gzz - ONE;
-//         gxy[tid] = gxyv;
-//         gxz[tid] = gxzv;
-//         gyz[tid] = gyzv;
+    double scale = ONE / pow(detg, F1o3);
 
-//         double gupxx =   ( gyy * gzz - gyzv * gyzv );
-//         double gupxy = - ( gxyv * gzz - gyzv * gxzv );
-//         double gupxz =   ( gxyv * gyzv - gyy * gxzv );
-//         double gupyy =   ( gxx * gzz - gxzv * gxzv );
-//         double gupyz = - ( gxx * gyzv - gxyv * gxzv );
-//         double gupzz =   ( gxx * gyy - gxyv * gxyv );
+    gxx *= scale; gxyv *= scale; gxzv *= scale;
+    gyy *= scale; gyzv *= scale; gzz *= scale;
 
-//         double trA = gupxx * Axx[tid] + gupyy * Ayy[tid] + gupzz * Azz[tid]
-//                    + TWO * (gupxy * Axy[tid] + gupxz * Axz[tid] + gupyz * Ayz[tid]);
+    dxx[idx] = gxx - ONE;
+    dyy[idx] = gyy - ONE;
+    dzz[idx] = gzz - ONE;
+    gxy[idx] = gxyv;
+    gxz[idx] = gxzv;
+    gyz[idx] = gyzv;
 
-//         Axx[tid] -= F1o3 * gxx * trA;
-//         Axy[tid] -= F1o3 * gxyv * trA;
-//         Axz[tid] -= F1o3 * gxzv * trA;
-//         Ayy[tid] -= F1o3 * gyy * trA;
-//         Ayz[tid] -= F1o3 * gyzv * trA;
-//         Azz[tid] -= F1o3 * gzz * trA;
+    double gupxx =   ( gyy * gzz - gyzv * gyzv );
+    double gupxy = - ( gxyv * gzz - gyzv * gxzv );
+    double gupxz =   ( gxyv * gyzv - gyy * gxzv );
+    double gupyy =   ( gxx * gzz - gxzv * gxzv );
+    double gupyz = - ( gxx * gyzv - gxyv * gxzv );
+    double gupzz =   ( gxx * gyy - gxyv * gxyv );
 
-//         tid += STEP_SIZE;
-//     }
-// }
+    double trA = gupxx * Axx[idx] + gupyy * Ayy[idx] + gupzz * Azz[idx]
+                + TWO * (gupxy * Axy[idx] + gupxz * Axz[idx] + gupyz * Ayz[idx]);
 
-// void gpu_enforce_ga(GPU_RHS_CONTEXT &ctx) {
-//     cudaSetDevice(DEVICE_ID);
-//     Meta *meta = gpu_get_meta();
-//     int n = ctx.ex[0] * ctx.ex[1] * ctx.ex[2];
-//     enforce_ga_kernel<<<RHS_GRID_DIM, RHS_BLOCK_DIM>>>(
-//         n,
-//         Mh_ dxx, Mh_ gxy, Mh_ gxz, Mh_ dyy, Mh_ gyz, Mh_ dzz,
-//         Mh_ Axx, Mh_ Axy, Mh_ Axz, Mh_ Ayy, Mh_ Ayz, Mh_ Azz
-//     );
-// }
+    Axx[idx] -= F1o3 * gxx * trA;
+    Axy[idx] -= F1o3 * gxyv * trA;
+    Axz[idx] -= F1o3 * gxzv * trA;
+    Ayy[idx] -= F1o3 * gyy * trA;
+    Ayz[idx] -= F1o3 * gyzv * trA;
+    Azz[idx] -= F1o3 * gzz * trA;
+}
+
+void gpu_enforce_ga_launch(
+    cudaStream_t &stream,
+    int ex[3],
+    double* d_dxx, double* d_gxy, double* d_gxz,
+    double* d_dyy, double* d_gyz, double* d_dzz,
+    double* d_Axx, double* d_Axy, double* d_Axz,
+    double* d_Ayy, double* d_Ayz, double* d_Azz
+) {
+    int n = ex[0] * ex[1] * ex[2];
+
+    int block = 256;
+    int grid = (n + block - 1) / block;
+
+    enforce_ga_kernel<<<grid, block, 0, stream>>>(
+        n,
+        d_dxx, d_gxy, d_gxz,
+        d_dyy, d_gyz, d_dzz,
+        d_Axx, d_Axy, d_Axz, 
+        d_Ayy, d_Ayz, d_Azz
+    );
+}

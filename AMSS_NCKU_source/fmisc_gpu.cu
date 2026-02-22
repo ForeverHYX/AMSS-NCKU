@@ -60,7 +60,7 @@ __device__ void polint(const double* xa, const double* ya, double x, double& y, 
 	}
 }
 
-__device__ void polin3(
+__device__ void d_polin3_1b(
 	const double* x1a, const double* x2a, const double* x3a,
 	const double* ya, double x1, double x2, double x3,
 	double& y, double& dy, int ordn
@@ -83,7 +83,7 @@ __device__ void polin3(
 	polint(x1a, ymtmp, x1, y, dy, ordn);
 }
 
-__device__ bool decide3d(
+__device__ bool d_decide3d(
 	const int ex[3], const double* f, const double* fpi,
 	const int cxB[3], const int cxT[3], const double SoA[3],
 	double* ya, int ordn, int Symmetry
@@ -197,7 +197,7 @@ __device__ void global_interp_device(
 	cx[2] = (cxB[2] > 0) ? (z1 - X_at_1b(Z, cxB[2])) / dZ : (z1 + X_at_1b(Z, 1 - cxB[2])) / dZ;
 
 	double ya[MAX_ORDN * MAX_ORDN * MAX_ORDN];
-	if (decide3d(ex, f, f, cxB, cxT, SoA, ya, ORDN, symmetry)) {
+	if (d_decide3d(ex, f, f, cxB, cxT, SoA, ya, ORDN, symmetry)) {
 #if GPU_DEBUG_PRINT
         printf("global_interp position: %f %f %f\n", x1, y1, z1);
         printf("data range: %f %f %f %f %f %f\n",
@@ -211,7 +211,7 @@ __device__ void global_interp_device(
 	}
 
 	double ddy = 0.0;
-	polin3(x1a, x1a, x1a, ya, cx[0], cx[1], cx[2], f_int[0], ddy, ORDN);
+	d_polin3_1b(x1a, x1a, x1a, ya, cx[0], cx[1], cx[2], f_int[0], ddy, ORDN);
 }
 
 __device__ double d_symmetry_bd_1b(
@@ -238,3 +238,24 @@ __device__ double d_symmetry_bd_1b(
 	return f_at_1b(func, extc, ii, jj, kk) * factor;
 }
 
+__global__ void lowerboundset_kernel(int n, double* chi0, double TINNY) {
+    int idx = blockIdx.x * blockDim.x + threadIdx.x;
+    
+    if (idx < n) {
+        if (chi0[idx] < TINNY) {
+            chi0[idx] = TINNY;
+        }
+    }
+}
+
+void gpu_lowerboundset_launch(
+    cudaStream_t &stream,
+    int ex[3],
+    double* d_chi0, double TINNY
+) {
+    int n = ex[0] * ex[1] * ex[2];
+    int block = 256;
+    int grid = (n + block - 1) / block;
+
+    lowerboundset_kernel<<<grid, block, 0, stream>>>(n, d_chi0, TINNY);
+}

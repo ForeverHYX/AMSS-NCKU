@@ -50,4 +50,25 @@ extern "C"
 					  int &, double *, int &);
 }
 
+void gpu_sommerfeld_rout_launch(
+    cudaStream_t &stream,
+    int ex[3],
+    const double* d_X, const double* d_Y, const double* d_Z,
+    double xmin, double ymin, double zmin,
+    double xmax, double ymax, double zmax,
+    double dT, const double* d_chi0, const double* d_Lap0,
+    const double* d_f0, double* d_f, const double SoA[3],
+    int Symmetry, int precor
+);
+
+void gpu_sommerfeld_routbam_launch(
+    cudaStream_t &stream,
+    int ex[3],
+    const double* d_X, const double* d_Y, const double* d_Z,
+    double xmin, double ymin, double zmin,
+    double xmax, double ymax, double zmax,
+    double* d_f_rhs, const double* d_f0,
+    double velocity, const double SoA[3], int Symmetry
+);
+
 #endif /* SOMMERFELD_ROUT_H */

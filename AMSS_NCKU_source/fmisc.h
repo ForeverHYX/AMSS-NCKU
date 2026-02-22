@@ -276,4 +276,22 @@ __device__ double d_symmetry_bd_1b(
 	int i1b, int j1b, int k1b, const double SoA[3]
 );
 
+__device__ void d_polin3_1b(
+	const double* x1a, const double* x2a, const double* x3a,
+	const double* ya, double x1, double x2, double x3,
+	double& y, double& dy, int ordn
+);
+
+__device__ bool d_decide3d(
+	const int ex[3], const double* f, const double* fpi,
+	const int cxB[3], const int cxT[3], const double SoA[3],
+	double* ya, int ordn, int Symmetry
+);
+
+void gpu_lowerboundset_launch(
+    cudaStream_t &stream,
+    int ex[3],
+    double* d_chi0, double TINNY
+);
+
 #endif /* FMISC_H */

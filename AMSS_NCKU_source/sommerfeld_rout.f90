@@ -337,45 +337,7 @@ endif
     do k = layer(3,gp), layer(6,gp)
      do j = layer(2,gp), layer(5,gp)
       do i = layer(1,gp), layer(4,gp)
-#if 0      
-!! old code
-! x direction   
-        if(i+1 <= imax .and. i-1 >= imin)then
-      fx=d2dx*(-fh(i-1,j,k)+fh(i+1,j,k))
-
-      elseif(i==imin)then
-      fx=(-fh(i,j,k)+fh(i+1,j,k))/dX
-
-      elseif(i==imax)then
-      fx=(-fh(i-1,j,k)+fh(i,j,k))/dX
-      
-      endif
-! y direction   
-        if(j+1 <= jmax .and. j-1 >= jmin)then
-      fy=d2dy*(-fh(i,j-1,k)+fh(i,j+1,k))
-
-      elseif(j==jmin)then
-      fy=(-fh(i,j,k)+fh(i,j+1,k))/dY
-
-      elseif(j==jmax)then
-      fy=(-fh(i,j-1,k)+fh(i,j,k))/dY
-      
-      endif
-! z direction   
-        if(k+1 <= kmax .and. k-1 >= kmin)then
-      fz=d2dz*(-fh(i,j,k-1)+fh(i,j,k+1))
-      
-      elseif(k==kmin)then
-      fz=(-fh(i,j,k)+fh(i,j,k+1))/dZ
-
-      elseif(k==kmax)then
-      fz=(-fh(i,j,k-1)+fh(i,j,k))/dZ
-      
-      endif
-
-      R = dsqrt(X(i)**2+Y(j)**2+Z(k)**2)
-      f_rhs(i,j,k) = -velocity*(fx*X(i) + fy*Y(j) + fz*Z(k) + f0(i,j,k))/R
-#else      
+ 
 !! new code, 2012dec26, based on bam 
 !! we always assume var0 = 0
       R = dsqrt(X(i)**2+Y(j)**2+Z(k)**2)
@@ -437,7 +399,6 @@ endif
       endif
 
       f_rhs(i,j,k) = -velocity*(fx*X(i) + fy*Y(j) + fz*Z(k) + f0(i,j,k))/R
-#endif
       enddo
      enddo
     enddo

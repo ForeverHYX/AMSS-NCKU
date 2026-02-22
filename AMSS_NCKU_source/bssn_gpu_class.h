@@ -120,6 +120,7 @@ public:
        var *Lap_rhs, *Sfx_rhs, *Sfy_rhs, *Sfz_rhs;
        var *dtSfx_rhs, *dtSfy_rhs, *dtSfz_rhs;
 
+       // MiscList
        var *rho, *Sx, *Sy, *Sz, *Sxx, *Sxy, *Sxz, *Syy, *Syz, *Szz;
 
        var *Gamxxx, *Gamxxy, *Gamxxz, *Gamxyy, *Gamxyz, *Gamxzz;

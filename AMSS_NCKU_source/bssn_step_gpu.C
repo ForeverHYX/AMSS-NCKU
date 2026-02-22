@@ -87,26 +87,21 @@ void bssn_class::Step_GPU(int lev, int YN)
 			Block *cg = BP->data;
 			if (myrank == cg->rank)
 			{
-				f_enforce_ga(
-					cg->shape,
-					cg->fgfs[gxx0->sgfn], cg->fgfs[gxy0->sgfn], cg->fgfs[gxz0->sgfn], cg->fgfs[gyy0->sgfn], cg->fgfs[gyz0->sgfn], cg->fgfs[gzz0->sgfn],
-					cg->fgfs[Axx0->sgfn], cg->fgfs[Axy0->sgfn], cg->fgfs[Axz0->sgfn], cg->fgfs[Ayy0->sgfn], cg->fgfs[Ayz0->sgfn], cg->fgfs[Azz0->sgfn]
-				);
-				
-				MyList<var> *var_in;
-				var_in = StateList; 
-				while (var_in) {
-					cg->mark_cpu_modified(var_in->data->sgfn);
-					cg->require_on_gpu(var_in->data->sgfn);
-					var_in = var_in->next;
-				}
-				var_in = MiscList; 
-				while (var_in) {
-					cg->mark_cpu_modified(var_in->data->sgfn);
-					cg->require_on_gpu(var_in->data->sgfn);
-					var_in = var_in->next;
-				}
+				cg->move_to_gpu(StateList);
+				// cg->move_to_gpu(SynchList_pre);
+				// cg->move_to_gpu(SynchList_cor);
+				// cg->move_to_gpu(RHSList);
+				// cg->move_to_gpu(ConstraintList);
+				cg->move_to_gpu(MiscList);
+			
 				auto stream = GPUManager::getInstance().get_stream();
+
+				gpu_enforce_ga_launch(
+					stream, cg->shape,
+					cg->d_fgfs[gxx0->sgfn], cg->d_fgfs[gxy0->sgfn], cg->d_fgfs[gxz0->sgfn], cg->d_fgfs[gyy0->sgfn], cg->d_fgfs[gyz0->sgfn], cg->d_fgfs[gzz0->sgfn],
+					cg->d_fgfs[Axx0->sgfn], cg->d_fgfs[Axy0->sgfn], cg->d_fgfs[Axz0->sgfn], cg->d_fgfs[Ayy0->sgfn], cg->d_fgfs[Ayz0->sgfn], cg->d_fgfs[Azz0->sgfn]
+				);
+
 				gpu_compute_rhs_bssn_launch(
 					stream,
 					cg->shape, TRK4, cg->d_X[0], cg->d_X[1], cg->d_X[2],
@@ -145,46 +140,52 @@ void bssn_class::Step_GPU(int lev, int YN)
 					Symmetry, lev, ndeps, pre
 				);
 
-				GPUManager::getInstance().synchronize_all();
-				MyList<var> *var_out;
-				var_out = RHSList; 
-				while (var_out) {
-					cg->mark_gpu_modified(var_out->data->sgfn);
-					cg->require_on_cpu(var_out->data->sgfn);
-					var_out = var_out->next;
-				}
-				var_out = ConstraintList; 
-				while (var_out) {
-					cg->mark_gpu_modified(var_out->data->sgfn);
-					cg->require_on_cpu(var_out->data->sgfn);
-					var_out = var_out->next;
-				}
-				// rk4 substep and boundary
-				{
-					MyList<var> *varl0 = StateList, *varl = SynchList_pre, *varlrhs = RHSList; // we do not check the correspondence here
-					while (varl0)
-					{
-						if (lev == 0) // sommerfeld indeed
-							f_sommerfeld_routbam(cg->shape, cg->X[0], cg->X[1], cg->X[2],
-																	 Pp->data->bbox[0], Pp->data->bbox[1], Pp->data->bbox[2], Pp->data->bbox[3], Pp->data->bbox[4], Pp->data->bbox[5],
-																	 cg->fgfs[varlrhs->data->sgfn],
-																	 cg->fgfs[varl0->data->sgfn], varl0->data->propspeed, varl0->data->SoA,
-																	 Symmetry);
-						f_rungekutta4_rout(cg->shape, dT_lev, cg->fgfs[varl0->data->sgfn], cg->fgfs[varl->data->sgfn], cg->fgfs[varlrhs->data->sgfn],
-															 iter_count);
-						if (lev > 0) // fix BD point
-							f_sommerfeld_rout(cg->shape, cg->X[0], cg->X[1], cg->X[2],
-																Pp->data->bbox[0], Pp->data->bbox[1], Pp->data->bbox[2], Pp->data->bbox[3], Pp->data->bbox[4], Pp->data->bbox[5],
-																dT_lev, cg->fgfs[phi0->sgfn],
-																cg->fgfs[Lap0->sgfn], cg->fgfs[varl0->data->sgfn], cg->fgfs[varl->data->sgfn], varl0->data->SoA,
-																Symmetry, cor);
-
-						varl0 = varl0->next;
-						varl = varl->next;
-						varlrhs = varlrhs->next;
+				MyList<var> *varl0 = StateList, *varl = SynchList_pre, *varlrhs = RHSList; // we do not check the correspondence here
+				while (varl0) {
+					if (lev == 0) { // sommerfeld indeed
+						gpu_sommerfeld_routbam_launch(
+							stream,
+							cg->shape,
+							cg->d_X[0], cg->d_X[1], cg->d_X[2],
+							Pp->data->bbox[0], Pp->data->bbox[1], Pp->data->bbox[2], Pp->data->bbox[3], Pp->data->bbox[4], Pp->data->bbox[5],
+							cg->d_fgfs[varlrhs->data->sgfn],
+							cg->d_fgfs[varl0->data->sgfn], varl0->data->propspeed, varl0->data->SoA,
+							Symmetry
+						);
 					}
+					gpu_rungekutta4_rout_launch(
+						stream,
+						cg->shape, dT_lev, 
+						cg->d_fgfs[varl0->data->sgfn], cg->d_fgfs[varl->data->sgfn], cg->d_fgfs[varlrhs->data->sgfn], iter_count
+					);
+					if (lev > 0) {// fix BD point
+						gpu_sommerfeld_rout_launch(
+							stream,
+							cg->shape,
+							cg->d_X[0], cg->d_X[1], cg->d_X[2],
+							Pp->data->bbox[0], Pp->data->bbox[1], Pp->data->bbox[2], Pp->data->bbox[3], Pp->data->bbox[4], Pp->data->bbox[5],
+							dT_lev, cg->d_fgfs[phi0->sgfn],
+							cg->d_fgfs[Lap0->sgfn], cg->d_fgfs[varl0->data->sgfn], cg->d_fgfs[varl->data->sgfn], varl0->data->SoA,
+							Symmetry, cor
+						);
+					}
+
+					varl0 = varl0->next;
+					varl = varl->next;
+					varlrhs = varlrhs->next;
 				}
-				f_lowerboundset(cg->shape, cg->fgfs[phi->sgfn], chitiny);
+				gpu_lowerboundset_launch(stream, cg->shape, cg->d_fgfs[phi->sgfn], chitiny);
+
+				GPUManager::getInstance().synchronize_all();
+
+				// cg->move_to_cpu(StateList);
+				cg->move_to_cpu(SynchList_pre);
+				// cg->move_to_cpu(SynchList_cor);
+				// cg->move_to_cpu(RHSList);
+				// cg->move_to_cpu(ConstraintList);
+				// cg->move_to_cpu(MiscList);
+
+				// f_lowerboundset(cg->shape, cg->fgfs[phi->sgfn], chitiny);
 			}
 			if (BP == Pp->data->ble)
 				break;
@@ -225,106 +226,103 @@ void bssn_class::Step_GPU(int lev, int YN)
 				Block *cg = BP->data;
 				if (myrank == cg->rank)
 				{
-						f_enforce_ga(
-							cg->shape,
-							cg->fgfs[gxx->sgfn], cg->fgfs[gxy->sgfn], cg->fgfs[gxz->sgfn], cg->fgfs[gyy->sgfn], cg->fgfs[gyz->sgfn], cg->fgfs[gzz->sgfn],
-							cg->fgfs[Axx->sgfn], cg->fgfs[Axy->sgfn], cg->fgfs[Axz->sgfn], cg->fgfs[Ayy->sgfn], cg->fgfs[Ayz->sgfn], cg->fgfs[Azz->sgfn]
-						);
-						
-						MyList<var> *var_in;
-						var_in = SynchList_pre; 
-						while (var_in) {
-							cg->mark_cpu_modified(var_in->data->sgfn);
-							cg->require_on_gpu(var_in->data->sgfn);
-							var_in = var_in->next;
-						}
-						var_in = MiscList; 
-						while (var_in) {
-							cg->mark_cpu_modified(var_in->data->sgfn);
-							cg->require_on_gpu(var_in->data->sgfn);
-							var_in = var_in->next;
-						}
-						auto stream = GPUManager::getInstance().get_stream();
-						gpu_compute_rhs_bssn_launch(
-							stream,
-							cg->shape, TRK4, cg->d_X[0], cg->d_X[1], cg->d_X[2],
-							cg->d_fgfs[phi->sgfn], cg->d_fgfs[trK->sgfn],
-							cg->d_fgfs[gxx->sgfn], cg->d_fgfs[gxy->sgfn], cg->d_fgfs[gxz->sgfn], 
-							cg->d_fgfs[gyy->sgfn], cg->d_fgfs[gyz->sgfn], cg->d_fgfs[gzz->sgfn],
-							cg->d_fgfs[Axx->sgfn], cg->d_fgfs[Axy->sgfn], cg->d_fgfs[Axz->sgfn], 
-							cg->d_fgfs[Ayy->sgfn], cg->d_fgfs[Ayz->sgfn], cg->d_fgfs[Azz->sgfn],
-							cg->d_fgfs[Gmx->sgfn], cg->d_fgfs[Gmy->sgfn], cg->d_fgfs[Gmz->sgfn],
-							cg->d_fgfs[Lap->sgfn], 
-							cg->d_fgfs[Sfx->sgfn], cg->d_fgfs[Sfy->sgfn], cg->d_fgfs[Sfz->sgfn],
-							cg->d_fgfs[dtSfx->sgfn], cg->d_fgfs[dtSfy->sgfn], cg->d_fgfs[dtSfz->sgfn],
-							cg->d_fgfs[phi1->sgfn], cg->d_fgfs[trK1->sgfn],
-							cg->d_fgfs[gxx1->sgfn], cg->d_fgfs[gxy1->sgfn], cg->d_fgfs[gxz1->sgfn],
-							cg->d_fgfs[gyy1->sgfn], cg->d_fgfs[gyz1->sgfn], cg->d_fgfs[gzz1->sgfn],
-							cg->d_fgfs[Axx1->sgfn], cg->d_fgfs[Axy1->sgfn], cg->d_fgfs[Axz1->sgfn],
-							cg->d_fgfs[Ayy1->sgfn], cg->d_fgfs[Ayz1->sgfn], cg->d_fgfs[Azz1->sgfn],
-							cg->d_fgfs[Gmx1->sgfn], cg->d_fgfs[Gmy1->sgfn], cg->d_fgfs[Gmz1->sgfn],
-							cg->d_fgfs[Lap1->sgfn], 
-							cg->d_fgfs[Sfx1->sgfn], cg->d_fgfs[Sfy1->sgfn], cg->d_fgfs[Sfz1->sgfn],
-							cg->d_fgfs[dtSfx1->sgfn], cg->d_fgfs[dtSfy1->sgfn], cg->d_fgfs[dtSfz1->sgfn],
-							cg->d_fgfs[rho->sgfn], 
-							cg->d_fgfs[Sx->sgfn], cg->d_fgfs[Sy->sgfn], cg->d_fgfs[Sz->sgfn],
-							cg->d_fgfs[Sxx->sgfn], cg->d_fgfs[Sxy->sgfn], cg->d_fgfs[Sxz->sgfn], 
-							cg->d_fgfs[Syy->sgfn], cg->d_fgfs[Syz->sgfn], cg->d_fgfs[Szz->sgfn],
-							cg->d_fgfs[Gamxxx->sgfn], cg->d_fgfs[Gamxxy->sgfn], cg->d_fgfs[Gamxxz->sgfn],
-							cg->d_fgfs[Gamxyy->sgfn], cg->d_fgfs[Gamxyz->sgfn], cg->d_fgfs[Gamxzz->sgfn],
-							cg->d_fgfs[Gamyxx->sgfn], cg->d_fgfs[Gamyxy->sgfn], cg->d_fgfs[Gamyxz->sgfn],
-							cg->d_fgfs[Gamyyy->sgfn], cg->d_fgfs[Gamyyz->sgfn], cg->d_fgfs[Gamyzz->sgfn],
-							cg->d_fgfs[Gamzxx->sgfn], cg->d_fgfs[Gamzxy->sgfn], cg->d_fgfs[Gamzxz->sgfn],
-							cg->d_fgfs[Gamzyy->sgfn], cg->d_fgfs[Gamzyz->sgfn], cg->d_fgfs[Gamzzz->sgfn],
-							cg->d_fgfs[Rxx->sgfn], cg->d_fgfs[Rxy->sgfn], cg->d_fgfs[Rxz->sgfn], 
-							cg->d_fgfs[Ryy->sgfn], cg->d_fgfs[Ryz->sgfn], cg->d_fgfs[Rzz->sgfn],
-							cg->d_fgfs[Cons_Ham->sgfn],
-							cg->d_fgfs[Cons_Px->sgfn], cg->d_fgfs[Cons_Py->sgfn], cg->d_fgfs[Cons_Pz->sgfn],
-							cg->d_fgfs[Cons_Gx->sgfn], cg->d_fgfs[Cons_Gy->sgfn], cg->d_fgfs[Cons_Gz->sgfn],
-							Symmetry, lev, ndeps, cor
-						);
+					// cg->move_to_gpu(StateList);
+					cg->move_to_gpu(SynchList_pre);
+					cg->move_to_gpu(SynchList_cor);
+					// cg->move_to_gpu(RHSList);
+					// cg->move_to_gpu(ConstraintList);
+					// cg->move_to_gpu(MiscList);
+					
+					auto stream = GPUManager::getInstance().get_stream();
 
-						GPUManager::getInstance().synchronize_all();
-						MyList<var> *var_out;
-						var_out = SynchList_cor; 
-						while (var_out) {
-							cg->mark_gpu_modified(var_out->data->sgfn);
-							cg->require_on_cpu(var_out->data->sgfn);
-							var_out = var_out->next;
-						}
-						var_out = ConstraintList; 
-						while (var_out) {
-							cg->mark_gpu_modified(var_out->data->sgfn);
-							cg->require_on_cpu(var_out->data->sgfn);
-							var_out = var_out->next;
-						}
-					// rk4 substep and boundary
-					{
-						MyList<var> *varl0 = StateList, *varl = SynchList_pre, *varl1 = SynchList_cor, *varlrhs = RHSList; // we do not check the correspondence here
-						while (varl0)
-						{
-							if (lev == 0) // sommerfeld indeed
-								f_sommerfeld_routbam(cg->shape, cg->X[0], cg->X[1], cg->X[2],
-																		 Pp->data->bbox[0], Pp->data->bbox[1], Pp->data->bbox[2], Pp->data->bbox[3], Pp->data->bbox[4], Pp->data->bbox[5],
-																		 cg->fgfs[varl1->data->sgfn],
-																		 cg->fgfs[varl->data->sgfn], varl0->data->propspeed, varl0->data->SoA,
-																		 Symmetry);
-							f_rungekutta4_rout(cg->shape, dT_lev, cg->fgfs[varl0->data->sgfn], cg->fgfs[varl1->data->sgfn], cg->fgfs[varlrhs->data->sgfn],
-																 iter_count);
-							if (lev > 0) // fix BD point
-								f_sommerfeld_rout(cg->shape, cg->X[0], cg->X[1], cg->X[2],
-																	Pp->data->bbox[0], Pp->data->bbox[1], Pp->data->bbox[2], Pp->data->bbox[3], Pp->data->bbox[4], Pp->data->bbox[5],
-																	dT_lev, cg->fgfs[phi0->sgfn],
-																	cg->fgfs[Lap0->sgfn], cg->fgfs[varl0->data->sgfn], cg->fgfs[varl1->data->sgfn], varl0->data->SoA,
-																	Symmetry, cor);
+					gpu_enforce_ga_launch(
+						stream, cg->shape,
+						cg->d_fgfs[gxx->sgfn], cg->d_fgfs[gxy->sgfn], cg->d_fgfs[gxz->sgfn], cg->d_fgfs[gyy->sgfn], cg->d_fgfs[gyz->sgfn], cg->d_fgfs[gzz->sgfn],
+						cg->d_fgfs[Axx->sgfn], cg->d_fgfs[Axy->sgfn], cg->d_fgfs[Axz->sgfn], cg->d_fgfs[Ayy->sgfn], cg->d_fgfs[Ayz->sgfn], cg->d_fgfs[Azz->sgfn]
+					);
 
-							varl0 = varl0->next;
-							varl = varl->next;
-							varl1 = varl1->next;
-							varlrhs = varlrhs->next;
+					gpu_compute_rhs_bssn_launch(
+						stream,
+						cg->shape, TRK4, cg->d_X[0], cg->d_X[1], cg->d_X[2],
+						cg->d_fgfs[phi->sgfn], cg->d_fgfs[trK->sgfn],
+						cg->d_fgfs[gxx->sgfn], cg->d_fgfs[gxy->sgfn], cg->d_fgfs[gxz->sgfn], 
+						cg->d_fgfs[gyy->sgfn], cg->d_fgfs[gyz->sgfn], cg->d_fgfs[gzz->sgfn],
+						cg->d_fgfs[Axx->sgfn], cg->d_fgfs[Axy->sgfn], cg->d_fgfs[Axz->sgfn], 
+						cg->d_fgfs[Ayy->sgfn], cg->d_fgfs[Ayz->sgfn], cg->d_fgfs[Azz->sgfn],
+						cg->d_fgfs[Gmx->sgfn], cg->d_fgfs[Gmy->sgfn], cg->d_fgfs[Gmz->sgfn],
+						cg->d_fgfs[Lap->sgfn], 
+						cg->d_fgfs[Sfx->sgfn], cg->d_fgfs[Sfy->sgfn], cg->d_fgfs[Sfz->sgfn],
+						cg->d_fgfs[dtSfx->sgfn], cg->d_fgfs[dtSfy->sgfn], cg->d_fgfs[dtSfz->sgfn],
+						cg->d_fgfs[phi1->sgfn], cg->d_fgfs[trK1->sgfn],
+						cg->d_fgfs[gxx1->sgfn], cg->d_fgfs[gxy1->sgfn], cg->d_fgfs[gxz1->sgfn],
+						cg->d_fgfs[gyy1->sgfn], cg->d_fgfs[gyz1->sgfn], cg->d_fgfs[gzz1->sgfn],
+						cg->d_fgfs[Axx1->sgfn], cg->d_fgfs[Axy1->sgfn], cg->d_fgfs[Axz1->sgfn],
+						cg->d_fgfs[Ayy1->sgfn], cg->d_fgfs[Ayz1->sgfn], cg->d_fgfs[Azz1->sgfn],
+						cg->d_fgfs[Gmx1->sgfn], cg->d_fgfs[Gmy1->sgfn], cg->d_fgfs[Gmz1->sgfn],
+						cg->d_fgfs[Lap1->sgfn], 
+						cg->d_fgfs[Sfx1->sgfn], cg->d_fgfs[Sfy1->sgfn], cg->d_fgfs[Sfz1->sgfn],
+						cg->d_fgfs[dtSfx1->sgfn], cg->d_fgfs[dtSfy1->sgfn], cg->d_fgfs[dtSfz1->sgfn],
+						cg->d_fgfs[rho->sgfn], 
+						cg->d_fgfs[Sx->sgfn], cg->d_fgfs[Sy->sgfn], cg->d_fgfs[Sz->sgfn],
+						cg->d_fgfs[Sxx->sgfn], cg->d_fgfs[Sxy->sgfn], cg->d_fgfs[Sxz->sgfn], 
+						cg->d_fgfs[Syy->sgfn], cg->d_fgfs[Syz->sgfn], cg->d_fgfs[Szz->sgfn],
+						cg->d_fgfs[Gamxxx->sgfn], cg->d_fgfs[Gamxxy->sgfn], cg->d_fgfs[Gamxxz->sgfn],
+						cg->d_fgfs[Gamxyy->sgfn], cg->d_fgfs[Gamxyz->sgfn], cg->d_fgfs[Gamxzz->sgfn],
+						cg->d_fgfs[Gamyxx->sgfn], cg->d_fgfs[Gamyxy->sgfn], cg->d_fgfs[Gamyxz->sgfn],
+						cg->d_fgfs[Gamyyy->sgfn], cg->d_fgfs[Gamyyz->sgfn], cg->d_fgfs[Gamyzz->sgfn],
+						cg->d_fgfs[Gamzxx->sgfn], cg->d_fgfs[Gamzxy->sgfn], cg->d_fgfs[Gamzxz->sgfn],
+						cg->d_fgfs[Gamzyy->sgfn], cg->d_fgfs[Gamzyz->sgfn], cg->d_fgfs[Gamzzz->sgfn],
+						cg->d_fgfs[Rxx->sgfn], cg->d_fgfs[Rxy->sgfn], cg->d_fgfs[Rxz->sgfn], 
+						cg->d_fgfs[Ryy->sgfn], cg->d_fgfs[Ryz->sgfn], cg->d_fgfs[Rzz->sgfn],
+						cg->d_fgfs[Cons_Ham->sgfn],
+						cg->d_fgfs[Cons_Px->sgfn], cg->d_fgfs[Cons_Py->sgfn], cg->d_fgfs[Cons_Pz->sgfn],
+						cg->d_fgfs[Cons_Gx->sgfn], cg->d_fgfs[Cons_Gy->sgfn], cg->d_fgfs[Cons_Gz->sgfn],
+						Symmetry, lev, ndeps, cor
+					);
+
+					MyList<var> *varl0 = StateList, *varl = SynchList_pre, *varl1 = SynchList_cor, *varlrhs = RHSList; // we do not check the correspondence here
+					while (varl0) {
+						if (lev == 0) { // sommerfeld indeed
+							gpu_sommerfeld_routbam_launch(
+								stream, cg->shape, cg->d_X[0], cg->d_X[1], cg->d_X[2],
+								Pp->data->bbox[0], Pp->data->bbox[1], Pp->data->bbox[2], Pp->data->bbox[3], Pp->data->bbox[4], Pp->data->bbox[5],
+								cg->d_fgfs[varl1->data->sgfn],
+								cg->d_fgfs[varl->data->sgfn], varl0->data->propspeed, varl0->data->SoA,
+								Symmetry
+							);
 						}
+						gpu_rungekutta4_rout_launch(
+							stream, cg->shape, dT_lev, 
+							cg->d_fgfs[varl0->data->sgfn], cg->d_fgfs[varl1->data->sgfn], cg->d_fgfs[varlrhs->data->sgfn], iter_count
+						);
+						if (lev > 0) { // fix BD point
+							gpu_sommerfeld_rout_launch(
+								stream, cg->shape, cg->d_X[0], cg->d_X[1], cg->d_X[2],
+								Pp->data->bbox[0], Pp->data->bbox[1], Pp->data->bbox[2], Pp->data->bbox[3], Pp->data->bbox[4], Pp->data->bbox[5],
+								dT_lev, cg->d_fgfs[phi0->sgfn],
+								cg->d_fgfs[Lap0->sgfn], cg->d_fgfs[varl0->data->sgfn], cg->d_fgfs[varl1->data->sgfn], varl0->data->SoA,
+								Symmetry, cor
+							);
+						}
+
+						varl0 = varl0->next;
+						varl = varl->next;
+						varl1 = varl1->next;
+						varlrhs = varlrhs->next;
 					}
-					f_lowerboundset(cg->shape, cg->fgfs[phi1->sgfn], chitiny);
+
+					gpu_lowerboundset_launch(stream, cg->shape, cg->d_fgfs[phi1->sgfn], chitiny);
+
+					GPUManager::getInstance().synchronize_all();
+
+					// cg->move_to_cpu(StateList);
+					cg->move_to_cpu(SynchList_pre);
+					cg->move_to_cpu(SynchList_cor);
+					// cg->move_to_cpu(RHSList);
+					// cg->move_to_cpu(ConstraintList);
+					// cg->move_to_cpu(MiscList);
+						
+					// f_lowerboundset(cg->shape, cg->fgfs[phi1->sgfn], chitiny);
 				}
 				if (BP == Pp->data->ble)
 					break;

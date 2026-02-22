@@ -43,6 +43,9 @@ public:
    void require_on_cpu(int var_index);
    void mark_gpu_modified(int var_index);
    void mark_cpu_modified(int var_index);
+
+   void move_to_gpu(MyList<var> *VarList);
+   void move_to_cpu(MyList<var> *VarList);
 };
 
 #endif /* BLOCK_H */
