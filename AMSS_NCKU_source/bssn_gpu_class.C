@@ -1610,8 +1610,8 @@ void bssn_class::RecursiveStep(int lev)
         // mesh refinement boundary part
         //
         // till here the PhysTime has updated dT_lev
+	    Helper::move_to_gpu_whole(GH->PatL[lev], myrank, SynchList_cor);
         RestrictProlong(lev, YN, fgt(PhysTime - dT_lev, StartTime, dT_lev / 2), StateList, OldStateList, SynchList_cor);
-        Helper::move_to_cpu_whole(GH->PatL[lev], myrank, SynchList_pre);
 	    Helper::move_to_cpu_whole(GH->PatL[lev], myrank, SynchList_cor);
     }
     GH->Regrid_Onelevel(lev, Symmetry, BH_num, Porgbr, Porg0,
