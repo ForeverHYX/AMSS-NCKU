@@ -95,6 +95,11 @@ namespace Parallel
     void OutBdLow2Hi(Patch *Patc, Patch *Patf,
                                      MyList<var> *VarList1 /* source */, MyList<var> *VarList2 /* target */,
                                      int Symmetry);
+    void OutBdLow2Hi_GPU(
+        Patch *Patc, Patch *Patf,
+        MyList<var> *VarList1 /* source */, MyList<var> *VarList2 /* target */,
+        int Symmetry
+    );
     void OutBdLow2Hi(MyList<Patch> *PatcL, MyList<Patch> *PatfL,
                                      MyList<var> *VarList1 /* source */, MyList<var> *VarList2 /* target */,
                                      int Symmetry);
@@ -113,6 +118,11 @@ namespace Parallel
     void Restrict(MyList<Patch> *PatcL, MyList<Patch> *PatfL,
                                 MyList<var> *VarList1 /* source */, MyList<var> *VarList2 /* target */,
                                 int Symmetry);
+    void Restrict_GPU(
+        MyList<Patch> *PatcL, MyList<Patch> *PatfL,
+        MyList<var> *VarList1 /* source */, MyList<var> *VarList2 /* target */,
+        int Symmetry
+    );
     void Restrict_after(MyList<Patch> *PatcL, MyList<Patch> *PatfL,
                                             MyList<var> *VarList1 /* source */, MyList<var> *VarList2 /* target */,
                                             int Symmetry); // for -ghost - BDghost
@@ -139,9 +149,19 @@ namespace Parallel
     void prepare_inter_time_level(Patch *Pat,
                                                                 MyList<var> *VarList1 /* source (t+dt) */, MyList<var> *VarList2 /* source (t) */,
                                                                 MyList<var> *VarList3 /* target (t+a*dt) */, int tindex);
+    void gpu_prepare_inter_time_level(
+        Patch *Pat,
+        MyList<var> *VarList1 /* source (t+dt) */, MyList<var> *VarList2 /* source (t) */,
+        MyList<var> *VarList3 /* target (t+a*dt) */, int tindex
+    );
     void prepare_inter_time_level(Patch *Pat,
                                                                 MyList<var> *VarList1 /* source (t+dt) */, MyList<var> *VarList2 /* source (t) */,
                                                                 MyList<var> *VarList3 /* source (t-dt) */, MyList<var> *VarList4 /* target (t+a*dt) */, int tindex);
+    void gpu_prepare_inter_time_level(
+        Patch *Pat,
+        MyList<var> *VarList1 /* source (t+dt) */, MyList<var> *VarList2 /* source (t) */,
+        MyList<var> *VarList3 /* source (t-dt) */, MyList<var> *VarList4 /* target (t+a*dt) */, int tindex
+    );
     void prepare_inter_time_level(MyList<Patch> *PatL,
                                                                 MyList<var> *VarList1 /* source (t+dt) */, MyList<var> *VarList2 /* source (t) */,
                                                                 MyList<var> *VarList3 /* target (t+a*dt) */, int tindex);

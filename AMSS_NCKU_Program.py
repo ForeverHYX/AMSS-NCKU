@@ -311,55 +311,61 @@ if (input_data.Initial_Data_Method == "Ansorg-TwoPuncture" ):
 
 ##################################################################
 
-## If the initial-data method is TwoPuncture, generate the TwoPuncture input files
+##################################################################
 
+## Record start time here to avoid NameError if TwoPuncture branch is skipped
+start_time = time.time()  
+
+## If the initial-data method is TwoPuncture, check whether to generate and run it
 if (input_data.Initial_Data_Method == "Ansorg-TwoPuncture" ):
 
     print(                                                  )
-    print( " Initial data is chosen as Ansorg-TwoPuncture" )
-    print(                                                 )
+    print( " Initial data is chosen as Ansorg-TwoPuncture"  )
+    print(                                                  )
     
-    print(                                                                                                         )
-    print( " Automatically generating the input parfile for the TwoPunctureABE executable " )
-    print(                                                                                                         ) 
-    
-    import generate_TwoPuncture_input
-    
-    generate_TwoPuncture_input.generate_AMSSNCKU_TwoPuncture_input()
-    
-    print(                                                                                              )
-    print( " The input parfile for the TwoPunctureABE executable has been generated. " )
-    print(                                                                                              )
-    
-    ## Generated AMSS-NCKU TwoPuncture input filename
-    AMSS_NCKU_TwoPuncture_inputfile      = 'AMSS-NCKU-TwoPuncture.input'
-    AMSS_NCKU_TwoPuncture_inputfile_path = os.path.join( File_directory, AMSS_NCKU_TwoPuncture_inputfile )
- 
-    ## Copy and rename the file
-    shutil.copy2( AMSS_NCKU_TwoPuncture_inputfile_path, os.path.join(output_directory, 'TwoPunctureinput.par') )
-    
-    ###########################
+    # 获取是否运行 TwoPuncture 的标志位，若未在 input 中定义则默认设为 "yes"
+    run_tp = getattr(input_data, "Run_TwoPuncture", "yes")
 
-    ## Run TwoPuncture to generate initial-data files
-    
-    start_time = time.time()  # Record start time
+    if run_tp == "yes":
+        print(                                                                                                         )
+        print( " Automatically generating the input parfile for the TwoPunctureABE executable " )
+        print(                                                                                                         ) 
+        
+        import generate_TwoPuncture_input
+        
+        generate_TwoPuncture_input.generate_AMSSNCKU_TwoPuncture_input()
+        
+        print(                                                                                              )
+        print( " The input parfile for the TwoPunctureABE executable has been generated. " )
+        print(                                                                                              )
+        
+        ## Generated AMSS-NCKU TwoPuncture input filename
+        AMSS_NCKU_TwoPuncture_inputfile      = 'AMSS-NCKU-TwoPuncture.input'
+        AMSS_NCKU_TwoPuncture_inputfile_path = os.path.join( File_directory, AMSS_NCKU_TwoPuncture_inputfile )
+     
+        ## Copy and rename the file
+        shutil.copy2( AMSS_NCKU_TwoPuncture_inputfile_path, os.path.join(output_directory, 'TwoPunctureinput.par') )
+        
+        ###########################
 
-    print()
-    ## print( " Ready to launch the AMSS-NCKU TwoPuncture executable; press Enter to continue. " )
-    ## inputvalue = input()                    
-    print()
-    
-    ## Change to the output (run) directory
-    os.chdir(output_directory)
+        ## Run TwoPuncture to generate initial-data files
+        print()
+        
+        ## Change to the output (run) directory
+        os.chdir(output_directory)
 
-    ## Run the TwoPuncture executable
-    makefile_and_run.run_TwoPunctureABE()
-    
-    ###########################
-    
-    ## Change current working directory back up two levels
-    os.chdir('..')
-    os.chdir('..')
+        ## Run the TwoPuncture executable
+        makefile_and_run.run_TwoPunctureABE()
+        
+        ###########################
+        
+        ## Change current working directory back up two levels
+        os.chdir('..')
+        os.chdir('..')
+    else:
+        print( " [Info] Run_TwoPuncture is set to 'no'. Skipping TwoPunctureABE execution." )
+        print( " [Info] Assuming required TwoPuncture initial-data results already exist in output dictionary." )
+        print()
     
 ##################################################################
     

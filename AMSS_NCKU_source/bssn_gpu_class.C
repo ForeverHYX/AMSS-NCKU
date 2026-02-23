@@ -33,6 +33,7 @@ using namespace std;
 
 // include GPU files
 #include "gpu_manager.h"
+#include "helper.h"
 
 //================================================================================================
 
@@ -1610,6 +1611,8 @@ void bssn_class::RecursiveStep(int lev)
         //
         // till here the PhysTime has updated dT_lev
         RestrictProlong(lev, YN, fgt(PhysTime - dT_lev, StartTime, dT_lev / 2), StateList, OldStateList, SynchList_cor);
+        Helper::move_to_cpu_whole(GH->PatL[lev], myrank, SynchList_pre);
+	    Helper::move_to_cpu_whole(GH->PatL[lev], myrank, SynchList_cor);
     }
     GH->Regrid_Onelevel(lev, Symmetry, BH_num, Porgbr, Porg0,
                                             SynchList_cor, OldStateList, StateList, SynchList_pre,
@@ -2016,67 +2019,61 @@ void bssn_class::Step(int lev, int YN)
 // 0: do not use mixing two levels data for OutBD; 1: do use
 
 #define MIXOUTB 0
-void bssn_class::RestrictProlong(int lev, int YN, bool BB,
-                                                                 MyList<var> *SL, MyList<var> *OL, MyList<var> *corL)
 // we assume
 // StateList      1   -----------
 //
 // OldStateList   0   -----------
 //
 // SynchList_cor  old -----------
-{
-    if (lev > 0)
-    {
+void bssn_class::RestrictProlong(
+    int lev, int YN, bool BB,
+    MyList<var> *SL, MyList<var> *OL, MyList<var> *corL
+) {
+    if (lev > 0) {
         MyList<Patch> *Pp, *Ppc;
-        if (lev > trfls && YN == 0) // time refinement levels and for intermediat time level
-        {
+        if (lev > trfls && YN == 0) { // time refinement levels and for intermediat time level
             Pp = GH->PatL[lev - 1];
-            while (Pp)
-            {
-                if (BB)
-                    Parallel::prepare_inter_time_level(Pp->data, SL, OL, corL,
-                                                                                         SynchList_pre, 0); // use SynchList_pre as temporal storage space
-                else
-                    Parallel::prepare_inter_time_level(Pp->data, SL, OL,
-                                                                                         SynchList_pre, 0); // use SynchList_pre as temporal storage space
+            while (Pp) {
+                // if (BB) Parallel::prepare_inter_time_level(Pp->data, SL, OL, corL, SynchList_pre, 0); // use SynchList_pre as temporal storage space
+                // else Parallel::prepare_inter_time_level(Pp->data, SL, OL, SynchList_pre, 0); // use SynchList_pre as temporal storage space
+                if (BB) Parallel::gpu_prepare_inter_time_level(Pp->data, SL, OL, corL, SynchList_pre, 0); // use SynchList_pre as temporal storage space
+                else Parallel::gpu_prepare_inter_time_level(Pp->data, SL, OL, SynchList_pre, 0); // use SynchList_pre as temporal storage space
                 Pp = Pp->next;
             }
-
-            Parallel::Restrict(GH->PatL[lev - 1], GH->PatL[lev], SL, SynchList_pre, Symmetry);
-
-            Parallel::Sync(GH->PatL[lev - 1], SynchList_pre, Symmetry);
+            Parallel::Restrict_GPU(GH->PatL[lev - 1], GH->PatL[lev], SL, SynchList_pre, Symmetry);
+            // Parallel::Restrict(GH->PatL[lev - 1], GH->PatL[lev], SL, SynchList_pre, Symmetry);
+            Parallel::Sync_GPU(GH->PatL[lev - 1], SynchList_pre, Symmetry);
+            // Parallel::Sync(GH->PatL[lev - 1], SynchList_pre, Symmetry);
             Ppc = GH->PatL[lev - 1];
-            while (Ppc)
-            {
+            while (Ppc) {
                 Pp = GH->PatL[lev];
-                while (Pp)
-                {
-                    Parallel::OutBdLow2Hi(Ppc->data, Pp->data, SynchList_pre, SL, Symmetry);
+                while (Pp) {
+                    Parallel::OutBdLow2Hi_GPU(Ppc->data, Pp->data, SynchList_pre, SL, Symmetry);
+                    // Parallel::OutBdLow2Hi(Ppc->data, Pp->data, SynchList_pre, SL, Symmetry);
                     Pp = Pp->next;
                 }
                 Ppc = Ppc->next;
             }
         }
-        else // no time refinement levels and for all same time levels
-        {
-            Parallel::Restrict(GH->PatL[lev - 1], GH->PatL[lev], SL, SL, Symmetry);
-
-            Parallel::Sync(GH->PatL[lev - 1], SL, Symmetry);
+        else { // no time refinement levels and for all same time levels
+            Parallel::Restrict_GPU(GH->PatL[lev - 1], GH->PatL[lev], SL, SL, Symmetry);
+            // Parallel::Restrict(GH->PatL[lev - 1], GH->PatL[lev], SL, SL, Symmetry);
+            Parallel::Sync_GPU(GH->PatL[lev - 1], SL, Symmetry);
+            // Parallel::Sync(GH->PatL[lev - 1], SL, Symmetry);
 
             Ppc = GH->PatL[lev - 1];
-            while (Ppc)
-            {
+            while (Ppc) {
                 Pp = GH->PatL[lev];
-                while (Pp)
-                {
-                    Parallel::OutBdLow2Hi(Ppc->data, Pp->data, SL, SL, Symmetry);
+                while (Pp) {
+                    Parallel::OutBdLow2Hi_GPU(Ppc->data, Pp->data, SL, SL, Symmetry);
+                    // Parallel::OutBdLow2Hi(Ppc->data, Pp->data, SL, SL, Symmetry);
                     Pp = Pp->next;
                 }
                 Ppc = Ppc->next;
             }
         }
-
-        Parallel::Sync(GH->PatL[lev], SL, Symmetry);
+        Parallel::Sync_GPU(GH->PatL[lev], SL, Symmetry);
+        // Parallel::Sync(GH->PatL[lev], SL, Symmetry);
     }
 }
 
@@ -2227,69 +2224,41 @@ void bssn_class::RestrictProlong(int lev, int YN, bool BB)
                 Pp = Pp->next;
             }
 
-#if (RPB == 0)
             Parallel::Restrict(GH->PatL[lev - 1], GH->PatL[lev], SynchList_cor, SynchList_pre, Symmetry);
-#elif (RPB == 1)
-            //       Parallel::Restrict_bam(GH->PatL[lev-1],GH->PatL[lev],SynchList_cor,SynchList_pre,Symmetry);
-            Parallel::Restrict_bam(GH->PatL[lev - 1], GH->PatL[lev], SynchList_cor, SynchList_pre, GH->rsul[lev], Symmetry);
-#endif
 
             Parallel::Sync(GH->PatL[lev - 1], SynchList_pre, Symmetry);
 
-#if (RPB == 0)
             Ppc = GH->PatL[lev - 1];
             while (Ppc)
             {
                 Pp = GH->PatL[lev];
                 while (Pp)
                 {
-#if (MIXOUTB == 0)
                     Parallel::OutBdLow2Hi(Ppc->data, Pp->data, SynchList_pre, SynchList_cor, Symmetry);
-#elif (MIXOUTB == 1)
-                    Parallel::OutBdLow2Himix(Ppc->data, Pp->data, SynchList_pre, SynchList_cor, Symmetry);
-#endif
                     Pp = Pp->next;
                 }
                 Ppc = Ppc->next;
             }
-#elif (RPB == 1)
-            //       Parallel::OutBdLow2Hi_bam(GH->PatL[lev-1],GH->PatL[lev],SynchList_pre,SynchList_cor,Symmetry);
-            Parallel::OutBdLow2Hi_bam(GH->PatL[lev - 1], GH->PatL[lev], SynchList_pre, SynchList_cor, GH->bdsul[lev], Symmetry);
-#endif
         }
         else // no time refinement levels and for all same time levels
         {
             if (myrank == 0)
                 cout << "===: " << GH->Lt[lev - 1] << "," << GH->Lt[lev] + dT_lev << endl;
-#if (RPB == 0)
             Parallel::Restrict(GH->PatL[lev - 1], GH->PatL[lev], SynchList_cor, StateList, Symmetry);
-#elif (RPB == 1)
-            //       Parallel::Restrict_bam(GH->PatL[lev-1],GH->PatL[lev],SynchList_cor,StateList,Symmetry);
-            Parallel::Restrict_bam(GH->PatL[lev - 1], GH->PatL[lev], SynchList_cor, StateList, GH->rsul[lev], Symmetry);
-#endif
 
             Parallel::Sync(GH->PatL[lev - 1], StateList, Symmetry);
 
-#if (RPB == 0)
             Ppc = GH->PatL[lev - 1];
             while (Ppc)
             {
                 Pp = GH->PatL[lev];
                 while (Pp)
                 {
-#if (MIXOUTB == 0)
                     Parallel::OutBdLow2Hi(Ppc->data, Pp->data, StateList, SynchList_cor, Symmetry);
-#elif (MIXOUTB == 1)
-                    Parallel::OutBdLow2Himix(Ppc->data, Pp->data, StateList, SynchList_cor, Symmetry);
-#endif
                     Pp = Pp->next;
                 }
                 Ppc = Ppc->next;
             }
-#elif (RPB == 1)
-            //       Parallel::OutBdLow2Hi_bam(GH->PatL[lev-1],GH->PatL[lev],StateList,SynchList_cor,Symmetry);
-            Parallel::OutBdLow2Hi_bam(GH->PatL[lev - 1], GH->PatL[lev], StateList, SynchList_cor, GH->bdsul[lev], Symmetry);
-#endif
         }
 
         Parallel::Sync(GH->PatL[lev], SynchList_cor, Symmetry);
@@ -2321,60 +2290,33 @@ void bssn_class::ProlongRestrict(int lev, int YN, bool BB)
                 Pp = Pp->next;
             }
 
-#if (RPB == 0)
             Ppc = GH->PatL[lev - 1];
             while (Ppc)
             {
                 Pp = GH->PatL[lev];
                 while (Pp)
                 {
-#if (MIXOUTB == 0)
                     Parallel::OutBdLow2Hi(Ppc->data, Pp->data, SynchList_pre, SynchList_cor, Symmetry);
-#elif (MIXOUTB == 1)
-                    Parallel::OutBdLow2Himix(Ppc->data, Pp->data, SynchList_pre, SynchList_cor, Symmetry);
-#endif
                     Pp = Pp->next;
                 }
                 Ppc = Ppc->next;
             }
-#elif (RPB == 1)
-            //       Parallel::OutBdLow2Hi_bam(GH->PatL[lev-1],GH->PatL[lev],SynchList_pre,SynchList_cor,Symmetry);
-            Parallel::OutBdLow2Hi_bam(GH->PatL[lev - 1], GH->PatL[lev], SynchList_pre, SynchList_cor, GH->bdsul[lev], Symmetry);
-#endif
         }
         else // no time refinement levels and for all same time levels
         {
-#if (RPB == 0)
             Ppc = GH->PatL[lev - 1];
             while (Ppc)
             {
                 Pp = GH->PatL[lev];
                 while (Pp)
                 {
-#if (MIXOUTB == 0)
                     Parallel::OutBdLow2Hi(Ppc->data, Pp->data, StateList, SynchList_cor, Symmetry);
-#elif (MIXOUTB == 1)
-                    Parallel::OutBdLow2Himix(Ppc->data, Pp->data, StateList, SynchList_cor, Symmetry);
-#endif
                     Pp = Pp->next;
                 }
                 Ppc = Ppc->next;
             }
-#elif (RPB == 1)
-            //       Parallel::OutBdLow2Hi_bam(GH->PatL[lev-1],GH->PatL[lev],StateList,SynchList_cor,Symmetry);
-            Parallel::OutBdLow2Hi_bam(GH->PatL[lev - 1], GH->PatL[lev], StateList, SynchList_cor, GH->bdsul[lev], Symmetry);
-#endif
 
-#if 0
-#if (RPB == 0)
-             Parallel::Restrict(GH->PatL[lev-1],GH->PatL[lev],SynchList_cor,StateList,Symmetry);
-#elif (RPB == 1)
-//       Parallel::Restrict_bam(GH->PatL[lev-1],GH->PatL[lev],SynchList_cor,StateList,Symmetry);
-             Parallel::Restrict_bam(GH->PatL[lev-1],GH->PatL[lev],SynchList_cor,StateList,GH->rsul[lev],Symmetry);
-#endif
-#else
             Parallel::Restrict_after(GH->PatL[lev - 1], GH->PatL[lev], SynchList_cor, StateList, Symmetry);
-#endif
             Parallel::Sync(GH->PatL[lev - 1], StateList, Symmetry);
         }
 

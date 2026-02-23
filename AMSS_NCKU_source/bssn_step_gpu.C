@@ -21,6 +21,7 @@
 
 // include gpu files
 #include "gpu_manager.h"
+#include "helper.h"
 
 void bssn_class::Step_GPU(int lev, int YN)
 {
@@ -333,19 +334,21 @@ void bssn_class::Step_GPU(int lev, int YN)
 			}
 		}
 	}
-	Pp = GH->PatL[lev];
-    while (Pp) {
-        MyList<Block> *BP = Pp->data->blb;
-        while (BP) {
-            Block *cg = BP->data;
-            if (myrank == cg->rank) {
-				cg->move_to_cpu(SynchList_pre); 
-                cg->move_to_cpu(SynchList_cor);
-            }
-            BP = BP->next;
-        }
-        Pp = Pp->next;
-    }
+	// Pp = GH->PatL[lev];
+    // while (Pp) {
+    //     MyList<Block> *BP = Pp->data->blb;
+    //     while (BP) {
+    //         Block *cg = BP->data;
+    //         if (myrank == cg->rank) {
+	// 			   cg->move_to_cpu(SynchList_pre); 
+    //             cg->move_to_cpu(SynchList_cor);
+    //         }
+    //         BP = BP->next;
+    //     }
+    //     Pp = Pp->next;
+    // }
+	// Helper::move_to_cpu_whole(GH->PatL[lev], myrank, SynchList_pre);
+	// Helper::move_to_cpu_whole(GH->PatL[lev], myrank, SynchList_cor);
 	// note the data structure before update
 	// SynchList_cor 1   -----------
 	//

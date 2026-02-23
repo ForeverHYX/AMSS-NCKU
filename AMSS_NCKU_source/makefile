@@ -10,6 +10,9 @@ include makefile.inc
 .C.o:
 	${CXX} $(CXXAPPFLAGS) -c $< $(filein) -o $@
 
+.cpp.o:
+	${CXX} $(CXXAPPFLAGS) -c $< $(filein) -o $@
+
 .for.o:
 	$(f77) -c $< -o $@
 
@@ -30,7 +33,8 @@ C++FILES_GPU = ABE.o Ansorg.o Block.o misc.o monitor.o Parallel.o MPatch.o var.o
 	   bssnEM_class.o cpbc_util.o z4c_rhs_point.o checkpoint.o\
            Parallel_bam.o scalar_class.o transpbh.o NullShellPatch2.o\
 	   NullShellPatch2_Evo.o \
-	   bssn_gpu_class.o bssn_step_gpu.o bssn_macro.o writefile_f.o
+	   bssn_gpu_class.o bssn_step_gpu.o bssn_macro.o writefile_f.o\
+	   Parallel_GPU.o helper.o
 
 F90FILES = enforce_algebra.o fmisc.o initial_puncture.o prolongrestrict.o\
 	   prolongrestrict_cell.o prolongrestrict_vertex.o\
@@ -76,7 +80,7 @@ $(C++FILES_GPU): Block.h enforce_algebra.h fmisc.h initial_puncture.h macrodef.h
 	     NullShellPatch.h initial_maxwell.h bssnEM_class.h getnpem2.h\
 	     empart.h NullNews.h kodiss.h Parallel_bam.h ricci_gamma.h\
              initial_null2.h NullShellPatch2.h \
-             bssn_gpu_class.h bssn_macro.h
+             bssn_gpu_class.h bssn_macro.h helper.h
              
 $(AHFDOBJS): cctk.h cctk_Config.h cctk_Types.h cctk_Constants.h myglobal.h
 

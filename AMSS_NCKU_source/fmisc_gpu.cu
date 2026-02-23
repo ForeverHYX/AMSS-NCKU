@@ -317,3 +317,77 @@ void gpu_unpack_launch(
 	int grid = (n + block - 1) / block;
 	gpu_unpack_kernel<<<grid, block, 0, stream>>>(d_src_1d, d_dst_3d, dst_nx, dst_ny, src_nx, src_ny, src_nz, off_x, off_y, off_z);
 }
+
+// =====================================================================
+// Time Level Interpolation Kernels
+// =====================================================================
+
+__global__ void average_kernel(int n, const double* f1, const double* f2, double* fout) {
+    int idx = blockIdx.x * blockDim.x + threadIdx.x;
+    if (idx < n) {
+        fout[idx] = 0.5 * (f1[idx] + f2[idx]);
+    }
+}
+
+__global__ void average3_kernel(int n, const double* f1, const double* f2, double* fout) {
+    int idx = blockIdx.x * blockDim.x + threadIdx.x;
+    if (idx < n) {
+        fout[idx] = 0.75 * f1[idx] + 0.25 * f2[idx];
+    }
+}
+
+__global__ void average2_kernel(int n, const double* f1, const double* f2, const double* f3, double* fout) {
+    int idx = blockIdx.x * blockDim.x + threadIdx.x;
+    if (idx < n) {
+        fout[idx] = (3.0 / 8.0) * f1[idx] + (3.0 / 4.0) * f2[idx] - (1.0 / 8.0) * f3[idx];
+    }
+}
+
+__global__ void average2p_kernel(int n, const double* f1, const double* f2, const double* f3, double* fout) {
+    int idx = blockIdx.x * blockDim.x + threadIdx.x;
+    if (idx < n) {
+        fout[idx] = (21.0 / 32.0) * f1[idx] + (7.0 / 16.0) * f2[idx] - (3.0 / 32.0) * f3[idx];
+    }
+}
+
+__global__ void average2m_kernel(int n, const double* f1, const double* f2, const double* f3, double* fout) {
+    int idx = blockIdx.x * blockDim.x + threadIdx.x;
+    if (idx < n) {
+        fout[idx] = (5.0 / 32.0) * f1[idx] + (15.0 / 16.0) * f2[idx] - (3.0 / 32.0) * f3[idx];
+    }
+}
+
+void gpu_average_launch(cudaStream_t stream, const int ext[3], const double* d_f1, const double* d_f2, double* d_fout) {
+    int n = ext[0] * ext[1] * ext[2];
+    int block = 256;
+    int grid = (n + block - 1) / block;
+    average_kernel<<<grid, block, 0, stream>>>(n, d_f1, d_f2, d_fout);
+}
+
+void gpu_average3_launch(cudaStream_t stream, const int ext[3], const double* d_f1, const double* d_f2, double* d_fout) {
+    int n = ext[0] * ext[1] * ext[2];
+    int block = 256;
+    int grid = (n + block - 1) / block;
+    average3_kernel<<<grid, block, 0, stream>>>(n, d_f1, d_f2, d_fout);
+}
+
+void gpu_average2_launch(cudaStream_t stream, const int ext[3], const double* d_f1, const double* d_f2, const double* d_f3, double* d_fout) {
+    int n = ext[0] * ext[1] * ext[2];
+    int block = 256;
+    int grid = (n + block - 1) / block;
+    average2_kernel<<<grid, block, 0, stream>>>(n, d_f1, d_f2, d_f3, d_fout);
+}
+
+void gpu_average2p_launch(cudaStream_t stream, const int ext[3], const double* d_f1, const double* d_f2, const double* d_f3, double* d_fout) {
+    int n = ext[0] * ext[1] * ext[2];
+    int block = 256;
+    int grid = (n + block - 1) / block;
+    average2p_kernel<<<grid, block, 0, stream>>>(n, d_f1, d_f2, d_f3, d_fout);
+}
+
+void gpu_average2m_launch(cudaStream_t stream, const int ext[3], const double* d_f1, const double* d_f2, const double* d_f3, double* d_fout) {
+    int n = ext[0] * ext[1] * ext[2];
+    int block = 256;
+    int grid = (n + block - 1) / block;
+    average2m_kernel<<<grid, block, 0, stream>>>(n, d_f1, d_f2, d_f3, d_fout);
+}
