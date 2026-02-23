@@ -27,6 +27,7 @@ public:
    double *(*d_fgfs);
    bool *cpu_valid;
    bool *gpu_valid;
+   cudaStream_t stream;
 
 public:
    Block() {};

@@ -2942,9 +2942,8 @@ void bssn_class::Constraint_Out()
                                 cg->move_to_gpu(StateList);
                                 cg->move_to_gpu(MiscList);
                                 
-                                auto stream = GPUManager::getInstance().get_stream();
                                 gpu_compute_rhs_bssn_launch(
-                                    stream,
+                                    cg->stream,
                                     cg->shape, TRK4, cg->d_X[0], cg->d_X[1], cg->d_X[2],
                                     cg->d_fgfs[phi0->sgfn], cg->d_fgfs[trK0->sgfn],
                                     cg->d_fgfs[gxx0->sgfn], cg->d_fgfs[gxy0->sgfn], cg->d_fgfs[gxz0->sgfn], 
@@ -3061,9 +3060,8 @@ void bssn_class::Interp_Constraint(bool infg)
                                 cg->move_to_gpu(StateList);
                                 cg->move_to_gpu(MiscList);
 
-                                auto stream = GPUManager::getInstance().get_stream();
                                 gpu_compute_rhs_bssn_launch(
-                                    stream,
+                                    cg->stream,
                                     cg->shape, TRK4, cg->d_X[0], cg->d_X[1], cg->d_X[2],
                                     cg->d_fgfs[phi0->sgfn], cg->d_fgfs[trK0->sgfn],
                                     cg->d_fgfs[gxx0->sgfn], cg->d_fgfs[gxy0->sgfn], cg->d_fgfs[gxz0->sgfn], 
@@ -3212,9 +3210,9 @@ void bssn_class::Compute_Constraint()
                     {
                         cg->move_to_gpu(StateList);
                         cg->move_to_gpu(MiscList);
-                        auto stream = GPUManager::getInstance().get_stream();
+
                         gpu_compute_rhs_bssn_launch(
-                            stream,
+                            cg->stream,
                             cg->shape, TRK4, cg->d_X[0], cg->d_X[1], cg->d_X[2],
                             cg->d_fgfs[phi0->sgfn], cg->d_fgfs[trK0->sgfn],
                             cg->d_fgfs[gxx0->sgfn], cg->d_fgfs[gxy0->sgfn], cg->d_fgfs[gxz0->sgfn], 

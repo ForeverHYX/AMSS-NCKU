@@ -3034,8 +3034,6 @@ int Parallel::data_packer(
         type = 2;
     else
         type = 3;
-
-    auto stream = GPUManager::getInstance().get_stream();
     
     while (src && dst)
     {
@@ -3159,7 +3157,6 @@ int Parallel::gpu_data_packer(
             varls = VarLists;
             varld = VarListd;
             while (varls && varld) {
-                auto stream = GPUManager::getInstance().get_stream();
                 if (d_data) {
                     if (dir == PACK) {
                         double* d_dst_ptr = d_data + size_out; 
@@ -3177,7 +3174,7 @@ int Parallel::gpu_data_packer(
                             int off_z = (int)std::trunc((dst->data->llb[2] - src->data->Bg->bbox[2]) / dz + 0.4);
 
                             gpu_pack_launch(
-                                stream, 
+                                src->data->Bg->stream, 
                                 d_src_ptr, d_dst_ptr,
                                 src->data->Bg->shape[0], src->data->Bg->shape[1], // 源 3D 数组的 XY 维度
                                 dst->data->shape[0], dst->data->shape[1], dst->data->shape[2], // 目标幽灵区的大小
@@ -3188,7 +3185,7 @@ int Parallel::gpu_data_packer(
 
                         case 2: {
                             gpu_restrict3_launch(
-                                stream,
+                                src->data->Bg->stream,
                                 d_src_ptr, d_dst_ptr, // src_f, dst_c
                                 dst->data->llb, dst->data->uub, dst->data->shape,        
                                 src->data->Bg->bbox, src->data->Bg->bbox + dim, src->data->Bg->shape, 
@@ -3200,7 +3197,7 @@ int Parallel::gpu_data_packer(
 
                         case 3: {
                             gpu_prolong3_launch(
-                                stream,
+                                src->data->Bg->stream,
                                 d_src_ptr, d_dst_ptr, // src_c, dst_f
                                 src->data->Bg->bbox, src->data->Bg->bbox + dim, src->data->Bg->shape, 
                                 dst->data->llb, dst->data->uub, dst->data->shape,        
@@ -3226,7 +3223,7 @@ int Parallel::gpu_data_packer(
                         int off_z = (int)std::trunc((dst->data->llb[2] - dst->data->Bg->bbox[2]) / dz + 0.4);
 
                         gpu_unpack_launch(
-                            stream, 
+                            dst->data->Bg->stream, 
                             d_src_ptr, d_dst_ptr,
                             dst->data->Bg->shape[0], dst->data->Bg->shape[1], // 目标 3D 数组的 XY 维度
                             dst->data->shape[0], dst->data->shape[1], dst->data->shape[2], // 收到幽灵区数据的大小

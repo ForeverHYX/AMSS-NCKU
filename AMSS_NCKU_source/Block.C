@@ -92,6 +92,8 @@ Block::Block(int DIM, int *shapei, double *bboxi, int ranki, int ingfsi, int fng
 			memset(igfs[i], 0, sizeof(int) * nn);
 		}
 	}
+
+	stream = GPUManager::getInstance().get_stream();
 }
 Block::~Block()
 {
