@@ -347,8 +347,8 @@ void bssn_class::Step_GPU(int lev, int YN)
     //     }
     //     Pp = Pp->next;
     // }
-	// Helper::move_to_cpu_whole(GH->PatL[lev], myrank, SynchList_pre);
-	// Helper::move_to_cpu_whole(GH->PatL[lev], myrank, SynchList_cor);
+	Helper::move_to_cpu_whole(GH->PatL[lev], myrank, SynchList_pre);
+	Helper::move_to_cpu_whole(GH->PatL[lev], myrank, SynchList_cor);
 	// note the data structure before update
 	// SynchList_cor 1   -----------
 	//

@@ -535,8 +535,8 @@ void Parallel::gpu_prepare_inter_time_level(
                     cg->d_fgfs[varl3->data->sgfn], cg->d_fgfs[varl4->data->sgfn]
                 );
                 else if (tindex == -1) gpu_average2m_launch(
-                    cg->stream, cg->shape, cg->fgfs[varl1->data->sgfn], cg->fgfs[varl2->data->sgfn],
-                    cg->fgfs[varl3->data->sgfn], cg->fgfs[varl4->data->sgfn]
+                    cg->stream, cg->shape, cg->d_fgfs[varl1->data->sgfn], cg->d_fgfs[varl2->data->sgfn],
+                    cg->d_fgfs[varl3->data->sgfn], cg->d_fgfs[varl4->data->sgfn]
                 );
                 else {
                     cout << "error tindex in long cgh::prepare_inter_time_level" << endl;
