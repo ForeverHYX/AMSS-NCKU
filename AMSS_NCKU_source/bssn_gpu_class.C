@@ -1610,9 +1610,40 @@ void bssn_class::RecursiveStep(int lev)
         // mesh refinement boundary part
         //
         // till here the PhysTime has updated dT_lev
-	    Helper::move_to_gpu_whole(GH->PatL[lev], myrank, SynchList_cor);
+        // =================================================================
+        // 1. RestrictProlong 前的数据入场 (H2D)
+        // =================================================================
+        if (lev > 0) {
+        // A. 细网格 (lev) 输入
+        Helper::move_to_gpu_whole(GH->PatL[lev], myrank, StateList);
+        Helper::move_to_gpu_whole(GH->PatL[lev], myrank, SynchList_cor);
+
+        // B. 粗网格 (lev-1) 输入 (为了给细网格提供边界插值基准)
+        Helper::move_to_gpu_whole(GH->PatL[lev - 1], myrank, StateList);
+        Helper::move_to_gpu_whole(GH->PatL[lev - 1], myrank, OldStateList);
+        Helper::move_to_gpu_whole(GH->PatL[lev - 1], myrank, SynchList_cor);
+        
+        // (可选保障) 如果 move_to_gpu 内部包含 cudaMalloc，
+        // 确保作为中间缓冲区的 SynchList_pre 在 GPU 上已分配
+        Helper::move_to_gpu_whole(GH->PatL[lev - 1], myrank, SynchList_pre); 
+        }
+
+        // =================================================================
+        // 2. 执行纯 GPU 版本的 RestrictProlong
+        // =================================================================
         RestrictProlong(lev, YN, fgt(PhysTime - dT_lev, StartTime, dT_lev / 2), StateList, OldStateList, SynchList_cor);
-	    Helper::move_to_cpu_whole(GH->PatL[lev], myrank, SynchList_cor);
+
+        // =================================================================
+        // 3. RestrictProlong 后的结果离场 (D2H)
+        // =================================================================
+        if (lev > 0) {
+        // A. 细网格的 StateList 在 OutBdLow2Hi 中被更新，必须拉回
+        Helper::move_to_cpu_whole(GH->PatL[lev], myrank, StateList);
+        Helper::move_to_cpu_whole(GH->PatL[lev], myrank, SynchList_cor);
+        
+        // B. 当 YN == 1 (同时间层) 时，粗网格的 StateList 会被 Restrict 修改，必须拉回
+        Helper::move_to_cpu_whole(GH->PatL[lev - 1], myrank, StateList);
+        }
     }
     GH->Regrid_Onelevel(lev, Symmetry, BH_num, Porgbr, Porg0,
                                             SynchList_cor, OldStateList, StateList, SynchList_pre,
