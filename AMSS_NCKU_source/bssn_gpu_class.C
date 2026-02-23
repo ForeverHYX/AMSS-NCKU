@@ -1469,8 +1469,8 @@ void bssn_class::Evolve(int Steps)
     double beg_time;
     beg_time = MPI_Wtime();
     use_gpu = 1;
-    if (myrank % 2 == 1)
-        use_gpu = 0;
+    // if (myrank % 2 == 1)
+    //     use_gpu = 0;
     // use_gpu = 0;
 
     // for step 0 constraint interpolation
@@ -1557,8 +1557,7 @@ void bssn_class::Evolve(int Steps)
                          (double)peak_avg / (1024.0 * 1024.0),
                          (double)peak_max / (1024.0 * 1024.0));
 
-        if (LastCheck >= CheckTime)
-        {
+        if (LastCheck >= CheckTime) {
             LastCheck = 0;
             CheckPoint->write_Black_Hole_position(BH_num_input, BH_num, Porg0, Porgbr, Mass);
             CheckPoint->writecheck_cgh(PhysTime, GH);
@@ -2399,13 +2398,7 @@ void bssn_class::Compute_Psi4(int lev)
     MyList<var> *DG_List = new MyList<var>(Rpsi4);
     DG_List->insert(Ipsi4);
 
-#if 0 // test showes this operation does not help    
-for(int ilev = GH->levels-1;ilev>=lev;ilev--)
-{
-    MyList<Patch> *Pp=GH->PatL[ilev];
-#else
     MyList<Patch> *Pp = GH->PatL[lev];
-#endif
     while (Pp)
     {
         MyList<Block> *BP = Pp->data->blb;
@@ -2874,7 +2867,6 @@ void bssn_class::AnalysisStuff(int lev, double dT_lev)
         IP = new double[NN];
         RoutMAP = new double[7];
         double Rex = maxrex;
-        if (isnan(Rex)) puts("Rex is nan in AnalysisStuff");
         for (int i = 0; i < decn; i++)
         {
             Waveshell->surf_Wave(Rex, lev, GH, Rpsi4, Ipsi4, 2, maxl, NN, RP, IP, ErrorMonitor);

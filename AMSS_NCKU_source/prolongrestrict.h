@@ -70,4 +70,22 @@ __device__ void d_restrict3_device(
     const double* SoA, int Symmetry
 );
 
+void gpu_prolong3_launch(
+    cudaStream_t stream,
+    const double* d_src_c, double* d_dst_f,
+    const double* llbc, const double* uubc, const int* extc,
+    const double* llbf, const double* uubf, const int* extf,
+    const double* llbt, const double* uubt,
+    const double* SoA, int Symmetry
+);
+
+void gpu_restrict3_launch(
+    cudaStream_t stream,
+    const double* d_src_f, double* d_dst_c,
+    const double* llbc, const double* uubc, const int* extc,
+    const double* llbf, const double* uubf, const int* extf,
+    const double* llbt, const double* uubt,
+    const double* SoA, int Symmetry
+);
+
 #endif /* PROLONGRESTRICT_H */

@@ -4,6 +4,8 @@
 
 #include "macrodef.fh"  
 
+#define MPI_CUDA_AWARE 0
+
 // application parameters
 
 #define SommerType 0

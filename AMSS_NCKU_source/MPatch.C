@@ -773,23 +773,7 @@ double Patch::getdX(int dir)
 		MPI_Abort(MPI_COMM_WORLD, 1);
 	}
 	double h;
-#ifdef Vertex
-#ifdef Cell
-#error Both Cell and Vertex are defined
-#endif
-	if (shape[dir] == 1)
-	{
-		cout << "Patch::getdX: for direction " << dir << ", this Patch has only one point. Can not determine dX for vertex center grid." << endl;
-		MPI_Abort(MPI_COMM_WORLD, 1);
-	}
-	h = (bbox[dim + dir] - bbox[dir]) / (shape[dir] - 1);
-#else
-#ifdef Cell
 	h = (bbox[dim + dir] - bbox[dir]) / shape[dir];
-#else
-#error Not define Vertex nor Cell
-#endif
-#endif
 	return h;
 }
 bool Patch::Interp_ONE_Point(MyList<var> *VarList, double *XX,

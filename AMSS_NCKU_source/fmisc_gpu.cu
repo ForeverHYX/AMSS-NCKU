@@ -259,3 +259,61 @@ void gpu_lowerboundset_launch(
 
     lowerboundset_kernel<<<grid, block, 0, stream>>>(n, d_chi0, TINNY);
 }
+
+__global__ void gpu_pack_kernel(
+    const double* __restrict__ src_3d, double* __restrict__ dst_1d,
+    int src_nx, int src_ny, 
+    int dst_nx, int dst_ny, int dst_nz,
+    int off_x, int off_y, int off_z
+) {
+    int idx = blockIdx.x * blockDim.x + threadIdx.x;
+    int total = dst_nx * dst_ny * dst_nz;
+    if (idx >= total) return;
+    
+    int i = idx % dst_nx;
+    int j = (idx / dst_nx) % dst_ny;
+    int k = idx / (dst_nx * dst_ny);
+    
+    int src_idx = (k + off_z) * (src_nx * src_ny) + (j + off_y) * src_nx + (i + off_x);
+    dst_1d[idx] = src_3d[src_idx];
+}
+
+__global__ void gpu_unpack_kernel(
+    const double* __restrict__ src_1d, double* __restrict__ dst_3d,
+    int dst_nx, int dst_ny, 
+    int src_nx, int src_ny, int src_nz,
+    int off_x, int off_y, int off_z
+) {
+    int idx = blockIdx.x * blockDim.x + threadIdx.x;
+    int total = src_nx * src_ny * src_nz;
+    if (idx >= total) return;
+    
+    int i = idx % src_nx;
+    int j = (idx / src_nx) % src_ny;
+    int k = idx / (src_nx * src_ny);
+    
+    int dst_idx = (k + off_z) * (dst_nx * dst_ny) + (j + off_y) * dst_nx + (i + off_x);
+    dst_3d[dst_idx] = src_1d[idx];
+}
+
+void gpu_pack_launch(
+	cudaStream_t stream, const double* d_src_3d, double* d_dst_1d,
+	int src_nx, int src_ny, int dst_nx, int dst_ny, int dst_nz,
+	int off_x, int off_y, int off_z
+) {
+	int n = dst_nx * dst_ny * dst_nz;
+	int block = 256;
+	int grid = (n + block - 1) / block;
+	gpu_pack_kernel<<<grid, block, 0, stream>>>(d_src_3d, d_dst_1d, src_nx, src_ny, dst_nx, dst_ny, dst_nz, off_x, off_y, off_z);
+}
+
+void gpu_unpack_launch(
+	cudaStream_t stream, const double* d_src_1d, double* d_dst_3d,
+	int dst_nx, int dst_ny, int src_nx, int src_ny, int src_nz,
+	int off_x, int off_y, int off_z
+) {
+	int n = src_nx * src_ny * src_nz;
+	int block = 256;
+	int grid = (n + block - 1) / block;
+	gpu_unpack_kernel<<<grid, block, 0, stream>>>(d_src_1d, d_dst_3d, dst_nx, dst_ny, src_nx, src_ny, src_nz, off_x, off_y, off_z);
+}

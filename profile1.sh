@@ -1,13 +1,12 @@
 #!/bin/bash
 
-cleanup() {
-    echo "Stopping MPS..."
-    echo quit | nvidia-cuda-mps-control
-}
+# cleanup() {
+#     echo "Stopping MPS..."
+#     echo quit | nvidia-cuda-mps-control
+# }
 
-trap cleanup EXIT INT TERM
+# trap cleanup EXIT INT TERM
 
-nvidia-cuda-mps-control -d
 . /home/jjsnam/spack/share/spack/setup-env.sh
 spack load intel-oneapi-vtune
 spack load intel-oneapi-mpi
@@ -35,10 +34,10 @@ export LD_LIBRARY_PATH=/home/jjsnam/spack/opt/spack/linux-icelake/cuda-13.0.2-nx
 
 # vtune -collect hotspots -result-dir ../../profile/TwoPunctureABE/${TS}/ -- ./TwoPunctureABE
 # ./TwoPunctureABE
-mpirun -bootstrap fork -np 1 ./ABEGPU
+# mpirun -bootstrap fork -np 1 ./ABEGPU
 # mpirun -bootstrap fork -np 1 compute-sanitizer --tool memcheck ./ABEGPU
-# mpirun -bootstrap fork -np 1 vtune -collect hotspots -trace-mpi -result-dir ../../profile/ABEGPU/${TS}/ -- ./ABEGPU
-echo quit | nvidia-cuda-mps-control
+mpirun -bootstrap fork -np 1 vtune -collect hotspots -trace-mpi -result-dir ../../profile/ABEGPU/${TS}/ -- ./ABEGPU
+# echo quit | nvidia-cuda-mps-control
 # mpirun -bootstrap fork -np 2 ncu --target-processes all ./ABEGPU
 # uarch-exploration
 # mpirun -bootstrap fork -np 1 vtune -collect uarch-exploration -trace-mpi -result-dir ../../profile/ABEGPU/ue${TS}/ -- ./ABEGPU

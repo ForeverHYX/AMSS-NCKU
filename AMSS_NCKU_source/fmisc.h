@@ -294,4 +294,16 @@ void gpu_lowerboundset_launch(
     double* d_chi0, double TINNY
 );
 
+void gpu_pack_launch(
+	cudaStream_t stream, const double* d_src_3d, double* d_dst_1d,
+	int src_nx, int src_ny, int dst_nx, int dst_ny, int dst_nz,
+	int off_x, int off_y, int off_z
+);
+
+void gpu_unpack_launch(
+	cudaStream_t stream, const double* d_src_1d, double* d_dst_3d,
+	int dst_nx, int dst_ny, int src_nx, int src_ny, int src_nz,
+	int off_x, int off_y, int off_z
+);
+
 #endif /* FMISC_H */

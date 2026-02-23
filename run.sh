@@ -8,12 +8,12 @@
 #SBATCH --error=slurm_%j.err      # 错误日志
 #SBATCH --time=01:00:00           # 限制运行时间 1 小时 (测试用)
 
-cleanup() {
-    echo "Stopping MPS..."
-    echo quit | nvidia-cuda-mps-control
-}
+# cleanup() {
+#     echo "Stopping MPS..."
+#     echo quit | nvidia-cuda-mps-control
+# }
 
-trap cleanup EXIT INT TERM
+# trap cleanup EXIT INT TERM
 
 echo "Job start at $(date)"
 echo "Node: $(hostname)"
@@ -36,12 +36,15 @@ export I_MPI_PIN_DOMAIN=core
 ulimit -s unlimited
 export OMP_NUM_THREADS=1
 
-export I_MPI_DEBUG=5 # Mysterious parameters for MPI_AllReduce
+export I_MPI_DEBUG=0 # Mysterious parameters for MPI_AllReduce
 
-nvidia-cuda-mps-control -d
+export I_MPI_CUDA_SUPPORT=1
+export CUDA_VISIBLE_DEVICES=1
+
+# nvidia-cuda-mps-control -d
 
 python -u AMSS_NCKU_Program.py
 
-echo quit | nvidia-cuda-mps-control
+# echo quit | nvidia-cuda-mps-control
 
 echo "Job finished at $(date)"

@@ -49,7 +49,13 @@ void bssn_class::Step_GPU(int lev, int YN)
 				if (ErrorMonitor->outfile)
 					ErrorMonitor->outfile << "predictor step finds NaN for BH's position from ("
 																<< Porg0[ithBH][0] << "," << Porg0[ithBH][1] << "," << Porg0[ithBH][2] << ")" << endl;
-
+				cout << "predictor step finds NaN for BH's position from ("
+					 << Porg0[ithBH][0] << "," << Porg0[ithBH][1] << "," << Porg0[ithBH][2] << ")" << endl;
+				cout << "to ("
+					 << Porg1[ithBH][0] << "," << Porg1[ithBH][1] << "," << Porg1[ithBH][2] << ")" << endl;
+				cout << "with velocity ("
+					 << Porg_rhs[ithBH][0] << "," << Porg_rhs[ithBH][1] << "," << Porg_rhs[ithBH][2] << ")" << endl;
+				MPI_Abort(MPI_COMM_WORLD, 1);
 				MyList<var> *DG_List = new MyList<var>(Sfx0);
 				DG_List->insert(Sfx0);
 				DG_List->insert(Sfy0);
@@ -88,10 +94,6 @@ void bssn_class::Step_GPU(int lev, int YN)
 			if (myrank == cg->rank)
 			{
 				cg->move_to_gpu(StateList);
-				// cg->move_to_gpu(SynchList_pre);
-				// cg->move_to_gpu(SynchList_cor);
-				// cg->move_to_gpu(RHSList);
-				// cg->move_to_gpu(ConstraintList);
 				cg->move_to_gpu(MiscList);
 			
 				auto stream = GPUManager::getInstance().get_stream();
@@ -177,15 +179,6 @@ void bssn_class::Step_GPU(int lev, int YN)
 				gpu_lowerboundset_launch(stream, cg->shape, cg->d_fgfs[phi->sgfn], chitiny);
 
 				GPUManager::getInstance().synchronize_all();
-
-				// cg->move_to_cpu(StateList);
-				cg->move_to_cpu(SynchList_pre);
-				// cg->move_to_cpu(SynchList_cor);
-				// cg->move_to_cpu(RHSList);
-				// cg->move_to_cpu(ConstraintList);
-				// cg->move_to_cpu(MiscList);
-
-				// f_lowerboundset(cg->shape, cg->fgfs[phi->sgfn], chitiny);
 			}
 			if (BP == Pp->data->ble)
 				break;
@@ -208,9 +201,7 @@ void bssn_class::Step_GPU(int lev, int YN)
 			MPI_Abort(MPI_COMM_WORLD, 1);
 		}
 	}
-
-	Parallel::Sync(GH->PatL[lev], SynchList_pre, Symmetry);
-
+	Parallel::Sync_GPU(GH->PatL[lev], SynchList_pre, Symmetry);
 	// corrector
 	for (iter_count = 1; iter_count < 4; iter_count++)
 	{
@@ -225,14 +216,7 @@ void bssn_class::Step_GPU(int lev, int YN)
 			{
 				Block *cg = BP->data;
 				if (myrank == cg->rank)
-				{
-					// cg->move_to_gpu(StateList);
-					cg->move_to_gpu(SynchList_pre);
-					cg->move_to_gpu(SynchList_cor);
-					// cg->move_to_gpu(RHSList);
-					// cg->move_to_gpu(ConstraintList);
-					// cg->move_to_gpu(MiscList);
-					
+				{	
 					auto stream = GPUManager::getInstance().get_stream();
 
 					gpu_enforce_ga_launch(
@@ -314,15 +298,6 @@ void bssn_class::Step_GPU(int lev, int YN)
 					gpu_lowerboundset_launch(stream, cg->shape, cg->d_fgfs[phi1->sgfn], chitiny);
 
 					GPUManager::getInstance().synchronize_all();
-
-					// cg->move_to_cpu(StateList);
-					cg->move_to_cpu(SynchList_pre);
-					cg->move_to_cpu(SynchList_cor);
-					// cg->move_to_cpu(RHSList);
-					// cg->move_to_cpu(ConstraintList);
-					// cg->move_to_cpu(MiscList);
-						
-					// f_lowerboundset(cg->shape, cg->fgfs[phi1->sgfn], chitiny);
 				}
 				if (BP == Pp->data->ble)
 					break;
@@ -337,27 +312,22 @@ void bssn_class::Step_GPU(int lev, int YN)
 			MPI_Allreduce(&erh, &ERROR, 1, MPI_INT, MPI_SUM, MPI_COMM_WORLD);
 		}
 
-		if (ERROR)
-		{
+		if (ERROR) {
 			Parallel::Dump_Data(GH->PatL[lev], SynchList_pre, 0, PhysTime, dT_lev);
-			if (myrank == 0)
-			{
+			if (myrank == 0) {
 				if (ErrorMonitor->outfile)
 					ErrorMonitor->outfile << "find NaN in RK4 substep#" << iter_count << " variables at t = " << PhysTime << ", lev = " << lev << endl;
 				MPI_Abort(MPI_COMM_WORLD, 1);
 			}
 		}
-		Parallel::Sync(GH->PatL[lev], SynchList_cor, Symmetry);
+		Parallel::Sync_GPU(GH->PatL[lev], SynchList_cor, Symmetry);
 
 		// swap time level
-		if (iter_count < 3)
-		{
+		if (iter_count < 3) {
 			Pp = GH->PatL[lev];
-			while (Pp)
-			{
+			while (Pp) {
 				MyList<Block> *BP = Pp->data->blb;
-				while (BP)
-				{
+				while (BP) {
 					Block *cg = BP->data;
 					cg->swapList(SynchList_pre, SynchList_cor, myrank);
 					if (BP == Pp->data->ble)
@@ -368,6 +338,19 @@ void bssn_class::Step_GPU(int lev, int YN)
 			}
 		}
 	}
+	Pp = GH->PatL[lev];
+    while (Pp) {
+        MyList<Block> *BP = Pp->data->blb;
+        while (BP) {
+            Block *cg = BP->data;
+            if (myrank == cg->rank) {
+				cg->move_to_cpu(SynchList_pre); 
+                cg->move_to_cpu(SynchList_cor);
+            }
+            BP = BP->next;
+        }
+        Pp = Pp->next;
+    }
 	// note the data structure before update
 	// SynchList_cor 1   -----------
 	//

@@ -2601,12 +2601,8 @@ void surface_integral::surf_MassPAng(double rex, int lev, cgh *GH, var *chi, var
 
 // Chi^2 corresponds to metric determinant
 // but this factor has been considered in f_admmass_bssn
-#ifdef GaussInt
     // wtcostheta is even function respect costheta
     Mass_out = Mass_out + (shellf[InList * n] * nx_g[n] + shellf[InList * n + 1] * ny_g[n] + shellf[InList * n + 2] * nz_g[n]) * wtcostheta[i];
-#else
-    Mass_out = Mass_out + (shellf[InList * n] * nx_g[n] + shellf[InList * n + 1] * ny_g[n] + shellf[InList * n + 2] * nz_g[n]);
-#endif
 
     gupzz = Gxx * Gyy * Gzz + Gxy * Gyz * Gxz + Gxz * Gxy * Gyz -
             Gxz * Gyy * Gxz - Gxy * Gxy * Gzz - Gxx * Gyz * Gyz;
