@@ -681,3 +681,143 @@ bool Parallel::PatList_Interp_Points_GPU(
     return success;
 }
 
+void Parallel::gpu_prepare_inter_time_level(
+    MyList<Patch> *PatL,
+    MyList<var> *VarList1 /* source (t+dt) */, MyList<var> *VarList2 /* source (t) */,
+    MyList<var> *VarList3 /* source (t-dt) */, MyList<var> *VarList4 /* target (t+a*dt) */, int tindex
+) {
+    while (PatL) {
+        gpu_prepare_inter_time_level(PatL->data, VarList1, VarList2, VarList3, VarList4, tindex);
+        PatL = PatL->next;
+    }
+}
+
+void Parallel::gpu_prepare_inter_time_level(
+    MyList<Patch> *PatL,
+    MyList<var> *VarList1 /* source (t+dt) */, MyList<var> *VarList2 /* source (t) */,
+    MyList<var> *VarList3 /* target (t+a*dt) */, int tindex
+) {
+    while (PatL) {
+        prepare_inter_time_level(PatL->data, VarList1, VarList2, VarList3, tindex);
+        PatL = PatL->next;
+    }
+}
+
+void Parallel::gpu_fill_level_data(
+    MyList<Patch> *PatLd, MyList<Patch> *PatLs, MyList<Patch> *PatcL,
+    MyList<var> *OldList, MyList<var> *StateList, MyList<var> *FutureList,
+    MyList<var> *tmList, int Symmetry, bool BB, bool CC
+) {
+    if (PatLd->data->lev != PatLs->data->lev) {
+        cout << "Parallel::fill_level_data: meet requst from lev#" << PatLs->data->lev << " to lev#" << PatLd->data->lev << endl;
+        MPI_Abort(MPI_COMM_WORLD, 1);
+    }
+    if (PatLd->data->lev <= PatcL->data->lev) {
+        cout << "Parallel::fill_level_data: meet prolong requst from lev#" << PatcL->data->lev << " to lev#" << PatLd->data->lev << endl;
+        MPI_Abort(MPI_COMM_WORLD, 1);
+    }
+
+    int cpusize;
+    MPI_Comm_size(MPI_COMM_WORLD, &cpusize);
+
+    MyList<var> *VarList = 0;
+    MyList<var> *p;
+    p = StateList;
+    while (p) {
+        if (VarList) VarList->insert(p->data);
+        else VarList = new MyList<var>(p->data);
+        p = p->next;
+    }
+    p = FutureList;
+    while (p) {
+        if (VarList) VarList->insert(p->data);
+        else VarList = new MyList<var>(p->data);
+        p = p->next;
+    }
+
+    MyList<Parallel::gridseg> *dst;
+    MyList<Parallel::gridseg> **src, **transfer_src, **transfer_dst;
+    src = new MyList<Parallel::gridseg> *[cpusize];
+    transfer_src = new MyList<Parallel::gridseg> *[cpusize];
+    transfer_dst = new MyList<Parallel::gridseg> *[cpusize];
+
+    dst = build_complete_gsl(PatLd); // including ghost
+    // copy part
+    for (int node = 0; node < cpusize; node++) {
+        src[node] = build_owned_gsl(PatLs, node, 0, Symmetry);                // similar to Sync
+        build_gstl(src[node], dst, &transfer_src[node], &transfer_dst[node]); // for transfer[node], data locate on cpu#node
+    }
+
+    gpu_transfer(transfer_src, transfer_dst, VarList, VarList, Symmetry);
+
+    for (int node = 0; node < cpusize; node++) {
+        if (src[node]) src[node]->destroyList();
+        if (transfer_src[node]) transfer_src[node]->destroyList();
+        if (transfer_dst[node]) transfer_dst[node]->destroyList();
+    }
+
+    MyList<Parallel::gridseg> *dsts, *dstd;
+    dsts = build_complete_gsl_virtual(PatLs);
+    dstd = dst;
+    dst = gsl_subtract(dstd, dsts);
+    if (dstd) dstd->destroyList();
+    if (dsts) dsts->destroyList();
+
+    if (dst) {
+        // prolongation part
+        for (int node = 0; node < cpusize; node++) {
+            src[node] = build_owned_gsl(PatcL, node, 4, Symmetry);                // - buffer - ghost - BD ghost
+            build_gstl(src[node], dst, &transfer_src[node], &transfer_dst[node]); // for transfer[node], data locate on cpu#node
+        }
+
+        if (CC) {
+            // for FutureList
+            // restrict first~~~>
+            {
+                Restrict_GPU(PatcL, PatLs, FutureList, FutureList, Symmetry);
+                Sync_GPU(PatcL, FutureList, Symmetry);
+            }
+            //<~~~prolong then
+            gpu_transfer(transfer_src, transfer_dst, FutureList, FutureList, Symmetry);
+
+            // for StateList
+            // time interpolation part
+            if (BB) gpu_prepare_inter_time_level(PatcL, FutureList, StateList, OldList, tmList, 0); // use SynchList_pre as temporal storage space
+            else gpu_prepare_inter_time_level(PatcL, FutureList, StateList, tmList, 0); // use SynchList_pre as temporal storage space
+            
+            {
+                Restrict_GPU(PatcL, PatLs, StateList, tmList, Symmetry);
+                Sync_GPU(PatcL, tmList, Symmetry);
+            }
+            //<~~~prolong then
+            gpu_transfer(transfer_src, transfer_dst, tmList, StateList, Symmetry);
+        }
+        else {
+            // for both FutureList and StateList
+            // restrict first~~~>
+            {
+                Restrict_GPU(PatcL, PatLs, VarList, VarList, Symmetry);
+                Sync_GPU(PatcL, VarList, Symmetry);
+            }
+            //<~~~prolong then
+            gpu_transfer(transfer_src, transfer_dst, VarList, VarList, Symmetry);
+        }
+
+        for (int node = 0; node < cpusize; node++) {
+            if (src[node])
+                src[node]->destroyList();
+            if (transfer_src[node])
+                transfer_src[node]->destroyList();
+            if (transfer_dst[node])
+                transfer_dst[node]->destroyList();
+        }
+
+        dst->destroyList();
+    }
+
+    delete[] src;
+    delete[] transfer_src;
+    delete[] transfer_dst;
+
+    VarList->clearList();
+}

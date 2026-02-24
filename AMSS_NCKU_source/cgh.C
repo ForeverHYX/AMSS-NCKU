@@ -1285,7 +1285,8 @@ void cgh::recompose_cgh_Onelevel(
     Parallel::distribute(tmPat, nprocs, ingfs, fngfs, false);
     //    checkPatchList(tmPat,true);
     bool CC = (lev > trfls);
-    Parallel::fill_level_data(tmPat, PatL[lev], PatL[lev - 1], OldList, StateList, FutureList, tmList, Symmetry, BB, CC);
+    // Parallel::fill_level_data(tmPat, PatL[lev], PatL[lev - 1], OldList, StateList, FutureList, tmList, Symmetry, BB, CC);
+    Parallel::gpu_fill_level_data(tmPat, PatL[lev], PatL[lev - 1], OldList, StateList, FutureList, tmList, Symmetry, BB, CC);
 
     Parallel::KillBlocks(PatL[lev]);
     PatL[lev]->destroyList();

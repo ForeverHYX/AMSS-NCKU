@@ -1501,25 +1501,25 @@ void bssn_class::Evolve(int Steps)
         cout << "Before Step: " << ncount << " My Rank: " << myrank 
                  << " takes " << MPI_Wtime() - beg_time << " seconds!" << endl;
         beg_time = MPI_Wtime();
-        // for (int lev = 0; lev < GH->levels; lev ++) {
-        //     Helper::move_to_gpu_whole(GH->PatL[lev], myrank, StateList);
-        //     Helper::move_to_gpu_whole(GH->PatL[lev], myrank, RHSList);
-        //     Helper::move_to_gpu_whole(GH->PatL[lev], myrank, MiscList);
-        //     Helper::move_to_gpu_whole(GH->PatL[lev], myrank, SynchList_pre);
-        //     Helper::move_to_gpu_whole(GH->PatL[lev], myrank, SynchList_cor);
-        //     Helper::move_to_gpu_whole(GH->PatL[lev], myrank, ConstraintList);
-        //     Helper::move_to_gpu_whole(GH->PatL[lev], myrank, DGList);    
-        // }
+        {
+            Helper::move_to_gpu_whole(GH, myrank, StateList);
+            Helper::move_to_gpu_whole(GH, myrank, RHSList);
+            Helper::move_to_gpu_whole(GH, myrank, MiscList);
+            Helper::move_to_gpu_whole(GH, myrank, SynchList_pre);
+            Helper::move_to_gpu_whole(GH, myrank, SynchList_cor);
+            Helper::move_to_gpu_whole(GH, myrank, ConstraintList);
+            Helper::move_to_gpu_whole(GH, myrank, DGList);       
+        }
         RecursiveStep(0);
-        // for (int lev = 0; lev < GH->levels; lev ++) {
-        //     Helper::move_to_cpu_whole(GH->PatL[lev], myrank, StateList);
-        //     Helper::move_to_cpu_whole(GH->PatL[lev], myrank, RHSList);
-        //     Helper::move_to_cpu_whole(GH->PatL[lev], myrank, MiscList);
-        //     Helper::move_to_cpu_whole(GH->PatL[lev], myrank, SynchList_pre);
-        //     Helper::move_to_cpu_whole(GH->PatL[lev], myrank, SynchList_cor);
-        //     Helper::move_to_cpu_whole(GH->PatL[lev], myrank, ConstraintList);
-        //     Helper::move_to_cpu_whole(GH->PatL[lev], myrank, DGList);    
-        // }
+        {
+            Helper::move_to_cpu_whole(GH, myrank, StateList);
+            Helper::move_to_cpu_whole(GH, myrank, RHSList);
+            Helper::move_to_cpu_whole(GH, myrank, MiscList);
+            Helper::move_to_cpu_whole(GH, myrank, SynchList_pre);
+            Helper::move_to_cpu_whole(GH, myrank, SynchList_cor);
+            Helper::move_to_cpu_whole(GH, myrank, ConstraintList);
+            Helper::move_to_cpu_whole(GH, myrank, DGList);      
+        }
         cout << "After Step: " << ncount << " My Rank: " << myrank 
                  << " takes " << MPI_Wtime() - beg_time << " seconds!" << endl;
         beg_time = MPI_Wtime();
@@ -1634,9 +1634,11 @@ void bssn_class::RecursiveStep(int lev)
 
         RestrictProlong(lev, YN, fgt(PhysTime - dT_lev, StartTime, dT_lev / 2), StateList, OldStateList, SynchList_cor);
     }
-    GH->Regrid_Onelevel(lev, Symmetry, BH_num, Porgbr, Porg0,
-                                            SynchList_cor, OldStateList, StateList, SynchList_pre,
-                                            fgt(PhysTime - dT_lev, StartTime, dT_lev / 2), ErrorMonitor);
+    GH->Regrid_Onelevel(
+        lev, Symmetry, BH_num, Porgbr, Porg0,
+        SynchList_cor, OldStateList, StateList, SynchList_pre,
+        fgt(PhysTime - dT_lev, StartTime, dT_lev / 2), ErrorMonitor
+    );
 }
 
 //================================================================================================
@@ -2049,11 +2051,6 @@ void bssn_class::RestrictProlong(
     int lev, int YN, bool BB,
     MyList<var> *SL, MyList<var> *OL, MyList<var> *corL
 ) {
-    if (lev > 0) { // TODO
-        Helper::move_to_gpu_whole(GH->PatL[lev], myrank, SL);
-        Helper::move_to_gpu_whole(GH->PatL[lev], myrank, OL);
-        Helper::move_to_gpu_whole(GH->PatL[lev], myrank, corL);
-    }
     if (lev > 0) {
         MyList<Patch> *Pp, *Ppc;
         if (lev > trfls && YN == 0) { // time refinement levels and for intermediat time level
@@ -2099,11 +2096,6 @@ void bssn_class::RestrictProlong(
         }
         Parallel::Sync_GPU(GH->PatL[lev], SL, Symmetry);
         // Parallel::Sync(GH->PatL[lev], SL, Symmetry);
-    }
-    if (lev > 0) { // TODO
-        Helper::move_to_cpu_whole(GH->PatL[lev], myrank, SL);
-        Helper::move_to_cpu_whole(GH->PatL[lev], myrank, OL);
-        Helper::move_to_cpu_whole(GH->PatL[lev], myrank, corL);
     }
 }
 

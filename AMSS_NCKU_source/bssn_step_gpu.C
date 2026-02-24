@@ -24,14 +24,6 @@
 #include "helper.h"
 
 void bssn_class::Step_GPU(int lev, int YN) {
-	Helper::move_to_gpu_whole(GH->PatL[lev], myrank, StateList);
-	Helper::move_to_gpu_whole(GH->PatL[lev], myrank, RHSList);
-	Helper::move_to_gpu_whole(GH->PatL[lev], myrank, MiscList);
-	Helper::move_to_gpu_whole(GH->PatL[lev], myrank, SynchList_pre);
-	Helper::move_to_gpu_whole(GH->PatL[lev], myrank, SynchList_cor);
-	Helper::move_to_gpu_whole(GH->PatL[lev], myrank, ConstraintList);
-	Helper::move_to_gpu_whole(GH->PatL[lev], myrank, DGList);
-
 	setpbh(BH_num, Porg0, Mass, BH_num_input);
 
 	double dT_lev = dT * pow(0.5, Mymax(lev, trfls));
@@ -326,13 +318,6 @@ void bssn_class::Step_GPU(int lev, int YN) {
 			}
 		}
 	}
-	Helper::move_to_cpu_whole(GH->PatL[lev], myrank, StateList);
-	Helper::move_to_cpu_whole(GH->PatL[lev], myrank, RHSList);
-	Helper::move_to_cpu_whole(GH->PatL[lev], myrank, MiscList);
-	Helper::move_to_cpu_whole(GH->PatL[lev], myrank, SynchList_pre);
-	Helper::move_to_cpu_whole(GH->PatL[lev], myrank, SynchList_cor);
-	Helper::move_to_cpu_whole(GH->PatL[lev], myrank, ConstraintList);
-	Helper::move_to_cpu_whole(GH->PatL[lev], myrank, DGList);
 	// note the data structure before update
 	// SynchList_cor 1   -----------
 	//

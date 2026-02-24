@@ -197,6 +197,21 @@ namespace Parallel
     bool PatList_Interp_Points(MyList<Patch> *PatL, MyList<var> *VarList,
                                                          int NN, double **XX,
                                                          double *Shellf, int Symmetry, MPI_Comm Comm_here);
+    void gpu_fill_level_data(
+        MyList<Patch> *PatLd, MyList<Patch> *PatLs, MyList<Patch> *PatcL,
+        MyList<var> *OldList, MyList<var> *StateList, MyList<var> *FutureList,
+        MyList<var> *tmList, int Symmetry, bool BB, bool CC
+    );
+    void gpu_prepare_inter_time_level(
+        MyList<Patch> *PatL,
+        MyList<var> *VarList1 /* source (t+dt) */, MyList<var> *VarList2 /* source (t) */,
+        MyList<var> *VarList3 /* source (t-dt) */, MyList<var> *VarList4 /* target (t+a*dt) */, int tindex
+    );
+    void gpu_prepare_inter_time_level(
+        MyList<Patch> *PatL,
+        MyList<var> *VarList1 /* source (t+dt) */, MyList<var> *VarList2 /* source (t) */,
+        MyList<var> *VarList3 /* target (t+a*dt) */, int tindex
+    );
 #if (PSTR == 1 || PSTR == 2 || PSTR == 3)
     MyList<Block> *distribute(MyList<Patch> *PatchLIST, int cpusize, int ingfsi, int fngfsi,
                                                         bool periodic, int start_rank, int end_rank, int nodes = 0);
