@@ -27,12 +27,6 @@ __global__ void rungekutta4_rout_kernel(
     } else if (RK4 == 3) {
         f1[idx] = f0_val + (1.0 / 6.0) * dT * (f1_val + f_rhs_val);
     }
-    // if (isnan(f1[idx])) {
-    //     printf("Is NaN f1[idx] at (%d)\n", idx);
-    // }
-    // if (isnan(f_rhs[idx])) {
-    //     printf("Is NaN f1[idx] at (%d)\n", idx);
-    // }
 }
 
 void gpu_rungekutta4_rout_launch(

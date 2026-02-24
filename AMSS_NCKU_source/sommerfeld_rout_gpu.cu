@@ -129,16 +129,14 @@ __global__ void sommerfeld_rout_kernel(
         }
 
         double ya[ORDN * ORDN * ORDN];
-        // 传入局部组装的 ext，彻底解决访存越界
-        if (!d_decide3d(ext, f0, f0, cxB, cxT, SoA, ya, ORDN, Symmetry)) {
-            double ddy;
-            double r_interp;
-            double xa[ORDN];
-            for(int m=0; m<ORDN; ++m) xa[m] = (double)m;
-            
-            d_polin3_1b(xa, xa, xa, ya, cx[0], cx[1], cx[2], r_interp, ddy, ORDN);
-            f[ex_idx] = r_interp * fac;
-        }
+        d_decide3d(ext, f0, f0, cxB, cxT, SoA, ya, ORDN, Symmetry);
+        double ddy;
+        double r_interp;
+        double xa[ORDN];
+        for(int m = 0; m < ORDN; ++ m) xa[m] = (double)m;
+        
+        d_polin3_1b(xa, xa, xa, ya, cx[0], cx[1], cx[2], r_interp, ddy, ORDN);
+        f[ex_idx] = r_interp * fac;
     }
 }
 
@@ -295,8 +293,7 @@ void gpu_sommerfeld_rout_launch(
     const double* d_f0, double* d_f, const double SoA[3],
     int Symmetry, int precor
 ) {
-    // 改为 3D Grid 映射
-    dim3 block(8, 8, 8);
+    dim3 block(8, 8, 4);
     dim3 grid((ex[0] + block.x - 1) / block.x, 
               (ex[1] + block.y - 1) / block.y, 
               (ex[2] + block.z - 1) / block.z);
@@ -316,8 +313,7 @@ void gpu_sommerfeld_routbam_launch(
     double* d_f_rhs, const double* d_f0,
     double velocity, const double SoA[3], int Symmetry
 ) {
-    // 改为 3D Grid 映射
-    dim3 block(8, 8, 8);
+    dim3 block(8, 8, 4);
     dim3 grid((ex[0] + block.x - 1) / block.x, 
               (ex[1] + block.y - 1) / block.y, 
               (ex[2] + block.z - 1) / block.z);

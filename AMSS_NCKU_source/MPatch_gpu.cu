@@ -20,6 +20,7 @@ __global__ void normalize_shellf_kernel(
         for (int j = 0; j < num_var; j++) {
             d_Shellf[j + i * num_var] /= (double)w;
         }
+        // printf("\33[1;33mWARNING: normalize_shellf_kernel meets multiple weight at point %d\33[0m\n", i);
     } else if (w == 0) {
         *d_err_flag = 1;
     }

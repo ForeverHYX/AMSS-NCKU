@@ -496,7 +496,6 @@ void gpu_restrict3_launch(
         if (llbc[d] <= llbf[d]) {
             base[d] = llbc[d];
         } else {
-            // 修正：使用 std::trunc
             int j_val = (int)std::trunc((llbc[d] - llbf[d]) / FD[d] + 0.4);
             if ((j_val / 2) * 2 == j_val) base[d] = llbf[d];
             else base[d] = llbf[d] - CD[d] / 2.0;
@@ -505,7 +504,6 @@ void gpu_restrict3_launch(
 
     int i_start, i_end, j_start, j_end, k_start, k_end;
     for(int d = 0; d < 3; d++) {
-        // 修正：使用 std::trunc
         int lbr = (int)std::trunc((llbt[d] - base[d]) / CD[d] + 0.4) + 1;
         int ubr = (int)std::trunc((uubt[d] - base[d]) / CD[d] + 0.4);
         int lbc = (int)std::trunc((llbc[d] - base[d]) / CD[d] + 0.4) + 1;
