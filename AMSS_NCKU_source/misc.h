@@ -25,6 +25,7 @@ using namespace std;
 #endif
 
 #include <mpi.h>
+#include <cuda_runtime.h>
 
 namespace misc
 {
@@ -90,5 +91,7 @@ complex<double> First_Bessel(const complex<double> a,complex<double> x);
     void polyinterp_d1(double t, double &rr, double *ti, double *ri, const int ORD);
     void next2power(long int Nin, long int &Nout, int &M);
     int MYpow2(int i);
+
+    __device__ double wigner_d_device(int l, int m, int s, double costheta);
 }
 #endif /* MISC_H */

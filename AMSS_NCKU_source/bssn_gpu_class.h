@@ -129,6 +129,7 @@ public:
 
        var *Rxx, *Rxy, *Rxz, *Ryy, *Ryz, *Rzz;
 
+       // DGList
        var *Rpsi4, *Ipsi4;
        var *t1Rpsi4, *t1Ipsi4, *t2Rpsi4, *t2Ipsi4;
 
@@ -149,7 +150,7 @@ public:
        MyList<var> *StateList, *SynchList_pre, *SynchList_cor, *RHSList;
        MyList<var> *OldStateList, *DumpList;
        MyList<var> *ConstraintList;
-       MyList<var> *MiscList;
+       MyList<var> *MiscList, *DGList;
 
        monitor *ErrorMonitor, *Psi4Monitor, *BHMonitor, *MAPMonitor;
        monitor *ConVMonitor;

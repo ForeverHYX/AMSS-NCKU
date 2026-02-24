@@ -312,4 +312,18 @@ void gpu_average2_launch(cudaStream_t stream, const int ext[3], const double* d_
 void gpu_average2p_launch(cudaStream_t stream, const int ext[3], const double* d_f1, const double* d_f2, const double* d_f3, double* d_fout);
 void gpu_average2m_launch(cudaStream_t stream, const int ext[3], const double* d_f1, const double* d_f2, const double* d_f3, double* d_fout);
 
+void gpu_global_interp_launch(
+	cudaStream_t stream,
+    int NN, int DIM,
+    double* d_XX_0, double* d_XX_1, double* d_XX_2,
+    int shape_0, int shape_1, int shape_2,
+    double* d_X_0, double* d_X_1, double* d_X_2,
+    double* d_field,
+    double llb_0, double llb_1, double llb_2,
+    double uub_0, double uub_1, double uub_2,
+    int ordn, double SoA_0, double SoA_1, double SoA_2, 
+    int Symmetry, int var_idx, int num_var,
+    double* d_shellf, int* d_weight
+);
+
 #endif /* FMISC_H */

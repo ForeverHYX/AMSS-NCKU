@@ -57,4 +57,18 @@ extern "C"
 							double *, double *, double *,
 							double *, double *, double *, double *, double *, double *);
 }
+
+void gpu_admmass_bssn_launch(
+    cudaStream_t stream, const int ext[3],
+    const double* d_X, const double* d_Y, const double* d_Z,
+    const double* chi, const double* trK,
+    const double* dxx, const double* gxy, const double* gxz, 
+    const double* dyy, const double* gyz, const double* dzz,
+    const double* Axx, const double* Axy, const double* Axz, 
+    const double* Ayy, const double* Ayz, const double* Azz, 
+    const double* Gamx, const double* Gamy, const double* Gamz,
+    double* massx, double* massy, double* massz,
+    int symmetry
+);
+
 #endif /* FADMQUANTITES_H */

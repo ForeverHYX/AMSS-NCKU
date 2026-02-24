@@ -37,6 +37,11 @@ private:
 	double *nx_g, *ny_g, *nz_g; // global list of unit normals
 	int myrank, cpusize;
 
+	// Shadow variables for surface integral (GPU)
+	cudaStream_t stream;
+	double *d_arcostheta, *d_wtcostheta;
+	double *d_nx_g, *d_ny_g, *d_nz_g;
+
 public:
 	surface_integral(int iSymmetry);
 	~surface_integral();
@@ -119,5 +124,19 @@ public:
 	void surf_Wave(double rex, int lev, cgh *GH, var *Rpsi4, var *Ipsi4,
 				   int spinw, int maxl, int NN, double *RP, double *IP,
 				   monitor *Monitor, MPI_Comm Comm_here);
+	void gpu_surf_MassPAng(
+		double rex, int lev, cgh *GH, var *chi, var *trK,
+		var *gxx, var *gxy, var *gxz, var *gyy, var *gyz, var *gzz,
+		var *Axx, var *Axy, var *Axz, var *Ayy, var *Ayz, var *Azz,
+		var *Gmx, var *Gmy, var *Gmz,
+		var *Sfx_rhs, var *Sfy_rhs, var *Sfz_rhs, // temparay memory for mass^i
+		double *Rout, monitor *Monitor
+	);
+	void gpu_surf_Wave(
+		double rex, int lev, cgh *GH, var *Rpsi4, var *Ipsi4,
+		int spinw, int maxl, int NN, double *RP, double *IP,
+		monitor *Monitor
+	);
 };
+
 #endif /* SURFACE_INTEGRAL_H */

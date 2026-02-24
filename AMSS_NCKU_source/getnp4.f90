@@ -78,23 +78,6 @@
   gzz = dzz + ONE
   chipn1= chi + ONE
 
-#if (ABV == 1)
-  call bssn2adm(ex,chipn1,trK,gxx,gxy,gxz,gyy,gyz,gzz, &
-                             Axx,Axy,Axz,Ayy,Ayz,Azz, &
-              adm_dxx,adm_gxy,adm_gxz,adm_dyy,adm_gyz,adm_dzz, &
-              Kxx,Kxy,Kxz,Kyy,Kyz,Kzz)    
-  adm_dxx = adm_dxx - ONE  
-  adm_dyy = adm_dyy - ONE  
-  adm_dzz = adm_dzz - ONE
-  call adm_ricci_gamma(ex, X, Y, Z,                            &
-               adm_dxx,adm_gxy,adm_gxz,adm_dyy,adm_gyz,adm_dzz,&
-               Gamxxx,Gamxxy,Gamxxz,Gamxyy,Gamxyz,Gamxzz,&
-               Gamyxx,Gamyxy,Gamyxz,Gamyyy,Gamyyz,Gamyzz,&
-               Gamzxx,Gamzxy,Gamzxz,Gamzyy,Gamzyz,Gamzzz,&
-               Rxx,Rxy,Rxz,Ryy,Ryz,Rzz,&
-               Symmetry)
-#endif  
-
 ! invert tilted metric
   gupzz =  gxx * gyy * gzz + gxy * gyz * gxz + gxz * gxy * gyz - &
            gxz * gyy * gxz - gxy * gxy * gzz - gxx * gyz * gyz
@@ -106,157 +89,6 @@
   gupzz =   ( gxx * gyy - gxy * gxy ) / gupzz
 
 ! initialize U, V, W vetors	
-#if (tetradtype == 0)
-  do i=1,ex(1)
-  do j=1,ex(2)
-  do k=1,ex(3)
-     if(abs(X(i)) < TINYRR .and. abs(Y(j)) < TINYRR .and. abs(Z(k)) < TINYRR)then
-        vx(i,j,k) = TINYRR
-        vy(i,j,k) = TINYRR
-        vz(i,j,k) = TINYRR
-     else
-        vx(i,j,k) = X(i)
-        vy(i,j,k) = Y(j)
-        vz(i,j,k) = Z(k)
-     endif
-     if(abs(X(i)) < TINYRR .and. abs(Y(j)) < TINYRR)then
-        ux(i,j,k) = - TINYRR
-        uy(i,j,k) = TINYRR
-        uz(i,j,k) = ZEO
-        wx(i,j,k) = TINYRR*Z(k)
-        wy(i,j,k) = TINYRR*Z(k)
-        wz(i,j,k) = -2*TINYRR*TINYRR
-     else
-        ux(i,j,k) = - Y(j)
-        uy(i,j,k) = X(i)
-        uz(i,j,k) = ZEO
-        wx(i,j,k) = X(i)*Z(k)
-        wy(i,j,k) = Y(j)*Z(k)
-        wz(i,j,k) = -(X(i)*X(i) + Y(j)*Y(j))
-     endif
-  enddo
-  enddo
-  enddo
-
-  f = 1.d0/chipn1
-
-  fx = gxx*vx*vx + gyy*vy*vy + gzz*vz*vz &
-     +(gxy*vx*vy + gxz*vx*vz + gyz*vy*vz)*TWO
-  fx = dsqrt(fx*f)
-  vx = vx/fx
-  vy = vy/fx
-  vz = vz/fx
-
-  fx = gxx*vx*ux + gxy*vx*uy + gxz*vx*uz + &
-       gxy*vy*ux + gyy*vy*uy + gyz*vy*uz + &
-       gxz*vz*ux + gyz*vz*uy + gzz*vz*uz
-  fx = fx*f
-  ux = ux - fx*vx
-  uy = uy - fx*vy
-  uz = uz - fx*vz
-  fx = gxx*ux*ux + gyy*uy*uy + gzz*uz*uz &
-     +(gxy*ux*uy + gxz*ux*uz + gyz*uy*uz)*TWO
-  fx = dsqrt(fx*f) 
-  ux = ux/fx
-  uy = uy/fx
-  uz = uz/fx
-
-  fx = gxx*vx*wx + gxy*vx*wy + gxz*vx*wz + &
-       gxy*vy*wx + gyy*vy*wy + gyz*vy*wz + &
-       gxz*vz*wx + gyz*vz*wy + gzz*vz*wz
-  fx = fx*f       
-  wx = wx - fx*vx
-  wy = wy - fx*vy
-  wz = wz - fx*vz
-  fx = gxx*ux*wx + gxy*ux*wy + gxz*ux*wz + &
-       gxy*uy*wx + gyy*uy*wy + gyz*uy*wz + &
-       gxz*uz*wx + gyz*uz*wy + gzz*uz*wz
-  fx = fx*f       
-  wx = wx - fx*ux
-  wy = wy - fx*uy
-  wz = wz - fx*uz
-  fx = gxx*wx*wx + gyy*wy*wy + gzz*wz*wz &
-     +(gxy*wx*wy + gxz*wx*wz + gyz*wy*wz)*TWO
-  fx = dsqrt(fx*f)
-  wx = wx/fx
-  wy = wy/fx
-  wz = wz/fx
-#elif  (tetradtype == 1)
-  do i=1,ex(1)
-  do j=1,ex(2)
-  do k=1,ex(3)
-     if(abs(X(i)) < TINYRR .and. abs(Y(j)) < TINYRR .and. abs(Z(k)) < TINYRR)then
-        vx(i,j,k) = TINYRR
-        vy(i,j,k) = TINYRR
-        vz(i,j,k) = TINYRR
-     else
-        vx(i,j,k) = X(i)
-        vy(i,j,k) = Y(j)
-        vz(i,j,k) = Z(k)
-     endif
-     if(abs(X(i)) < TINYRR .and. abs(Y(j)) < TINYRR)then
-        ux(i,j,k) = - TINYRR
-        uy(i,j,k) = TINYRR
-        uz(i,j,k) = ZEO
-        wx(i,j,k) = TINYRR*Z(k)
-        wy(i,j,k) = TINYRR*Z(k)
-        wz(i,j,k) = -2*TINYRR*TINYRR
-     else
-        ux(i,j,k) = - Y(j)
-        uy(i,j,k) = X(i)
-        uz(i,j,k) = ZEO
-        wx(i,j,k) = X(i)*Z(k)
-        wy(i,j,k) = Y(j)*Z(k)
-        wz(i,j,k) = -(X(i)*X(i) + Y(j)*Y(j))
-     endif
-  enddo
-  enddo
-  enddo
-
-  f = 1.d0/chipn1
-
-  fx = gxx*wx*wx + gyy*wy*wy + gzz*wz*wz &
-     +(gxy*wx*wy + gxz*wx*wz + gyz*wy*wz)*TWO
-  fx = dsqrt(fx*f)
-  wx = wx/fx
-  wy = wy/fx
-  wz = wz/fx
-
-  fx = gxx*wx*ux + gxy*wx*uy + gxz*wx*uz + &
-       gxy*wy*ux + gyy*wy*uy + gyz*wy*uz + &
-       gxz*wz*ux + gyz*wz*uy + gzz*wz*uz
-  fx = fx*f
-  ux = ux - fx*wx
-  uy = uy - fx*wy
-  uz = uz - fx*wz
-  fx = gxx*ux*ux + gyy*uy*uy + gzz*uz*uz &
-     +(gxy*ux*uy + gxz*ux*uz + gyz*uy*uz)*TWO
-  fx = dsqrt(fx*f) 
-  ux = ux/fx
-  uy = uy/fx
-  uz = uz/fx
-
-  fx = gxx*vx*wx + gxy*vx*wy + gxz*vx*wz + &
-       gxy*vy*wx + gyy*vy*wy + gyz*vy*wz + &
-       gxz*vz*wx + gyz*vz*wy + gzz*vz*wz
-  fx = fx*f       
-  vx = vx - fx*wx
-  vy = vy - fx*wy
-  vz = vz - fx*wz
-  fx = gxx*ux*vx + gxy*ux*vy + gxz*ux*vz + &
-       gxy*uy*vx + gyy*uy*vy + gyz*uy*vz + &
-       gxz*uz*vx + gyz*uz*vy + gzz*uz*vz
-  fx = fx*f       
-  vx = vx - fx*ux
-  vy = vy - fx*uy
-  vz = vz - fx*uz
-  fx = gxx*vx*vx + gyy*vy*vy + gzz*vz*vz &
-     +(gxy*vx*vy + gxz*vx*vz + gyz*vy*vz)*TWO
-  fx = dsqrt(fx*f)
-  vx = vx/fx
-  vy = vy/fx
-  vz = vz/fx
-#elif (tetradtype == 2)  
   do i=1,ex(1)
   do j=1,ex(2)
   do k=1,ex(3)
@@ -338,7 +170,6 @@
   wx = wx/fx
   wy = wy/fx
   wz = wz/fx
-#endif
 
   call fderivs(ex,Axx,Axxx,Axxy,Axxz,X,Y,Z,SYM ,SYM ,SYM ,Symmetry,0)
   call fderivs(ex,Axy,Axyx,Axyy,Axyz,X,Y,Z,ANTI,ANTI,SYM ,Symmetry,0)

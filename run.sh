@@ -39,7 +39,7 @@ export OMP_NUM_THREADS=1
 export I_MPI_DEBUG=0 # Mysterious parameters for MPI_AllReduce
 
 export I_MPI_CUDA_SUPPORT=1
-export CUDA_VISIBLE_DEVICES=1
+export CUDA_VISIBLE_DEVICES=0
 
 # nvidia-cuda-mps-control -d
 

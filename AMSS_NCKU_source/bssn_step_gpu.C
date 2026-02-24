@@ -67,6 +67,15 @@ void bssn_class::Step_GPU(int lev, int YN)
 		}
 	}
 
+
+	Helper::move_to_gpu_whole(GH->PatL[lev], myrank, StateList);
+	Helper::move_to_gpu_whole(GH->PatL[lev], myrank, RHSList);
+	Helper::move_to_gpu_whole(GH->PatL[lev], myrank, MiscList);
+	Helper::move_to_gpu_whole(GH->PatL[lev], myrank, SynchList_pre);
+	Helper::move_to_gpu_whole(GH->PatL[lev], myrank, SynchList_cor);
+	Helper::move_to_gpu_whole(GH->PatL[lev], myrank, ConstraintList);
+	Helper::move_to_gpu_whole(GH->PatL[lev], myrank, DGList);
+
 	// data analysis part
 	// Warning NOTE: the variables1 are used as temp storege room
 	if (lev == a_lev)
@@ -86,17 +95,11 @@ void bssn_class::Step_GPU(int lev, int YN)
 	MyList<ss_patch> *sPp;
 	// Predictor
 	MyList<Patch> *Pp = GH->PatL[lev];
-	while (Pp)
-	{
+	while (Pp) {
 		MyList<Block> *BP = Pp->data->blb;
-		while (BP)
-		{
+		while (BP) {
 			Block *cg = BP->data;
-			if (myrank == cg->rank)
-			{
-				cg->move_to_gpu(StateList);
-				cg->move_to_gpu(MiscList);
-
+			if (myrank == cg->rank) {
 				gpu_enforce_ga_launch(
 					cg->stream, cg->shape,
 					cg->d_fgfs[gxx0->sgfn], cg->d_fgfs[gxy0->sgfn], cg->d_fgfs[gxz0->sgfn], cg->d_fgfs[gyy0->sgfn], cg->d_fgfs[gyz0->sgfn], cg->d_fgfs[gzz0->sgfn],
@@ -190,29 +193,22 @@ void bssn_class::Step_GPU(int lev, int YN)
 		int erh = ERROR;
 		MPI_Allreduce(&erh, &ERROR, 1, MPI_INT, MPI_SUM, MPI_COMM_WORLD);
 	}
-	if (ERROR)
-	{
+	if (ERROR) {
 		Parallel::Dump_Data(GH->PatL[lev], StateList, 0, PhysTime, dT_lev);
-		if (myrank == 0)
-		{
-			if (ErrorMonitor->outfile)
-				ErrorMonitor->outfile << "find NaN in state variables at t = " << PhysTime << ", lev = " << lev << endl;
+		if (myrank == 0) {
+			if (ErrorMonitor->outfile) ErrorMonitor->outfile << "find NaN in state variables at t = " << PhysTime << ", lev = " << lev << endl;
 			MPI_Abort(MPI_COMM_WORLD, 1);
 		}
 	}
 	Parallel::Sync_GPU(GH->PatL[lev], SynchList_pre, Symmetry);
 	// corrector
-	for (iter_count = 1; iter_count < 4; iter_count++)
-	{
+	for (iter_count = 1; iter_count < 4; iter_count++) {
 		// for RK4: t0, t0+dt/2, t0+dt/2, t0+dt;
-		if (iter_count == 1 || iter_count == 3)
-			TRK4 += dT_lev / 2;
+		if (iter_count == 1 || iter_count == 3) TRK4 += dT_lev / 2;
 		Pp = GH->PatL[lev];
-		while (Pp)
-		{
+		while (Pp) {
 			MyList<Block> *BP = Pp->data->blb;
-			while (BP)
-			{
+			while (BP) {
 				Block *cg = BP->data;
 				if (myrank == cg->rank) {	
 					gpu_enforce_ga_launch(
@@ -334,21 +330,13 @@ void bssn_class::Step_GPU(int lev, int YN)
 			}
 		}
 	}
-	// Pp = GH->PatL[lev];
-    // while (Pp) {
-    //     MyList<Block> *BP = Pp->data->blb;
-    //     while (BP) {
-    //         Block *cg = BP->data;
-    //         if (myrank == cg->rank) {
-	// 			   cg->move_to_cpu(SynchList_pre); 
-    //             cg->move_to_cpu(SynchList_cor);
-    //         }
-    //         BP = BP->next;
-    //     }
-    //     Pp = Pp->next;
-    // }
+	Helper::move_to_cpu_whole(GH->PatL[lev], myrank, StateList);
+	Helper::move_to_cpu_whole(GH->PatL[lev], myrank, RHSList);
+	Helper::move_to_cpu_whole(GH->PatL[lev], myrank, MiscList);
 	Helper::move_to_cpu_whole(GH->PatL[lev], myrank, SynchList_pre);
 	Helper::move_to_cpu_whole(GH->PatL[lev], myrank, SynchList_cor);
+	Helper::move_to_cpu_whole(GH->PatL[lev], myrank, ConstraintList);
+	Helper::move_to_cpu_whole(GH->PatL[lev], myrank, DGList);
 	// note the data structure before update
 	// SynchList_cor 1   -----------
 	//

@@ -391,3 +391,76 @@ void gpu_average2m_launch(cudaStream_t stream, const int ext[3], const double* d
     int grid = (n + block - 1) / block;
     average2m_kernel<<<grid, block, 0, stream>>>(n, d_f1, d_f2, d_f3, d_fout);
 }
+
+__global__ void global_interp_kernel(
+    int NN, int DIM,
+    double* d_XX_0, double* d_XX_1, double* d_XX_2,
+    int ex0, int ex1, int ex2, 
+    double* d_X_0, double* d_X_1, double* d_X_2,
+    double* d_field,
+    double llb_0, double llb_1, double llb_2,
+    double uub_0, double uub_1, double uub_2,
+    int ordn, double SoA_0, double SoA_1, double SoA_2, int Symmetry,
+    int var_idx, int num_var,
+    double* d_shellf, int* d_weight)
+{
+    int j = blockIdx.x * blockDim.x + threadIdx.x;
+    if (j >= NN) return;
+
+    // 获取当前点的坐标
+    double px = d_XX_0[j];
+    double py = d_XX_1[j];
+    double pz = d_XX_2[j];
+
+    // 边界检查（Bounding Box 判断）
+    if (px < llb_0 || px > uub_0) return;
+    if (py < llb_1 || py > uub_1) return;
+    if (pz < llb_2 || pz > uub_2) return;
+
+    // 组装传给已有插值库的指针
+    double* d_X_arr[3] = {d_X_0, d_X_1, d_X_2};
+	double SoA_arr[3] = {SoA_0, SoA_1, SoA_2};
+	const int ex[3] = {ex0, ex1, ex2};
+
+    // 调用你们原有的设备端插值函数
+    double val = 0.0;
+    global_interp_device(
+        ex, d_X_arr[0], d_X_arr[1], d_X_arr[2],
+        d_field, &val,
+        px, py, pz,
+        ordn, SoA_arr, Symmetry
+    );
+
+    // 将结果原子累加到对应位置（处理 Ghost Zone 多个 Block 重叠的情况）
+    atomicAdd(&d_shellf[j * num_var + var_idx], val);
+
+    if (var_idx == 0) {
+        d_weight[j] = 1; 
+    }
+}
+
+void gpu_global_interp_launch(
+	cudaStream_t stream,
+    int NN, int DIM,
+    double* d_XX_0, double* d_XX_1, double* d_XX_2,
+    int shape_0, int shape_1, int shape_2,
+    double* d_X_0, double* d_X_1, double* d_X_2,
+    double* d_field,
+    double llb_0, double llb_1, double llb_2,
+    double uub_0, double uub_1, double uub_2,
+    int ordn, double SoA_0, double SoA_1, double SoA_2, 
+    int Symmetry, int var_idx, int num_var,
+    double* d_shellf, int* d_weight
+) {
+	int blockSize = 256;
+    int gridSize = (NN + blockSize - 1) / blockSize;
+
+	global_interp_kernel<<<gridSize, blockSize, 0, stream>>>(
+		NN, DIM, 
+        d_XX_0, d_XX_1, d_XX_2, 
+        shape_0, shape_1, shape_2, d_X_0, d_X_1, d_X_2, d_field,
+        llb_0, llb_1, llb_2, uub_0, uub_1, uub_2,
+        ordn, SoA_0, SoA_1, SoA_2, Symmetry, 
+        var_idx, num_var, d_shellf, d_weight
+	);
+}

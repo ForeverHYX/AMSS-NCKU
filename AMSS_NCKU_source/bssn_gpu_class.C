@@ -510,6 +510,13 @@ bssn_class::bssn_class(double Couranti, double StartTimei, double TotalTimei,
     MiscList->insert(Syz);
     MiscList->insert(Szz);
 
+    DGList = new MyList<var>(Rpsi4);
+    DGList->insert(Ipsi4);
+    DGList->insert(t1Rpsi4);
+    DGList->insert(t1Ipsi4);
+    DGList->insert(t2Rpsi4);
+    DGList->insert(t2Ipsi4);
+
     CheckPoint = new checkpoint(checkrun, checkfilename, myrank);
 }
 
@@ -574,6 +581,7 @@ bssn_class::~bssn_class()
     DumpList->clearList();
     ConstraintList->clearList();
     MiscList->clearList();
+    DGList->clearList();
 
     delete phio;
     delete trKo;
@@ -1613,20 +1621,20 @@ void bssn_class::RecursiveStep(int lev)
         // =================================================================
         // 1. RestrictProlong 前的数据入场 (H2D)
         // =================================================================
-        if (lev > 0) {
-        // A. 细网格 (lev) 输入
-        Helper::move_to_gpu_whole(GH->PatL[lev], myrank, StateList);
-        Helper::move_to_gpu_whole(GH->PatL[lev], myrank, SynchList_cor);
+        // if (lev > 0) {
+        // // A. 细网格 (lev) 输入
+        // Helper::move_to_gpu_whole(GH->PatL[lev], myrank, StateList);
+        // Helper::move_to_gpu_whole(GH->PatL[lev], myrank, SynchList_cor);
 
-        // B. 粗网格 (lev-1) 输入 (为了给细网格提供边界插值基准)
-        Helper::move_to_gpu_whole(GH->PatL[lev - 1], myrank, StateList);
-        Helper::move_to_gpu_whole(GH->PatL[lev - 1], myrank, OldStateList);
-        Helper::move_to_gpu_whole(GH->PatL[lev - 1], myrank, SynchList_cor);
+        // // B. 粗网格 (lev-1) 输入 (为了给细网格提供边界插值基准)
+        // Helper::move_to_gpu_whole(GH->PatL[lev - 1], myrank, StateList);
+        // Helper::move_to_gpu_whole(GH->PatL[lev - 1], myrank, OldStateList);
+        // Helper::move_to_gpu_whole(GH->PatL[lev - 1], myrank, SynchList_cor);
         
-        // (可选保障) 如果 move_to_gpu 内部包含 cudaMalloc，
-        // 确保作为中间缓冲区的 SynchList_pre 在 GPU 上已分配
-        Helper::move_to_gpu_whole(GH->PatL[lev - 1], myrank, SynchList_pre); 
-        }
+        // // (可选保障) 如果 move_to_gpu 内部包含 cudaMalloc，
+        // // 确保作为中间缓冲区的 SynchList_pre 在 GPU 上已分配
+        // Helper::move_to_gpu_whole(GH->PatL[lev - 1], myrank, SynchList_pre); 
+        // }
 
         // =================================================================
         // 2. 执行纯 GPU 版本的 RestrictProlong
@@ -1636,14 +1644,14 @@ void bssn_class::RecursiveStep(int lev)
         // =================================================================
         // 3. RestrictProlong 后的结果离场 (D2H)
         // =================================================================
-        if (lev > 0) {
-        // A. 细网格的 StateList 在 OutBdLow2Hi 中被更新，必须拉回
-        Helper::move_to_cpu_whole(GH->PatL[lev], myrank, StateList);
-        Helper::move_to_cpu_whole(GH->PatL[lev], myrank, SynchList_cor);
+        // if (lev > 0) {
+        // // A. 细网格的 StateList 在 OutBdLow2Hi 中被更新，必须拉回
+        // Helper::move_to_cpu_whole(GH->PatL[lev], myrank, StateList);
+        // Helper::move_to_cpu_whole(GH->PatL[lev], myrank, SynchList_cor);
         
-        // B. 当 YN == 1 (同时间层) 时，粗网格的 StateList 会被 Restrict 修改，必须拉回
-        Helper::move_to_cpu_whole(GH->PatL[lev - 1], myrank, StateList);
-        }
+        // // B. 当 YN == 1 (同时间层) 时，粗网格的 StateList 会被 Restrict 修改，必须拉回
+        // Helper::move_to_cpu_whole(GH->PatL[lev - 1], myrank, StateList);
+        // }
     }
     GH->Regrid_Onelevel(lev, Symmetry, BH_num, Porgbr, Porg0,
                                             SynchList_cor, OldStateList, StateList, SynchList_pre,
@@ -2060,6 +2068,11 @@ void bssn_class::RestrictProlong(
     int lev, int YN, bool BB,
     MyList<var> *SL, MyList<var> *OL, MyList<var> *corL
 ) {
+    if (lev > 0) { // TODO
+        Helper::move_to_gpu_whole(GH->PatL[lev], myrank, SL);
+        Helper::move_to_gpu_whole(GH->PatL[lev], myrank, OL);
+        Helper::move_to_gpu_whole(GH->PatL[lev], myrank, corL);
+    }
     if (lev > 0) {
         MyList<Patch> *Pp, *Ppc;
         if (lev > trfls && YN == 0) { // time refinement levels and for intermediat time level
@@ -2105,6 +2118,11 @@ void bssn_class::RestrictProlong(
         }
         Parallel::Sync_GPU(GH->PatL[lev], SL, Symmetry);
         // Parallel::Sync(GH->PatL[lev], SL, Symmetry);
+    }
+    if (lev > 0) { // TODO
+        Helper::move_to_cpu_whole(GH->PatL[lev], myrank, SL);
+        Helper::move_to_cpu_whole(GH->PatL[lev], myrank, OL);
+        Helper::move_to_cpu_whole(GH->PatL[lev], myrank, corL);
     }
 }
 
@@ -2372,31 +2390,31 @@ void bssn_class::Compute_Psi4(int lev)
     DG_List->insert(Ipsi4);
 
     MyList<Patch> *Pp = GH->PatL[lev];
-    while (Pp)
-    {
+    while (Pp) {
         MyList<Block> *BP = Pp->data->blb;
-        while (BP)
-        {
+        while (BP) {
             Block *cg = BP->data;
-            if (myrank == cg->rank)
-            {
+            if (myrank == cg->rank) {
                 // the input arguments Gamma^i_jk and R_ij do not need synch, because we do not need to derivate them
-                f_getnp4(cg->shape, cg->X[0], cg->X[1], cg->X[2],
-                                 cg->fgfs[phi0->sgfn], cg->fgfs[trK0->sgfn],
-                                 cg->fgfs[gxx0->sgfn], cg->fgfs[gxy0->sgfn], cg->fgfs[gxz0->sgfn], 
-                                 cg->fgfs[gyy0->sgfn], cg->fgfs[gyz0->sgfn], cg->fgfs[gzz0->sgfn],
-                                 cg->fgfs[Axx0->sgfn], cg->fgfs[Axy0->sgfn], cg->fgfs[Axz0->sgfn], 
-                                 cg->fgfs[Ayy0->sgfn], cg->fgfs[Ayz0->sgfn], cg->fgfs[Azz0->sgfn],
-                                 cg->fgfs[Gamxxx->sgfn], cg->fgfs[Gamxxy->sgfn], cg->fgfs[Gamxxz->sgfn],
-                                 cg->fgfs[Gamxyy->sgfn], cg->fgfs[Gamxyz->sgfn], cg->fgfs[Gamxzz->sgfn],
-                                 cg->fgfs[Gamyxx->sgfn], cg->fgfs[Gamyxy->sgfn], cg->fgfs[Gamyxz->sgfn],
-                                 cg->fgfs[Gamyyy->sgfn], cg->fgfs[Gamyyz->sgfn], cg->fgfs[Gamyzz->sgfn],
-                                 cg->fgfs[Gamzxx->sgfn], cg->fgfs[Gamzxy->sgfn], cg->fgfs[Gamzxz->sgfn],
-                                 cg->fgfs[Gamzyy->sgfn], cg->fgfs[Gamzyz->sgfn], cg->fgfs[Gamzzz->sgfn],
-                                 cg->fgfs[Rxx->sgfn], cg->fgfs[Rxy->sgfn], cg->fgfs[Rxz->sgfn], 
-                                 cg->fgfs[Ryy->sgfn], cg->fgfs[Ryz->sgfn], cg->fgfs[Rzz->sgfn],
-                                 cg->fgfs[Rpsi4->sgfn], cg->fgfs[Ipsi4->sgfn],
-                                 Symmetry);
+                gpu_getnp4_launch(
+                    cg->stream,
+                    cg->shape, cg->d_X[0], cg->d_X[1], cg->d_X[2],
+                    cg->d_fgfs[phi0->sgfn], cg->d_fgfs[trK0->sgfn],
+                    cg->d_fgfs[gxx0->sgfn], cg->d_fgfs[gxy0->sgfn], cg->d_fgfs[gxz0->sgfn], 
+                    cg->d_fgfs[gyy0->sgfn], cg->d_fgfs[gyz0->sgfn], cg->d_fgfs[gzz0->sgfn],
+                    cg->d_fgfs[Axx0->sgfn], cg->d_fgfs[Axy0->sgfn], cg->d_fgfs[Axz0->sgfn], 
+                    cg->d_fgfs[Ayy0->sgfn], cg->d_fgfs[Ayz0->sgfn], cg->d_fgfs[Azz0->sgfn],
+                    cg->d_fgfs[Gamxxx->sgfn], cg->d_fgfs[Gamxxy->sgfn], cg->d_fgfs[Gamxxz->sgfn],
+                    cg->d_fgfs[Gamxyy->sgfn], cg->d_fgfs[Gamxyz->sgfn], cg->d_fgfs[Gamxzz->sgfn],
+                    cg->d_fgfs[Gamyxx->sgfn], cg->d_fgfs[Gamyxy->sgfn], cg->d_fgfs[Gamyxz->sgfn],
+                    cg->d_fgfs[Gamyyy->sgfn], cg->d_fgfs[Gamyyz->sgfn], cg->d_fgfs[Gamyzz->sgfn],
+                    cg->d_fgfs[Gamzxx->sgfn], cg->d_fgfs[Gamzxy->sgfn], cg->d_fgfs[Gamzxz->sgfn],
+                    cg->d_fgfs[Gamzyy->sgfn], cg->d_fgfs[Gamzyz->sgfn], cg->d_fgfs[Gamzzz->sgfn],
+                    cg->d_fgfs[Rxx->sgfn], cg->d_fgfs[Rxy->sgfn], cg->d_fgfs[Rxz->sgfn], 
+                    cg->d_fgfs[Ryy->sgfn], cg->d_fgfs[Ryz->sgfn], cg->d_fgfs[Rzz->sgfn],
+                    cg->d_fgfs[Rpsi4->sgfn], cg->d_fgfs[Ipsi4->sgfn],
+                    Symmetry
+                );
             }
             if (BP == Pp->data->ble)
                 break;
@@ -2404,8 +2422,8 @@ void bssn_class::Compute_Psi4(int lev)
         }
         Pp = Pp->next;
     }
-
-    Parallel::Sync(GH->PatL[lev], DG_List, Symmetry);
+    Parallel::Sync_GPU(GH->PatL[lev], DG_List, Symmetry);
+    // Parallel::Sync(GH->PatL[lev], DG_List, Symmetry);
 
     DG_List->clearList();
 
@@ -2824,12 +2842,10 @@ void bssn_class::compute_Porg_rhs(double **BH_PS, double **BH_RHS, var *forx, va
 
 //================================================================================================
 
-void bssn_class::AnalysisStuff(int lev, double dT_lev)
-{
+void bssn_class::AnalysisStuff(int lev, double dT_lev) {
     LastAnas += dT_lev;
 
-    if (LastAnas >= AnasTime)
-    {
+    if (LastAnas >= AnasTime) {
         Compute_Psi4(lev);
         double *RP, *IP, *RoutMAP;
         int NN = 0;
@@ -2840,16 +2856,22 @@ void bssn_class::AnalysisStuff(int lev, double dT_lev)
         IP = new double[NN];
         RoutMAP = new double[7];
         double Rex = maxrex;
-        for (int i = 0; i < decn; i++)
-        {
-            Waveshell->surf_Wave(Rex, lev, GH, Rpsi4, Ipsi4, 2, maxl, NN, RP, IP, ErrorMonitor);
-            Waveshell->surf_MassPAng(Rex, lev, GH, phi0, trK0,
-                                                             gxx0, gxy0, gxz0, gyy0, gyz0, gzz0,
-                                                             Axx0, Axy0, Axz0, Ayy0, Ayz0, Azz0,
-                                                             Gmx0, Gmy0, Gmz0, Sfx1, Sfy1, Sfz1, // here we can not touch rhs variables, but 1 variables
-                                                             RoutMAP, ErrorMonitor);
-            if (i == 0)
-            {
+        for (int i = 0; i < decn; i++) {
+            // Waveshell->surf_Wave(Rex, lev, GH, Rpsi4, Ipsi4, 2, maxl, NN, RP, IP, ErrorMonitor);
+            // Waveshell->surf_MassPAng(Rex, lev, GH, phi0, trK0,
+            //                                                  gxx0, gxy0, gxz0, gyy0, gyz0, gzz0,
+            //                                                  Axx0, Axy0, Axz0, Ayy0, Ayz0, Azz0,
+            //                                                  Gmx0, Gmy0, Gmz0, Sfx1, Sfy1, Sfz1, // here we can not touch rhs variables, but 1 variables
+            //                                                  RoutMAP, ErrorMonitor);
+            Waveshell->gpu_surf_Wave(Rex, lev, GH, Rpsi4, Ipsi4, 2, maxl, NN, RP, IP, ErrorMonitor);
+            Waveshell->gpu_surf_MassPAng(
+                Rex, lev, GH, phi0, trK0,
+                gxx0, gxy0, gxz0, gyy0, gyz0, gzz0,
+                Axx0, Axy0, Axz0, Ayy0, Ayz0, Azz0,
+                Gmx0, Gmy0, Gmz0, Sfx1, Sfy1, Sfz1, // here we can not touch rhs variables, but 1 variables
+                RoutMAP, ErrorMonitor
+            );
+            if (i == 0) {
                 ADMMass = RoutMAP[0];
             }
             Psi4Monitor->writefile(PhysTime, NN, RP, IP);

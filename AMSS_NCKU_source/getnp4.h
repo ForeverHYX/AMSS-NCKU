@@ -177,4 +177,25 @@ extern "C"
                                double *, double *, int &, int &);
 }
 
+void gpu_getnp4_launch(
+    cudaStream_t stream,
+    int ex[3], 
+    const double* d_X, const double* d_Y, const double* d_Z,
+    const double* d_chi, const double* d_trK,
+    const double* d_dxx, const double* d_gxy, const double* d_gxz,
+    const double* d_dyy, const double* d_gyz, const double* d_dzz,
+    const double* d_Axx, const double* d_Axy, const double* d_Axz,
+    const double* d_Ayy, const double* d_Ayz, const double* d_Azz,
+    const double* d_Gamxxx, const double* d_Gamxxy, const double* d_Gamxxz,
+    const double* d_Gamxyy, const double* d_Gamxyz, const double* d_Gamxzz,
+    const double* d_Gamyxx, const double* d_Gamyxy, const double* d_Gamyxz,
+    const double* d_Gamyyy, const double* d_Gamyyz, const double* d_Gamyzz,
+    const double* d_Gamzxx, const double* d_Gamzxy, const double* d_Gamzxz,
+    const double* d_Gamzyy, const double* d_Gamzyz, const double* d_Gamzzz,
+    const double* d_Rxx, const double* d_Rxy, const double* d_Rxz,
+    const double* d_Ryy, const double* d_Ryz, const double* d_Rzz,
+    double* d_Rpsi4, double* d_Ipsi4,
+    int symmetry
+);
+
 #endif /* GETNP4_H */

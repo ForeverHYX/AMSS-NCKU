@@ -338,54 +338,52 @@ void Patch::checkPatch(bool buflog, const int out_rank)
 		}
 	}
 }
+
 void Patch::Interp_Points(MyList<var> *VarList,
-													int NN, double **XX,
-													double *Shellf, int Symmetry)
+                          int NN, double **XX,
+                          double *Shellf, int Symmetry)
 {
-	// NOTE: we do not Synchnize variables here, make sure of that before calling this routine
-	int myrank;
-	MPI_Comm_rank(MPI_COMM_WORLD, &myrank);
+    // NOTE: we do not Synchnize variables here, make sure of that before calling this routine
+    int myrank;
+    MPI_Comm_rank(MPI_COMM_WORLD, &myrank);
 
-	int ordn = 2 * ghost_width;
-	MyList<var> *varl;
-	int num_var = 0;
-	varl = VarList;
-	while (varl)
-	{
-		num_var++;
-		varl = varl->next;
-	}
-
-	double *shellf;
-	shellf = new double[NN * num_var];
-	memset(shellf, 0, sizeof(double) * NN * num_var);
-
-	// we use weight to monitor code, later some day we can move it for optimization
-	int *weight;
-	weight = new int[NN];
-	memset(weight, 0, sizeof(int) * NN);
-
-	double *DH, *llb, *uub;
-	DH = new double[dim];
-
-	for (int i = 0; i < dim; i++)
-	{
-		DH[i] = getdX(i);
-	}
-	llb = new double[dim];
-	uub = new double[dim];
-
-	GpuBatchInterp gpu_manager;
-	for (int j = 0; j < NN; j++) // run along points
+    int ordn = 2 * ghost_width;
+    MyList<var> *varl;
+    int num_var = 0;
+    varl = VarList;
+    while (varl)
     {
-        double pox[dim];
+        num_var++;
+        varl = varl->next;
+    }
+
+    double *shellf;
+    shellf = new double[NN * num_var];
+    memset(shellf, 0, sizeof(double) * NN * num_var);
+
+    int *weight;
+    weight = new int[NN];
+    memset(weight, 0, sizeof(int) * NN);
+
+    double *DH, *llb, *uub;
+    DH = new double[dim];
+
+    for (int i = 0; i < dim; i++)
+    {
+        DH[i] = getdX(i);
+    }
+    llb = new double[dim];
+    uub = new double[dim];
+
+    // --------------------------------------------------------------------------
+    // 保留 CPU 端的安全检查（只执行一次，开销极低）
+    for (int j = 0; j < NN; j++) 
+    {
         for (int i = 0; i < dim; i++)
         {
-            pox[i] = XX[i][j];
-			if (isnan(pox[i])) {
-				puts("Error: Patch::Interp_Points encounters NaN in input point coordinates.");
-			}
-            // [Original Logic] 边界检查，保持不变
+            if (isnan(XX[i][j])) {
+                puts("Error: Patch::Interp_Points encounters NaN in input point coordinates.");
+            }
             if (myrank == 0 && (XX[i][j] < bbox[i] + lli[i] * DH[i] || XX[i][j] > bbox[dim + i] - uui[i] * DH[i]))
             {
                 cout << "Patch::Interp_Points: point (";
@@ -400,153 +398,375 @@ void Patch::Interp_Points(MyList<var> *VarList,
                 MPI_Abort(MPI_COMM_WORLD, 1);
             }
         }
+    }
 
-        MyList<Block> *Bp = blb;
-        bool notfind = true;
-        while (notfind && Bp) // run along Blocks
+    // ================== GPU 零拷贝重构部分 开始 ==================
+
+    // 1. 分配 GPU 内存并将所有插值点坐标一次性拷贝至 GPU
+    double *d_XX[3] = {nullptr, nullptr, nullptr};
+    for (int i = 0; i < dim; i++) {
+        cudaMalloc((void**)&d_XX[i], NN * sizeof(double));
+        cudaMemcpy(d_XX[i], XX[i], NN * sizeof(double), cudaMemcpyHostToDevice);
+    }
+
+    double *d_shellf;
+    cudaMalloc((void**)&d_shellf, NN * num_var * sizeof(double));
+    cudaMemset(d_shellf, 0, NN * num_var * sizeof(double));
+
+    int *d_weight;
+    cudaMalloc((void**)&d_weight, NN * sizeof(int));
+    cudaMemset(d_weight, 0, NN * sizeof(int));
+
+    // 2. Block-Centric 遍历：以 Block 为单位启动 Kernel
+    MyList<Block> *Bp = blb;
+    while (Bp)
+    {
+        Block *BP = Bp->data;
+
+        if (myrank == BP->rank) 
         {
-            Block *BP = Bp->data;
-
-            bool flag = true;
-            // [Original Logic] Bounding Box 复杂判断，保持不变
+            // 计算当前 Block 包含幽灵区(ghost zones)的 Bounding Box
             for (int i = 0; i < dim; i++)
             {
                 llb[i] = (feq(BP->bbox[i], bbox[i], DH[i] / 2)) ? BP->bbox[i] + lli[i] * DH[i] : BP->bbox[i] + ghost_width * DH[i];
                 uub[i] = (feq(BP->bbox[dim + i], bbox[dim + i], DH[i] / 2)) ? BP->bbox[dim + i] - uui[i] * DH[i] : BP->bbox[dim + i] - ghost_width * DH[i];
-
-                if (XX[i][j] - llb[i] < -DH[i] / 2 || XX[i][j] - uub[i] > DH[i] / 2)
-                {
-                    flag = false;
-                    break;
-                }
             }
 
-            if (flag)
+            // 提取多维参数（展平传递给 Kernel 以避免隐式 Host 指针问题）
+            int shape_0 = BP->shape[0];
+            int shape_1 = (dim > 1) ? BP->shape[1] : 1;
+            int shape_2 = (dim > 2) ? BP->shape[2] : 1;
+
+            double llb_0 = llb[0], llb_1 = (dim > 1) ? llb[1] : 0.0, llb_2 = (dim > 2) ? llb[2] : 0.0;
+            double uub_0 = uub[0], uub_1 = (dim > 1) ? uub[1] : 0.0, uub_2 = (dim > 2) ? uub[2] : 0.0;
+
+            varl = VarList;
+            int k = 0;
+            while (varl) 
             {
-                notfind = false;
-                if (myrank == BP->rank) // [Check] 只处理属于本 rank 的 Block
+                gpu_global_interp_launch(
+					BP->stream,
+                    NN, dim, 
+                    d_XX[0], d_XX[1], d_XX[2],
+                    shape_0, shape_1, shape_2,
+                    BP->d_X[0], BP->d_X[1], BP->d_X[2],
+                    BP->d_fgfs[varl->data->sgfn],
+                    llb_0, llb_1, llb_2, 
+                    uub_0, uub_1, uub_2, 
+                    ordn, varl->data->SoA[0], varl->data->SoA[1], varl->data->SoA[2], 
+                    Symmetry, k, num_var, d_shellf, d_weight
+                );
+                varl = varl->next;
+                k++;
+            }
+        }
+        if (Bp == ble) break;
+        Bp = Bp->next;
+    }
+
+    GPUManager::getInstance().synchronize_all();
+    cudaMemcpy(shellf, d_shellf, NN * num_var * sizeof(double), cudaMemcpyDeviceToHost);
+    cudaMemcpy(weight, d_weight, NN * sizeof(int), cudaMemcpyDeviceToHost);
+
+    // 4. 清理 GPU 临时内存
+    for (int i = 0; i < dim; i++) {
+        if (d_XX[i]) cudaFree(d_XX[i]);
+    }
+    cudaFree(d_shellf);
+    cudaFree(d_weight);
+
+    // ================== GPU 零拷贝重构部分 结束 ==================
+
+    MPI_Allreduce(shellf, Shellf, NN * num_var, MPI_DOUBLE, MPI_SUM, MPI_COMM_WORLD);
+    int *Weight;
+    Weight = new int[NN];
+    MPI_Allreduce(weight, Weight, NN, MPI_INT, MPI_SUM, MPI_COMM_WORLD);
+
+    for (int i = 0; i < NN; i++)
+    {
+        if (Weight[i] > 1)
+        {
+            if (myrank == 0)
+                cout << "WARNING: Patch::Interp_Points meets multiple weight" << endl;
+            for (int j = 0; j < num_var; j++)
+                Shellf[j + i * num_var] = Shellf[j + i * num_var] / Weight[i];
+        }
+        else if (Weight[i] == 0 && myrank == 0)
+        {
+            cout << "ERROR: Patch::Interp_Points fails to find point (";
+            for (int j = 0; j < dim; j++)
+            {
+                cout << XX[j][i];
+                if (j < dim - 1)
+                    cout << ",";
+                else
+                    cout << ")";
+            }
+            cout << " on Patch (";
+            for (int j = 0; j < dim; j++)
+            {
+                cout << bbox[j] << "+" << lli[j] * getdX(j);
+                if (j < dim - 1)
+                    cout << ",";
+                else
+                    cout << ")--";
+            }
+            cout << "(";
+            for (int j = 0; j < dim; j++)
+            {
+                cout << bbox[dim + j] << "-" << uui[j] * getdX(j);
+                if (j < dim - 1)
+                    cout << ",";
+                else
+                    cout << ")" << endl;
+            }
+            cout << "splited domains:" << endl;
+            {
+                MyList<Block> *Bp = blb;
+                while (Bp)
                 {
-                    // ---> interpolation [Refactored for GPU]
-                    varl = VarList;
-                    int k = 0;
-                    while (varl) // run along variables
+                    Block *BP = Bp->data;
+
+                    for (int i = 0; i < dim; i++)
                     {
-                        // 计算 Shellf 数组的目标索引
-                        int target_idx = j * num_var + k;
-
-                        // [GPU] 添加任务到队列，而不是立即计算
-                        // 注意：这里我们传入了 Block 的几何信息、场数据指针、点坐标和目标索引
-                        gpu_manager.add_task(
-                            BP->shape, 
-                            BP->X, 
-                            varl->data->SoA,           // SoA
-                            BP->fgfs[varl->data->sgfn], // 当前变量的 Field Data
-                            pox, 
-                            ordn, 
-                            Symmetry, 
-                            target_idx                  // 计算结果应该填回 Shellf 的哪个位置
-                        );
-
-                        varl = varl->next;
-                        k++;
+                        llb[i] = (feq(BP->bbox[i], bbox[i], DH[i] / 2)) ? BP->bbox[i] + lli[i] * DH[i] : BP->bbox[i] + ghost_width * DH[i];
+                        uub[i] = (feq(BP->bbox[dim + i], bbox[dim + i], DH[i] / 2)) ? BP->bbox[dim + i] - uui[i] * DH[i] : BP->bbox[dim + i] - ghost_width * DH[i];
                     }
-                    // 标记权重 (CPU 侧逻辑保持不变，因为我们确信这个点被找到了)
-                    weight[j] = 1; 
+                    cout << "(";
+                    for (int j = 0; j < dim; j++)
+                    {
+                        cout << llb[j] << ":" << uub[j];
+                        if (j < dim - 1)
+                            cout << ",";
+                        else
+                            cout << ")" << endl;
+                    }
+                    if (Bp == ble)
+                        break;
+                    Bp = Bp->next;
                 }
             }
-            if (Bp == ble)
-                break;
-            Bp = Bp->next;
+            MPI_Abort(MPI_COMM_WORLD, 1);
         }
     }
 
-    // --------------------------------------------------------------------------
-    // [New Code] 循环结束，触发 GPU 批量计算并写回结果
-    // 这一步会执行：拷贝任务 -> Kernel 计算 -> 拷贝结果 -> 填入 Shellf
-    gpu_manager.execute(shellf);
-
-	MPI_Allreduce(shellf, Shellf, NN * num_var, MPI_DOUBLE, MPI_SUM, MPI_COMM_WORLD);
-	int *Weight;
-	Weight = new int[NN];
-	MPI_Allreduce(weight, Weight, NN, MPI_INT, MPI_SUM, MPI_COMM_WORLD);
-
-	//  misc::tillherecheck("print me");
-
-	for (int i = 0; i < NN; i++)
-	{
-		if (Weight[i] > 1)
-		{
-			if (myrank == 0)
-				cout << "WARNING: Patch::Interp_Points meets multiple weight" << endl;
-			for (int j = 0; j < num_var; j++)
-				Shellf[j + i * num_var] = Shellf[j + i * num_var] / Weight[i];
-		}
-		else if (Weight[i] == 0 && myrank == 0)
-		{
-			cout << "ERROR: Patch::Interp_Points fails to find point (";
-			for (int j = 0; j < dim; j++)
-			{
-				cout << XX[j][i];
-				if (j < dim - 1)
-					cout << ",";
-				else
-					cout << ")";
-			}
-			cout << " on Patch (";
-			for (int j = 0; j < dim; j++)
-			{
-				cout << bbox[j] << "+" << lli[j] * getdX(j);
-				if (j < dim - 1)
-					cout << ",";
-				else
-					cout << ")--";
-			}
-			cout << "(";
-			for (int j = 0; j < dim; j++)
-			{
-				cout << bbox[dim + j] << "-" << uui[j] * getdX(j);
-				if (j < dim - 1)
-					cout << ",";
-				else
-					cout << ")" << endl;
-			}
-			cout << "splited domains:" << endl;
-			{
-				MyList<Block> *Bp = blb;
-				while (Bp)
-				{
-					Block *BP = Bp->data;
-
-					for (int i = 0; i < dim; i++)
-					{
-						llb[i] = (feq(BP->bbox[i], bbox[i], DH[i] / 2)) ? BP->bbox[i] + lli[i] * DH[i] : BP->bbox[i] + ghost_width * DH[i];
-						uub[i] = (feq(BP->bbox[dim + i], bbox[dim + i], DH[i] / 2)) ? BP->bbox[dim + i] - uui[i] * DH[i] : BP->bbox[dim + i] - ghost_width * DH[i];
-					}
-					cout << "(";
-					for (int j = 0; j < dim; j++)
-					{
-						cout << llb[j] << ":" << uub[j];
-						if (j < dim - 1)
-							cout << ",";
-						else
-							cout << ")" << endl;
-					}
-					if (Bp == ble)
-						break;
-					Bp = Bp->next;
-				}
-			}
-			MPI_Abort(MPI_COMM_WORLD, 1);
-		}
-	}
-
-	delete[] shellf;
-	delete[] weight;
-	delete[] Weight;
-	delete[] DH;
-	delete[] llb;
-	delete[] uub;
+    delete[] shellf;
+    delete[] weight;
+    delete[] Weight;
+    delete[] DH;
+    delete[] llb;
+    delete[] uub;
 }
+
+// void Patch::Interp_Points(MyList<var> *VarList,
+// 													int NN, double **XX,
+// 													double *Shellf, int Symmetry)
+// {
+// 	// NOTE: we do not Synchnize variables here, make sure of that before calling this routine
+// 	int myrank;
+// 	MPI_Comm_rank(MPI_COMM_WORLD, &myrank);
+
+// 	int ordn = 2 * ghost_width;
+// 	MyList<var> *varl;
+// 	int num_var = 0;
+// 	varl = VarList;
+// 	while (varl)
+// 	{
+// 		num_var++;
+// 		varl = varl->next;
+// 	}
+
+// 	double *shellf;
+// 	shellf = new double[NN * num_var];
+// 	memset(shellf, 0, sizeof(double) * NN * num_var);
+
+// 	// we use weight to monitor code, later some day we can move it for optimization
+// 	int *weight;
+// 	weight = new int[NN];
+// 	memset(weight, 0, sizeof(int) * NN);
+
+// 	double *DH, *llb, *uub;
+// 	DH = new double[dim];
+
+// 	for (int i = 0; i < dim; i++)
+// 	{
+// 		DH[i] = getdX(i);
+// 	}
+// 	llb = new double[dim];
+// 	uub = new double[dim];
+
+// 	GpuBatchInterp gpu_manager;
+// 	for (int j = 0; j < NN; j++) // run along points
+//     {
+//         double pox[dim];
+//         for (int i = 0; i < dim; i++)
+//         {
+//             pox[i] = XX[i][j];
+// 			if (isnan(pox[i])) {
+// 				puts("Error: Patch::Interp_Points encounters NaN in input point coordinates.");
+// 			}
+//             // [Original Logic] 边界检查，保持不变
+//             if (myrank == 0 && (XX[i][j] < bbox[i] + lli[i] * DH[i] || XX[i][j] > bbox[dim + i] - uui[i] * DH[i]))
+//             {
+//                 cout << "Patch::Interp_Points: point (";
+//                 for (int k = 0; k < dim; k++)
+//                 {
+//                     cout << XX[k][j];
+//                     if (k < dim - 1)
+//                         cout << ",";
+//                     else
+//                         cout << ") is out of current Patch." << endl;
+//                 }
+//                 MPI_Abort(MPI_COMM_WORLD, 1);
+//             }
+//         }
+
+//         MyList<Block> *Bp = blb;
+//         bool notfind = true;
+//         while (notfind && Bp) // run along Blocks
+//         {
+//             Block *BP = Bp->data;
+
+//             bool flag = true;
+//             // [Original Logic] Bounding Box 复杂判断，保持不变
+//             for (int i = 0; i < dim; i++)
+//             {
+//                 llb[i] = (feq(BP->bbox[i], bbox[i], DH[i] / 2)) ? BP->bbox[i] + lli[i] * DH[i] : BP->bbox[i] + ghost_width * DH[i];
+//                 uub[i] = (feq(BP->bbox[dim + i], bbox[dim + i], DH[i] / 2)) ? BP->bbox[dim + i] - uui[i] * DH[i] : BP->bbox[dim + i] - ghost_width * DH[i];
+
+//                 if (XX[i][j] - llb[i] < -DH[i] / 2 || XX[i][j] - uub[i] > DH[i] / 2)
+//                 {
+//                     flag = false;
+//                     break;
+//                 }
+//             }
+
+//             if (flag)
+//             {
+//                 notfind = false;
+//                 if (myrank == BP->rank) // [Check] 只处理属于本 rank 的 Block
+//                 {
+//                     // ---> interpolation [Refactored for GPU]
+//                     varl = VarList;
+//                     int k = 0;
+//                     while (varl) // run along variables
+//                     {
+//                         // 计算 Shellf 数组的目标索引
+//                         int target_idx = j * num_var + k;
+
+//                         // [GPU] 添加任务到队列，而不是立即计算
+//                         // 注意：这里我们传入了 Block 的几何信息、场数据指针、点坐标和目标索引
+//                         gpu_manager.add_task(
+//                             BP->shape, 
+//                             BP->X, 
+//                             varl->data->SoA,           // SoA
+//                             BP->fgfs[varl->data->sgfn], // 当前变量的 Field Data
+//                             pox, 
+//                             ordn, 
+//                             Symmetry, 
+//                             target_idx                  // 计算结果应该填回 Shellf 的哪个位置
+//                         );
+
+//                         varl = varl->next;
+//                         k++;
+//                     }
+//                     // 标记权重 (CPU 侧逻辑保持不变，因为我们确信这个点被找到了)
+//                     weight[j] = 1; 
+//                 }
+//             }
+//             if (Bp == ble)
+//                 break;
+//             Bp = Bp->next;
+//         }
+//     }
+
+//     // --------------------------------------------------------------------------
+//     // [New Code] 循环结束，触发 GPU 批量计算并写回结果
+//     // 这一步会执行：拷贝任务 -> Kernel 计算 -> 拷贝结果 -> 填入 Shellf
+//     gpu_manager.execute(shellf);
+
+// 	MPI_Allreduce(shellf, Shellf, NN * num_var, MPI_DOUBLE, MPI_SUM, MPI_COMM_WORLD);
+// 	int *Weight;
+// 	Weight = new int[NN];
+// 	MPI_Allreduce(weight, Weight, NN, MPI_INT, MPI_SUM, MPI_COMM_WORLD);
+
+// 	//  misc::tillherecheck("print me");
+
+// 	for (int i = 0; i < NN; i++)
+// 	{
+// 		if (Weight[i] > 1)
+// 		{
+// 			if (myrank == 0)
+// 				cout << "WARNING: Patch::Interp_Points meets multiple weight" << endl;
+// 			for (int j = 0; j < num_var; j++)
+// 				Shellf[j + i * num_var] = Shellf[j + i * num_var] / Weight[i];
+// 		}
+// 		else if (Weight[i] == 0 && myrank == 0)
+// 		{
+// 			cout << "ERROR: Patch::Interp_Points fails to find point (";
+// 			for (int j = 0; j < dim; j++)
+// 			{
+// 				cout << XX[j][i];
+// 				if (j < dim - 1)
+// 					cout << ",";
+// 				else
+// 					cout << ")";
+// 			}
+// 			cout << " on Patch (";
+// 			for (int j = 0; j < dim; j++)
+// 			{
+// 				cout << bbox[j] << "+" << lli[j] * getdX(j);
+// 				if (j < dim - 1)
+// 					cout << ",";
+// 				else
+// 					cout << ")--";
+// 			}
+// 			cout << "(";
+// 			for (int j = 0; j < dim; j++)
+// 			{
+// 				cout << bbox[dim + j] << "-" << uui[j] * getdX(j);
+// 				if (j < dim - 1)
+// 					cout << ",";
+// 				else
+// 					cout << ")" << endl;
+// 			}
+// 			cout << "splited domains:" << endl;
+// 			{
+// 				MyList<Block> *Bp = blb;
+// 				while (Bp)
+// 				{
+// 					Block *BP = Bp->data;
+
+// 					for (int i = 0; i < dim; i++)
+// 					{
+// 						llb[i] = (feq(BP->bbox[i], bbox[i], DH[i] / 2)) ? BP->bbox[i] + lli[i] * DH[i] : BP->bbox[i] + ghost_width * DH[i];
+// 						uub[i] = (feq(BP->bbox[dim + i], bbox[dim + i], DH[i] / 2)) ? BP->bbox[dim + i] - uui[i] * DH[i] : BP->bbox[dim + i] - ghost_width * DH[i];
+// 					}
+// 					cout << "(";
+// 					for (int j = 0; j < dim; j++)
+// 					{
+// 						cout << llb[j] << ":" << uub[j];
+// 						if (j < dim - 1)
+// 							cout << ",";
+// 						else
+// 							cout << ")" << endl;
+// 					}
+// 					if (Bp == ble)
+// 						break;
+// 					Bp = Bp->next;
+// 				}
+// 			}
+// 			MPI_Abort(MPI_COMM_WORLD, 1);
+// 		}
+// 	}
+
+// 	delete[] shellf;
+// 	delete[] weight;
+// 	delete[] Weight;
+// 	delete[] DH;
+// 	delete[] llb;
+// 	delete[] uub;
+// }
 void Patch::Interp_Points(MyList<var> *VarList,
 													int NN, double **XX,
 													double *Shellf, int Symmetry, MPI_Comm Comm_here)
