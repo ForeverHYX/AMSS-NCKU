@@ -1497,12 +1497,29 @@ void bssn_class::Evolve(int Steps)
 
     GH->settrfls(trfls);
 
-    for (int ncount = 1; ncount < Steps + 1; ncount++)
-    {
+    for (int ncount = 1; ncount < Steps + 1; ncount++) {
         cout << "Before Step: " << ncount << " My Rank: " << myrank 
                  << " takes " << MPI_Wtime() - beg_time << " seconds!" << endl;
         beg_time = MPI_Wtime();
+        // for (int lev = 0; lev < GH->levels; lev ++) {
+        //     Helper::move_to_gpu_whole(GH->PatL[lev], myrank, StateList);
+        //     Helper::move_to_gpu_whole(GH->PatL[lev], myrank, RHSList);
+        //     Helper::move_to_gpu_whole(GH->PatL[lev], myrank, MiscList);
+        //     Helper::move_to_gpu_whole(GH->PatL[lev], myrank, SynchList_pre);
+        //     Helper::move_to_gpu_whole(GH->PatL[lev], myrank, SynchList_cor);
+        //     Helper::move_to_gpu_whole(GH->PatL[lev], myrank, ConstraintList);
+        //     Helper::move_to_gpu_whole(GH->PatL[lev], myrank, DGList);    
+        // }
         RecursiveStep(0);
+        // for (int lev = 0; lev < GH->levels; lev ++) {
+        //     Helper::move_to_cpu_whole(GH->PatL[lev], myrank, StateList);
+        //     Helper::move_to_cpu_whole(GH->PatL[lev], myrank, RHSList);
+        //     Helper::move_to_cpu_whole(GH->PatL[lev], myrank, MiscList);
+        //     Helper::move_to_cpu_whole(GH->PatL[lev], myrank, SynchList_pre);
+        //     Helper::move_to_cpu_whole(GH->PatL[lev], myrank, SynchList_cor);
+        //     Helper::move_to_cpu_whole(GH->PatL[lev], myrank, ConstraintList);
+        //     Helper::move_to_cpu_whole(GH->PatL[lev], myrank, DGList);    
+        // }
         cout << "After Step: " << ncount << " My Rank: " << myrank 
                  << " takes " << MPI_Wtime() - beg_time << " seconds!" << endl;
         beg_time = MPI_Wtime();
@@ -1615,43 +1632,7 @@ void bssn_class::RecursiveStep(int lev)
         else
             PhysTime += dT * pow(0.5, lev);
 
-        // mesh refinement boundary part
-        //
-        // till here the PhysTime has updated dT_lev
-        // =================================================================
-        // 1. RestrictProlong 前的数据入场 (H2D)
-        // =================================================================
-        // if (lev > 0) {
-        // // A. 细网格 (lev) 输入
-        // Helper::move_to_gpu_whole(GH->PatL[lev], myrank, StateList);
-        // Helper::move_to_gpu_whole(GH->PatL[lev], myrank, SynchList_cor);
-
-        // // B. 粗网格 (lev-1) 输入 (为了给细网格提供边界插值基准)
-        // Helper::move_to_gpu_whole(GH->PatL[lev - 1], myrank, StateList);
-        // Helper::move_to_gpu_whole(GH->PatL[lev - 1], myrank, OldStateList);
-        // Helper::move_to_gpu_whole(GH->PatL[lev - 1], myrank, SynchList_cor);
-        
-        // // (可选保障) 如果 move_to_gpu 内部包含 cudaMalloc，
-        // // 确保作为中间缓冲区的 SynchList_pre 在 GPU 上已分配
-        // Helper::move_to_gpu_whole(GH->PatL[lev - 1], myrank, SynchList_pre); 
-        // }
-
-        // =================================================================
-        // 2. 执行纯 GPU 版本的 RestrictProlong
-        // =================================================================
         RestrictProlong(lev, YN, fgt(PhysTime - dT_lev, StartTime, dT_lev / 2), StateList, OldStateList, SynchList_cor);
-
-        // =================================================================
-        // 3. RestrictProlong 后的结果离场 (D2H)
-        // =================================================================
-        // if (lev > 0) {
-        // // A. 细网格的 StateList 在 OutBdLow2Hi 中被更新，必须拉回
-        // Helper::move_to_cpu_whole(GH->PatL[lev], myrank, StateList);
-        // Helper::move_to_cpu_whole(GH->PatL[lev], myrank, SynchList_cor);
-        
-        // // B. 当 YN == 1 (同时间层) 时，粗网格的 StateList 会被 Restrict 修改，必须拉回
-        // Helper::move_to_cpu_whole(GH->PatL[lev - 1], myrank, StateList);
-        // }
     }
     GH->Regrid_Onelevel(lev, Symmetry, BH_num, Porgbr, Porg0,
                                             SynchList_cor, OldStateList, StateList, SynchList_pre,
@@ -2782,55 +2763,104 @@ void bssn_class::Setup_Black_Hole_position()
 //================================================================================================
 
 // new code considering diferent levels for different black hole
-
-void bssn_class::compute_Porg_rhs(double **BH_PS, double **BH_RHS, var *forx, var *fory, var *forz, int ilev)
-{
+void bssn_class::compute_Porg_rhs(double **BH_PS, double **BH_RHS, var *forx, var *fory, var *forz, int ilev) {
     const int InList = 3;
 
     MyList<var> *DG_List = new MyList<var>(forx);
     DG_List->insert(fory);
     DG_List->insert(forz);
 
-    double *x1, *y1, *z1;
-    double *shellf;
-    shellf = new double[3];
-    double *pox[3];
-    for (int i = 0; i < 3; i++)
-        pox[i] = new double[1];
+    double *d_pox[3];
+    for (int i = 0; i < 3; i++) {
+        d_pox[i] = GPUManager::getInstance().allocate_device_memory(1);
+    }
+    double *d_shellf = GPUManager::getInstance().allocate_device_memory(InList);
+    double h_shellf[3] = {0.0, 0.0, 0.0};
 
-    for (int n = 0; n < BH_num; n++)
-    {
-        pox[0][0] = BH_PS[n][0];
-        pox[1][0] = BH_PS[n][1];
-        pox[2][0] = BH_PS[n][2];
+    for (int n = 0; n < BH_num; n++) {
+        double h_pox[3] = { BH_PS[n][0], BH_PS[n][1], BH_PS[n][2] };
+        
+        GPUManager::getInstance().sync_to_gpu(&h_pox[0], d_pox[0], 1);
+        GPUManager::getInstance().sync_to_gpu(&h_pox[1], d_pox[1], 1);
+        GPUManager::getInstance().sync_to_gpu(&h_pox[2], d_pox[2], 1);
 
         int lev = ilev;
 
-        while (!Parallel::PatList_Interp_Points(GH->PatL[lev], DG_List, 1, pox, shellf, Symmetry))
-        {
-            lev--;
-            if (lev < 0)
-            {
-                ErrorMonitor->outfile << "fail to find black holes at t = " << PhysTime << endl;
-                for (n = 0; n < BH_num; n++)
-                    ErrorMonitor->outfile << "(x,y,z) = (" << pox[0][n] << "," << pox[1][n] << "," << pox[2][n] << ")" << endl;
+        while (lev >= 0) {
+            bool found = Parallel::PatList_Interp_Points_GPU(GPUManager::getInstance().get_stream(), GH->PatL[lev], DG_List, 1, d_pox, d_shellf, Symmetry);
+            if (found) {
                 break;
             }
+            lev--;
         }
 
-        if (lev >= 0)
-        {
-            BH_RHS[n][0] = -shellf[0];
-            BH_RHS[n][1] = -shellf[1];
-            BH_RHS[n][2] = -shellf[2];
+        if (lev < 0) {
+            ErrorMonitor->outfile << "fail to find black holes at t = " << PhysTime << endl;
+            ErrorMonitor->outfile << "(x,y,z) = (" << h_pox[0] << "," << h_pox[1] << "," << h_pox[2] << ")" << endl;
+        }
+        else {
+            GPUManager::getInstance().sync_to_cpu(h_shellf, d_shellf, InList);
+            BH_RHS[n][0] = -h_shellf[0];
+            BH_RHS[n][1] = -h_shellf[1];
+            BH_RHS[n][2] = -h_shellf[2];
         }
     }
 
+    // 清理资源
     DG_List->clearList();
-    delete[] shellf;
-    for (int i = 0; i < 3; i++)
-        delete[] pox[i];
+    for (int i = 0; i < 3; i++) {
+        GPUManager::getInstance().free_device_memory(d_pox[i], 1);
+    }
+    GPUManager::getInstance().free_device_memory(d_shellf, InList);
 }
+// void bssn_class::compute_Porg_rhs(double **BH_PS, double **BH_RHS, var *forx, var *fory, var *forz, int ilev)
+// {
+//     const int InList = 3;
+
+//     MyList<var> *DG_List = new MyList<var>(forx);
+//     DG_List->insert(fory);
+//     DG_List->insert(forz);
+
+//     double *x1, *y1, *z1;
+//     double *shellf;
+//     shellf = new double[3];
+//     double *pox[3];
+//     for (int i = 0; i < 3; i++)
+//         pox[i] = new double[1];
+
+//     for (int n = 0; n < BH_num; n++)
+//     {
+//         pox[0][0] = BH_PS[n][0];
+//         pox[1][0] = BH_PS[n][1];
+//         pox[2][0] = BH_PS[n][2];
+
+//         int lev = ilev;
+
+//         while (!Parallel::PatList_Interp_Points(GH->PatL[lev], DG_List, 1, pox, shellf, Symmetry))
+//         {
+//             lev--;
+//             if (lev < 0)
+//             {
+//                 ErrorMonitor->outfile << "fail to find black holes at t = " << PhysTime << endl;
+//                 for (n = 0; n < BH_num; n++)
+//                     ErrorMonitor->outfile << "(x,y,z) = (" << pox[0][n] << "," << pox[1][n] << "," << pox[2][n] << ")" << endl;
+//                 break;
+//             }
+//         }
+
+//         if (lev >= 0)
+//         {
+//             BH_RHS[n][0] = -shellf[0];
+//             BH_RHS[n][1] = -shellf[1];
+//             BH_RHS[n][2] = -shellf[2];
+//         }
+//     }
+
+//     DG_List->clearList();
+//     delete[] shellf;
+//     for (int i = 0; i < 3; i++)
+//         delete[] pox[i];
+// }
 
 //================================================================================================
 

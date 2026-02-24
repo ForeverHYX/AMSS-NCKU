@@ -54,4 +54,12 @@ public:
     );
 };
 
+void gpu_normalize_shellf_launch(
+    cudaStream_t stream,
+    int NN, int num_var, 
+    double* d_Shellf, 
+    const int* d_Weight, 
+    int* d_err_flag
+);
+
 #endif /* PATCH_H */

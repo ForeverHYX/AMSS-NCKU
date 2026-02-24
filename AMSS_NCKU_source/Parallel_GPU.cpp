@@ -8,6 +8,7 @@
 
 #include "prolongrestrict_gpu_manager.h"
 #include "gpu_manager.h"
+#include "MPatch.h"
 
 
 int Parallel::gpu_data_packer(
@@ -554,3 +555,129 @@ void Parallel::gpu_prepare_inter_time_level(
     }
     GPUManager::getInstance().synchronize_all();
 }
+
+bool Parallel::PatList_Interp_Points_GPU(
+    cudaStream_t stream,
+    MyList<Patch> *PatL, MyList<var> *VarList,
+    int NN, double *d_XX[3], 
+    double *d_Shellf,
+    int Symmetry
+) {
+    int myrank;
+    MPI_Comm_rank(MPI_COMM_WORLD, &myrank);
+
+    MyList<var> *varl = VarList;
+    int num_var = 0;
+    while (varl) {
+        num_var++;
+        varl = varl->next;
+    }
+
+    if (!PatL || !PatL->data) {
+        return false;
+    }
+
+    double *d_local_shellf = GPUManager::getInstance().allocate_device_memory(NN * num_var);
+    int *d_local_weight; cudaMalloc(&d_local_weight, NN * sizeof(int));
+    
+    cudaMemset(d_local_shellf, 0, NN * num_var * sizeof(double));
+    cudaMemset(d_local_weight, 0, NN * sizeof(int));
+
+    int ordn = 2 * ghost_width;
+
+    MyList<Patch> *PL = PatL;
+    while (PL) {
+        Patch *patch = PL->data;
+        
+        double *DH = new double[dim];
+        for (int i = 0; i < dim; i++) DH[i] = patch->getdX(i);
+        
+        MyList<Block> *Bp = patch->blb;
+        while (Bp) {
+            Block *BP = Bp->data;
+            if (myrank == BP->rank) {
+                double llb[3] = {0}, uub[3] = {0};
+                for (int i = 0; i < dim; i++) {
+                    llb[i] = (feq(BP->bbox[i], patch->bbox[i], DH[i] / 2)) ? BP->bbox[i] + patch->lli[i] * DH[i] : BP->bbox[i] + ghost_width * DH[i];
+                    uub[i] = (feq(BP->bbox[dim + i], patch->bbox[dim + i], DH[i] / 2)) ? BP->bbox[dim + i] - patch->uui[i] * DH[i] : BP->bbox[dim + i] - ghost_width * DH[i];
+                }
+
+                int shape_0 = BP->shape[0];
+                int shape_1 = BP->shape[1];
+                int shape_2 = BP->shape[2];
+
+                varl = VarList;
+                int k = 0;
+                while (varl) {
+                    gpu_global_interp_launch(
+                        stream,
+                        NN, dim, 
+                        d_XX[0], d_XX[1], d_XX[2],
+                        shape_0, shape_1, shape_2,
+                        BP->d_X[0], BP->d_X[1], BP->d_X[2],
+                        BP->d_fgfs[varl->data->sgfn],
+                        llb[0], llb[1], llb[2], 
+                        uub[0], uub[1], uub[2], 
+                        ordn, varl->data->SoA[0], varl->data->SoA[1], varl->data->SoA[2], 
+                        Symmetry, k, num_var, d_local_shellf, d_local_weight
+                    );
+                    varl = varl->next;
+                    k ++;
+                }
+            }
+            Bp = Bp->next;
+        }
+        delete[] DH;
+        PL = PL->next;
+    }
+
+    GPUManager::getInstance().synchronize_all();
+
+#if MPI_CUDA_AWARE
+    
+#else
+    double *h_local_shellf = new double[NN * num_var];
+    int    *h_local_weight = new int[NN];
+    GPUManager::getInstance().sync_to_cpu(h_local_shellf, d_local_shellf, NN * num_var);
+    cudaMemcpy(h_local_weight, d_local_weight, NN * sizeof(int), cudaMemcpyDeviceToHost);
+
+    double *h_global_shellf = new double[NN * num_var];
+    int    *h_global_weight = new int[NN];
+
+    MPI_Allreduce(h_local_shellf, h_global_shellf, NN * num_var, MPI_DOUBLE, MPI_SUM, MPI_COMM_WORLD);
+    MPI_Allreduce(h_local_weight, h_global_weight, NN, MPI_INT, MPI_SUM, MPI_COMM_WORLD);
+#endif
+    GPUManager::getInstance().sync_to_gpu(h_global_shellf, d_Shellf, NN * num_var);
+    
+    int *d_global_weight; 
+    cudaMalloc(&d_global_weight, NN * sizeof(int));
+    cudaMemcpy(d_global_weight, h_global_weight, NN * sizeof(int), cudaMemcpyHostToDevice);
+
+    int *d_err_flag;
+    cudaMalloc(&d_err_flag, sizeof(int));
+    cudaMemset(d_err_flag, 0, sizeof(int));
+
+    gpu_normalize_shellf_launch(stream, NN, num_var, d_Shellf, d_global_weight, d_err_flag);
+    GPUManager::getInstance().synchronize_all();
+
+    int h_err_flag = 0;
+    cudaMemcpy(&h_err_flag, d_err_flag, sizeof(int), cudaMemcpyDeviceToHost);
+
+    bool success = true;
+    if (h_err_flag > 0) {
+        checkpatchlist(PatL, false);
+        success = false;
+    }
+
+    delete[] h_local_shellf; 
+    delete[] h_local_weight;
+    delete[] h_global_shellf; 
+    delete[] h_global_weight;
+    GPUManager::getInstance().free_device_memory(d_local_shellf, NN * num_var);
+    cudaFree(d_local_weight);
+    cudaFree(d_global_weight);
+    cudaFree(d_err_flag);
+
+    return success;
+}
+

@@ -49,7 +49,7 @@ double* GPUManager::allocate_device_memory(size_t num_elements) {
     // }
     double* d_ptr = nullptr;
     CUDA_CHECK(cudaMalloc((void**)&d_ptr, num_elements * sizeof(double)));
-    // CUDA_CHECK(cudaMemset(d_ptr, 0, num_elements * sizeof(double)));
+    CUDA_CHECK(cudaMemset(d_ptr, 0, num_elements * sizeof(double)));
     return d_ptr;
 }
 

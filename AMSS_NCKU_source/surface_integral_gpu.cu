@@ -216,7 +216,7 @@ void surface_integral::gpu_surf_MassPAng(
     DG_List->insert(Ayz);
     DG_List->insert(Azz);
 
-    Helper::move_to_gpu_whole(GH->PatL[lev], myrank, DG_List);
+    // Helper::move_to_gpu_whole(GH->PatL[lev], myrank, DG_List);
 
     MyList<Patch> *Pp = GH->PatL[lev];
     while (Pp) {
@@ -471,7 +471,7 @@ void surface_integral::gpu_surf_Wave(
     MyList<var> *DG_List = new MyList<var>(Rpsi4);
     DG_List->insert(Ipsi4);
 
-    Helper::move_to_gpu_whole(GH->PatL[lev], myrank, DG_List);
+    // Helper::move_to_gpu_whole(GH->PatL[lev], myrank, DG_List);
 
     // 1. 生成球面插值点坐标 (完全在 GPU 上，无 Host 开销)
     double *d_pox[3];

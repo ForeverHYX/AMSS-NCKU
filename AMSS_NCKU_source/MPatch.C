@@ -37,18 +37,7 @@ Patch::Patch(int DIM, int *shapei, double *bboxi, int levi, bool buflog, int Sym
 		if (buflog)
 		{
 			double DH;
-#ifdef Vertex
-#ifdef Cell
-#error Both Cell and Vertex are defined
-#endif
-			DH = (bbox[dim + i] - bbox[i]) / (shape[i] - 1);
-#else
-#ifdef Cell
 			DH = (bbox[dim + i] - bbox[i]) / shape[i];
-#else
-#error Not define Vertex nor Cell
-#endif
-#endif
 			uui[i] = hbuffer_width;
 			bbox[dim + i] = bbox[dim + i] + uui[i] * DH;
 			shape[i] = shape[i] + uui[i];
@@ -65,18 +54,7 @@ Patch::Patch(int DIM, int *shapei, double *bboxi, int levi, bool buflog, int Sym
 		double tmpb, DH;
 		if (Symmetry > 0)
 		{
-#ifdef Vertex
-#ifdef Cell
-#error Both Cell and Vertex are defined
-#endif
-			DH = (bbox[5] - bbox[2]) / (shape[2] - 1);
-#else
-#ifdef Cell
 			DH = (bbox[5] - bbox[2]) / shape[2];
-#else
-#error Not define Vertex nor Cell
-#endif
-#endif
 			tmpb = Mymax(0, bbox[2] - hbuffer_width * DH);
 			lli[2] = int((bbox[2] - tmpb) / DH + 0.4);
 			bbox[2] = bbox[2] - lli[2] * DH;
@@ -93,18 +71,7 @@ Patch::Patch(int DIM, int *shapei, double *bboxi, int levi, bool buflog, int Sym
 			}
 			if (Symmetry > 1)
 			{
-#ifdef Vertex
-#ifdef Cell
-#error Both Cell and Vertex are defined
-#endif
-				DH = (bbox[3] - bbox[0]) / (shape[0] - 1);
-#else
-#ifdef Cell
 				DH = (bbox[3] - bbox[0]) / shape[0];
-#else
-#error Not define Vertex nor Cell
-#endif
-#endif
 				tmpb = Mymax(0, bbox[0] - hbuffer_width * DH);
 				lli[0] = int((bbox[0] - tmpb) / DH + 0.4);
 				bbox[0] = bbox[0] - lli[0] * DH;
@@ -119,18 +86,7 @@ Patch::Patch(int DIM, int *shapei, double *bboxi, int levi, bool buflog, int Sym
 						MPI_Abort(MPI_COMM_WORLD, 1);
 					}
 				}
-#ifdef Vertex
-#ifdef Cell
-#error Both Cell and Vertex are defined
-#endif
-				DH = (bbox[4] - bbox[1]) / (shape[1] - 1);
-#else
-#ifdef Cell
 				DH = (bbox[4] - bbox[1]) / shape[1];
-#else
-#error Not define Vertex nor Cell
-#endif
-#endif
 				tmpb = Mymax(0, bbox[1] - hbuffer_width * DH);
 				lli[1] = int((bbox[1] - tmpb) / DH + 0.4);
 				bbox[1] = bbox[1] - lli[1] * DH;
@@ -150,18 +106,7 @@ Patch::Patch(int DIM, int *shapei, double *bboxi, int levi, bool buflog, int Sym
 			{
 				for (int i = 0; i < 2; i++)
 				{
-#ifdef Vertex
-#ifdef Cell
-#error Both Cell and Vertex are defined
-#endif
-					DH = (bbox[dim + i] - bbox[i]) / (shape[i] - 1);
-#else
-#ifdef Cell
 					DH = (bbox[dim + i] - bbox[i]) / shape[i];
-#else
-#error Not define Vertex nor Cell
-#endif
-#endif
 					lli[i] = hbuffer_width;
 					bbox[i] = bbox[i] - lli[i] * DH;
 					shape[i] = shape[i] + lli[i];
@@ -172,18 +117,7 @@ Patch::Patch(int DIM, int *shapei, double *bboxi, int levi, bool buflog, int Sym
 		{
 			for (int i = 0; i < dim; i++)
 			{
-#ifdef Vertex
-#ifdef Cell
-#error Both Cell and Vertex are defined
-#endif
-				DH = (bbox[dim + i] - bbox[i]) / (shape[i] - 1);
-#else
-#ifdef Cell
 				DH = (bbox[dim + i] - bbox[i]) / shape[i];
-#else
-#error Not define Vertex nor Cell
-#endif
-#endif
 				lli[i] = hbuffer_width;
 				bbox[i] = bbox[i] - lli[i] * DH;
 				shape[i] = shape[i] + lli[i];

@@ -182,6 +182,13 @@ namespace Parallel
     bool PatList_Interp_Points(MyList<Patch> *PatL, MyList<var> *VarList,
                                                          int NN, double **XX,
                                                          double *Shellf, int Symmetry);
+    bool PatList_Interp_Points_GPU(
+        cudaStream_t stream,
+        MyList<Patch> *PatL, MyList<var> *VarList,
+        int NN, double *d_XX[3], 
+        double *d_Shellf,
+        int Symmetry
+    );
     void aligncheck(double *bbox0, double *bboxl, int lev, double *DH0, int *shape);
     bool point_locat_gsl(double *pox, MyList<Parallel::gridseg> *gsl);
     void checkpatchlist(MyList<Patch> *PatL, bool buflog);

@@ -23,19 +23,24 @@
 #include "gpu_manager.h"
 #include "helper.h"
 
-void bssn_class::Step_GPU(int lev, int YN)
-{
+void bssn_class::Step_GPU(int lev, int YN) {
+	Helper::move_to_gpu_whole(GH->PatL[lev], myrank, StateList);
+	Helper::move_to_gpu_whole(GH->PatL[lev], myrank, RHSList);
+	Helper::move_to_gpu_whole(GH->PatL[lev], myrank, MiscList);
+	Helper::move_to_gpu_whole(GH->PatL[lev], myrank, SynchList_pre);
+	Helper::move_to_gpu_whole(GH->PatL[lev], myrank, SynchList_cor);
+	Helper::move_to_gpu_whole(GH->PatL[lev], myrank, ConstraintList);
+	Helper::move_to_gpu_whole(GH->PatL[lev], myrank, DGList);
+
 	setpbh(BH_num, Porg0, Mass, BH_num_input);
 
 	double dT_lev = dT * pow(0.5, Mymax(lev, trfls));
 
 // new code 2013-2-15, zjcao
 	// for black hole position
-	if (BH_num > 0 && lev == GH->levels - 1)
-	{
+	if (BH_num > 0 && lev == GH->levels - 1) {
 		compute_Porg_rhs(Porg0, Porg_rhs, Sfx0, Sfy0, Sfz0, lev);
-		for (int ithBH = 0; ithBH < BH_num; ithBH++)
-		{
+		for (int ithBH = 0; ithBH < BH_num; ithBH++) {
 			for (int ith = 0; ith < 3; ith++)
 				Porg1[ithBH][ith] = Porg0[ithBH][ith] + Porg_rhs[ithBH][ith] * dT_lev;
 			if (Symmetry > 0)
@@ -66,15 +71,6 @@ void bssn_class::Step_GPU(int lev, int YN)
 			}
 		}
 	}
-
-
-	Helper::move_to_gpu_whole(GH->PatL[lev], myrank, StateList);
-	Helper::move_to_gpu_whole(GH->PatL[lev], myrank, RHSList);
-	Helper::move_to_gpu_whole(GH->PatL[lev], myrank, MiscList);
-	Helper::move_to_gpu_whole(GH->PatL[lev], myrank, SynchList_pre);
-	Helper::move_to_gpu_whole(GH->PatL[lev], myrank, SynchList_cor);
-	Helper::move_to_gpu_whole(GH->PatL[lev], myrank, ConstraintList);
-	Helper::move_to_gpu_whole(GH->PatL[lev], myrank, DGList);
 
 	// data analysis part
 	// Warning NOTE: the variables1 are used as temp storege room

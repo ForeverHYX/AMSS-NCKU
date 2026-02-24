@@ -60,7 +60,7 @@ int Parallel::partition2(int *nxy, int split_size, int *min_width, int cpusize, 
 #undef SEARCH_SIZE
 }
 int Parallel::partition3(int *nxyz, int split_size, int *min_width, int cpusize, int *shape) // special for 3 diemnsions
-#if 1                                                                                        // algrithsm from Pretorius
+                                                                                        // algrithsm from Pretorius
 {
 //	cout<<split_size<<endl<<min_width[0]<<endl<<min_width[1]<<endl<<min_width[2]<<endl
 //            <<shape[0]<<endl<<shape[1]<<endl<<shape[2]<<endl<<cpusize<<endl;
@@ -118,193 +118,13 @@ int Parallel::partition3(int *nxyz, int split_size, int *min_width, int cpusize,
     return nx * ny * nz;
 #undef SEARCH_SIZE
 }
-#elif 1 // Zhihui's idea one on 2013-09-25
-{
-    int nx, ny, nz;
-    int hmin_width;
-    hmin_width = Mymin(min_width[0], min_width[1]);
-    hmin_width = Mymin(hmin_width, min_width[2]);
-    nx = shape[0] / hmin_width;
-    if (nx * hmin_width < shape[0])
-        nx++;
-    ny = shape[1] / hmin_width;
-    if (ny * hmin_width < shape[1])
-        ny++;
-    nz = shape[2] / hmin_width;
-    if (nz * hmin_width < shape[2])
-        nz++;
-    while (nx * ny * nz > cpusize)
-    {
-        hmin_width++;
-        nx = shape[0] / hmin_width;
-        if (nx * hmin_width < shape[0])
-            nx++;
-        ny = shape[1] / hmin_width;
-        if (ny * hmin_width < shape[1])
-            ny++;
-        nz = shape[2] / hmin_width;
-        if (nz * hmin_width < shape[2])
-            nz++;
-    }
-
-    nxyz[0] = nx;
-    nxyz[1] = ny;
-    nxyz[2] = nz;
-
-    return nx * ny * nz;
-}
-#elif 1 // Zhihui's idea two on 2013-09-25
-{
-    int nx, ny, nz;
-    const int hmin_width = 8; // for example we use 8
-    nx = shape[0] / hmin_width;
-    if (nx * hmin_width < shape[0])
-        nx++;
-    ny = shape[1] / hmin_width;
-    if (ny * hmin_width < shape[1])
-        ny++;
-    nz = shape[2] / hmin_width;
-    if (nz * hmin_width < shape[2])
-        nz++;
-
-    nxyz[0] = nx;
-    nxyz[1] = ny;
-    nxyz[2] = nz;
-
-    return nx * ny * nz;
-}
-#endif
 // distribute the data to cprocessors
-#if (PSTR == 0)
-MyList<Block> *Parallel::distribute(MyList<Patch> *PatchLIST, int cpusize, int ingfsi, int fngfsi,
-                                                                        bool periodic, int nodes)
-{
-#ifdef USE_GPU_DIVIDE
-    double cpu_part, gpu_part;
-    map<string, double>::iterator iter;
-    iter = parameters::dou_par.find("cpu part");
-    if (iter != parameters::dou_par.end())
-    {
-        cpu_part = iter->second;
-    }
-    else
-    {
-        int myrank;
-        MPI_Comm_rank(MPI_COMM_WORLD, &myrank);
-        // read parameter from file
-        const int LEN = 256;
-        char pline[LEN];
-        string str, sgrp, skey, sval;
-        int sind;
-        char pname[50];
-        {
-            map<string, string>::iterator iter = parameters::str_par.find("inputpar");
-            if (iter != parameters::str_par.end())
-            {
-                strcpy(pname, (iter->second).c_str());
-            }
-            else
-            {
-                cout << "Error inputpar" << endl;
-                exit(0);
-            }
-        }
-        ifstream inf(pname, ifstream::in);
-        if (!inf.good() && myrank == 0)
-        {
-            cout << "Can not open parameter file " << pname << endl;
-            MPI_Abort(MPI_COMM_WORLD, 1);
-        }
-
-        for (int i = 1; inf.good(); i++)
-        {
-            inf.getline(pline, LEN);
-            str = pline;
-
-            int status = misc::parse_parts(str, sgrp, skey, sval, sind);
-            if (status == -1)
-            {
-                cout << "error reading parameter file " << pname << " in line " << i << endl;
-                MPI_Abort(MPI_COMM_WORLD, 1);
-            }
-            else if (status == 0)
-                continue;
-
-            if (sgrp == "ABE")
-            {
-                if (skey == "cpu part")
-                    cpu_part = atof(sval.c_str());
-            }
-        }
-        inf.close();
-
-        parameters::dou_par.insert(map<string, double>::value_type("cpu part", cpu_part));
-    }
-    iter = parameters::dou_par.find("gpu part");
-    if (iter != parameters::dou_par.end())
-    {
-        gpu_part = iter->second;
-    }
-    else
-    {
-        int myrank;
-        MPI_Comm_rank(MPI_COMM_WORLD, &myrank);
-        // read parameter from file
-        const int LEN = 256;
-        char pline[LEN];
-        string str, sgrp, skey, sval;
-        int sind;
-        char pname[50];
-        {
-            map<string, string>::iterator iter = parameters::str_par.find("inputpar");
-            if (iter != parameters::str_par.end())
-            {
-                strcpy(pname, (iter->second).c_str());
-            }
-            else
-            {
-                cout << "Error inputpar" << endl;
-                exit(0);
-            }
-        }
-        ifstream inf(pname, ifstream::in);
-        if (!inf.good() && myrank == 0)
-        {
-            cout << "Can not open parameter file " << pname << endl;
-            MPI_Abort(MPI_COMM_WORLD, 1);
-        }
-
-        for (int i = 1; inf.good(); i++)
-        {
-            inf.getline(pline, LEN);
-            str = pline;
-
-            int status = misc::parse_parts(str, sgrp, skey, sval, sind);
-            if (status == -1)
-            {
-                cout << "error reading parameter file " << pname << " in line " << i << endl;
-                MPI_Abort(MPI_COMM_WORLD, 1);
-            }
-            else if (status == 0)
-                continue;
-
-            if (sgrp == "ABE")
-            {
-                if (skey == "gpu part")
-                    gpu_part = atof(sval.c_str());
-            }
-        }
-        inf.close();
-
-        parameters::dou_par.insert(map<string, double>::value_type("gpu part", gpu_part));
-    }
-
-    if (nodes == 0)
-        nodes = cpusize / 2;
-#else
+MyList<Block> *Parallel::distribute(
+    MyList<Patch> *PatchLIST, int cpusize, int ingfsi, int fngfsi,
+    bool periodic, int nodes
+) {
     if (nodes == 0)
         nodes = cpusize;
-#endif
 
     if (dim != 3)
     {
@@ -402,24 +222,7 @@ MyList<Block> *Parallel::distribute(MyList<Patch> *PatchLIST, int cpusize, int i
                     shape_here[0] = ibbox_here[3] - ibbox_here[0] + 1;
                     shape_here[1] = ibbox_here[4] - ibbox_here[1] + 1;
                     shape_here[2] = ibbox_here[5] - ibbox_here[2] + 1;
-#ifdef Vertex
-#ifdef Cell
-#error Both Cell and Vertex are defined
-#endif
-                    // 0--4, 5--10
-                    dd = (PP->bbox[3] - PP->bbox[0]) / (PP->shape[0] - 1);
-                    bbox_here[0] = PP->bbox[0] + ibbox_here[0] * dd;
-                    bbox_here[3] = PP->bbox[0] + ibbox_here[3] * dd;
 
-                    dd = (PP->bbox[4] - PP->bbox[1]) / (PP->shape[1] - 1);
-                    bbox_here[1] = PP->bbox[1] + ibbox_here[1] * dd;
-                    bbox_here[4] = PP->bbox[1] + ibbox_here[4] * dd;
-
-                    dd = (PP->bbox[5] - PP->bbox[2]) / (PP->shape[2] - 1);
-                    bbox_here[2] = PP->bbox[2] + ibbox_here[2] * dd;
-                    bbox_here[5] = PP->bbox[2] + ibbox_here[5] * dd;
-#else
-#ifdef Cell
                     // 0--5, 5--10
                     dd = (PP->bbox[3] - PP->bbox[0]) / PP->shape[0];
                     bbox_here[0] = PP->bbox[0] + (ibbox_here[0]) * dd;
@@ -432,46 +235,14 @@ MyList<Block> *Parallel::distribute(MyList<Patch> *PatchLIST, int cpusize, int i
                     dd = (PP->bbox[5] - PP->bbox[2]) / PP->shape[2];
                     bbox_here[2] = PP->bbox[2] + (ibbox_here[2]) * dd;
                     bbox_here[5] = PP->bbox[2] + (ibbox_here[5] + 1) * dd;
-#else
-#error Not define Vertex nor Cell
-#endif
-#endif
 
-#ifdef USE_GPU_DIVIDE
-                    {
-                        const int pices = 2;
-                        double picef[pices];
-                        picef[0] = cpu_part;
-                        picef[1] = gpu_part;
-                        int shape_res[dim * pices];
-                        double bbox_res[2 * dim * pices];
-                        misc::dividBlock(dim, shape_here, bbox_here, pices, picef, shape_res, bbox_res, min_width);
-                        ng = ng0 = new Block(dim, shape_res, bbox_res, n_rank++, ingfsi, fngfsi, PP->lev, 0); // delete through KillBlocks
-
-                        //	       if(n_rank==cpusize) {n_rank=0; cerr<<"place one!!"<<endl;}
-
-                        //	       ng->checkBlock();
-                        if (BlL)
-                            BlL->insert(ng);
-                        else
-                            BlL = new MyList<Block>(ng); // delete through KillBlocks
-
-                        for (int i = 1; i < pices; i++)
-                        {
-                            ng = new Block(dim, shape_res + i * dim, bbox_res + i * 2 * dim, n_rank++, ingfsi, fngfsi, PP->lev, i); // delete through KillBlocks
-                            //	        if(n_rank==cpusize) {n_rank=0; cerr<<"place two!! "<<i<<endl;}
-                            //	        ng->checkBlock();
-                            BlL->insert(ng);
-                        }
-                    }
-#else
                     ng = ng0 = new Block(dim, shape_here, bbox_here, n_rank++, ingfsi, fngfsi, PP->lev); // delete through KillBlocks
                     //	    ng->checkBlock();
                     if (BlL)
                         BlL->insert(ng);
                     else
                         BlL = new MyList<Block>(ng); // delete through KillBlocks
-#endif
+
                     if (n_rank == cpusize)
                         n_rank = 0;
 
@@ -503,332 +274,7 @@ MyList<Block> *Parallel::distribute(MyList<Patch> *PatchLIST, int cpusize, int i
 
     return BlL;
 }
-#elif (PSTR == 1 || PSTR == 2 || PSTR == 3)
-MyList<Block> *Parallel::distribute(MyList<Patch> *PatchLIST, int cpusize, int ingfsi, int fngfsi,
-                                                                        bool periodic, int start_rank, int end_rank, int nodes)
-{
-#ifdef USE_GPU_DIVIDE
-    double cpu_part, gpu_part;
-    map<string, double>::iterator iter;
-    iter = parameters::dou_par.find("cpu part");
-    if (iter != parameters::dou_par.end())
-    {
-        cpu_part = iter->second;
-    }
-    else
-    {
-        int myrank;
-        MPI_Comm_rank(MPI_COMM_WORLD, &myrank);
-        // read parameter from file
-        const int LEN = 256;
-        char pline[LEN];
-        string str, sgrp, skey, sval;
-        int sind;
-        char pname[50];
-        {
-            map<string, string>::iterator iter = parameters::str_par.find("inputpar");
-            if (iter != parameters::str_par.end())
-            {
-                strcpy(pname, (iter->second).c_str());
-            }
-            else
-            {
-                cout << "Error inputpar" << endl;
-                exit(0);
-            }
-        }
-        ifstream inf(pname, ifstream::in);
-        if (!inf.good() && myrank == 0)
-        {
-            cout << "Can not open parameter file " << pname << endl;
-            MPI_Abort(MPI_COMM_WORLD, 1);
-        }
 
-        for (int i = 1; inf.good(); i++)
-        {
-            inf.getline(pline, LEN);
-            str = pline;
-
-            int status = misc::parse_parts(str, sgrp, skey, sval, sind);
-            if (status == -1)
-            {
-                cout << "error reading parameter file " << pname << " in line " << i << endl;
-                MPI_Abort(MPI_COMM_WORLD, 1);
-            }
-            else if (status == 0)
-                continue;
-
-            if (sgrp == "ABE")
-            {
-                if (skey == "cpu part")
-                    cpu_part = atof(sval.c_str());
-            }
-        }
-        inf.close();
-
-        parameters::dou_par.insert(map<string, double>::value_type("cpu part", cpu_part));
-    }
-    iter = parameters::dou_par.find("gpu part");
-    if (iter != parameters::dou_par.end())
-    {
-        gpu_part = iter->second;
-    }
-    else
-    {
-        int myrank;
-        MPI_Comm_rank(MPI_COMM_WORLD, &myrank);
-        // read parameter from file
-        const int LEN = 256;
-        char pline[LEN];
-        string str, sgrp, skey, sval;
-        int sind;
-        char pname[50];
-        {
-            map<string, string>::iterator iter = parameters::str_par.find("inputpar");
-            if (iter != parameters::str_par.end())
-            {
-                strcpy(pname, (iter->second).c_str());
-            }
-            else
-            {
-                cout << "Error inputpar" << endl;
-                exit(0);
-            }
-        }
-        ifstream inf(pname, ifstream::in);
-        if (!inf.good() && myrank == 0)
-        {
-            cout << "Can not open parameter file " << pname << endl;
-            MPI_Abort(MPI_COMM_WORLD, 1);
-        }
-
-        for (int i = 1; inf.good(); i++)
-        {
-            inf.getline(pline, LEN);
-            str = pline;
-
-            int status = misc::parse_parts(str, sgrp, skey, sval, sind);
-            if (status == -1)
-            {
-                cout << "error reading parameter file " << pname << " in line " << i << endl;
-                MPI_Abort(MPI_COMM_WORLD, 1);
-            }
-            else if (status == 0)
-                continue;
-
-            if (sgrp == "ABE")
-            {
-                if (skey == "gpu part")
-                    gpu_part = atof(sval.c_str());
-            }
-        }
-        inf.close();
-
-        parameters::dou_par.insert(map<string, double>::value_type("gpu part", gpu_part));
-    }
-
-    if (nodes == 0)
-        nodes = cpusize / 2;
-#else
-    if (nodes == 0)
-        nodes = cpusize;
-#endif
-
-    if (dim != 3)
-    {
-        cout << "distrivute: now we only support 3-dimension" << endl;
-        MPI_Abort(MPI_COMM_WORLD, 1);
-    }
-
-    MyList<Block> *BlL = 0;
-
-    int split_size, min_size, block_size = 0;
-
-    int min_width = 2 * Mymax(ghost_width, buffer_width);
-    int nxyz[dim], mmin_width[dim], min_shape[dim];
-
-    MyList<Patch> *PLi = PatchLIST;
-    for (int i = 0; i < dim; i++)
-        min_shape[i] = PLi->data->shape[i];
-    int lev = PLi->data->lev;
-    PLi = PLi->next;
-    while (PLi)
-    {
-        Patch *PP = PLi->data;
-        for (int i = 0; i < dim; i++)
-            min_shape[i] = Mymin(min_shape[i], PP->shape[i]);
-        if (lev != PLi->data->lev)
-            cout << "Parallel::distribute CAUSTION: meet Patches for different level: " << lev << " and " << PLi->data->lev << endl;
-        PLi = PLi->next;
-    }
-
-    for (int i = 0; i < dim; i++)
-        mmin_width[i] = Mymin(min_width, min_shape[i]);
-
-    min_size = mmin_width[0];
-    for (int i = 1; i < dim; i++)
-        min_size = min_size * mmin_width[i];
-
-    PLi = PatchLIST;
-    while (PLi)
-    {
-        Patch *PP = PLi->data;
-        //    PP->checkPatch(true);
-        int bs = PP->shape[0];
-        for (int i = 1; i < dim; i++)
-            bs = bs * PP->shape[i];
-        block_size = block_size + bs;
-        PLi = PLi->next;
-    }
-    split_size = Mymax(min_size, block_size / cpusize);
-    split_size = Mymax(1, split_size);
-
-    int n_rank = start_rank;
-    PLi = PatchLIST;
-    int reacpu = 0;
-    while (PLi)
-    {
-        Patch *PP = PLi->data;
-
-        reacpu += partition3(nxyz, split_size, mmin_width, cpusize, PP->shape);
-
-        Block *ng, *ng0;
-        int shape_here[dim], ibbox_here[2 * dim];
-        double bbox_here[2 * dim], dd;
-
-        // ibbox : 0,...N-1
-        for (int i = 0; i < nxyz[0]; i++)
-            for (int j = 0; j < nxyz[1]; j++)
-                for (int k = 0; k < nxyz[2]; k++)
-                {
-                    ibbox_here[0] = (PP->shape[0] * i) / nxyz[0];
-                    ibbox_here[3] = (PP->shape[0] * (i + 1)) / nxyz[0] - 1;
-                    ibbox_here[1] = (PP->shape[1] * j) / nxyz[1];
-                    ibbox_here[4] = (PP->shape[1] * (j + 1)) / nxyz[1] - 1;
-                    ibbox_here[2] = (PP->shape[2] * k) / nxyz[2];
-                    ibbox_here[5] = (PP->shape[2] * (k + 1)) / nxyz[2] - 1;
-
-                    if (periodic)
-                    {
-                        ibbox_here[0] = ibbox_here[0] - ghost_width;
-                        ibbox_here[3] = ibbox_here[3] + ghost_width;
-                        ibbox_here[1] = ibbox_here[1] - ghost_width;
-                        ibbox_here[4] = ibbox_here[4] + ghost_width;
-                        ibbox_here[2] = ibbox_here[2] - ghost_width;
-                        ibbox_here[5] = ibbox_here[5] + ghost_width;
-                    }
-                    else
-                    {
-                        ibbox_here[0] = Mymax(0, ibbox_here[0] - ghost_width);
-                        ibbox_here[3] = Mymin(PP->shape[0] - 1, ibbox_here[3] + ghost_width);
-                        ibbox_here[1] = Mymax(0, ibbox_here[1] - ghost_width);
-                        ibbox_here[4] = Mymin(PP->shape[1] - 1, ibbox_here[4] + ghost_width);
-                        ibbox_here[2] = Mymax(0, ibbox_here[2] - ghost_width);
-                        ibbox_here[5] = Mymin(PP->shape[2] - 1, ibbox_here[5] + ghost_width);
-                    }
-
-                    shape_here[0] = ibbox_here[3] - ibbox_here[0] + 1;
-                    shape_here[1] = ibbox_here[4] - ibbox_here[1] + 1;
-                    shape_here[2] = ibbox_here[5] - ibbox_here[2] + 1;
-#ifdef Vertex
-#ifdef Cell
-#error Both Cell and Vertex are defined
-#endif
-                    // 0--4, 5--10
-                    dd = (PP->bbox[3] - PP->bbox[0]) / (PP->shape[0] - 1);
-                    bbox_here[0] = PP->bbox[0] + ibbox_here[0] * dd;
-                    bbox_here[3] = PP->bbox[0] + ibbox_here[3] * dd;
-
-                    dd = (PP->bbox[4] - PP->bbox[1]) / (PP->shape[1] - 1);
-                    bbox_here[1] = PP->bbox[1] + ibbox_here[1] * dd;
-                    bbox_here[4] = PP->bbox[1] + ibbox_here[4] * dd;
-
-                    dd = (PP->bbox[5] - PP->bbox[2]) / (PP->shape[2] - 1);
-                    bbox_here[2] = PP->bbox[2] + ibbox_here[2] * dd;
-                    bbox_here[5] = PP->bbox[2] + ibbox_here[5] * dd;
-#else
-#ifdef Cell
-                    // 0--5, 5--10
-                    dd = (PP->bbox[3] - PP->bbox[0]) / PP->shape[0];
-                    bbox_here[0] = PP->bbox[0] + (ibbox_here[0]) * dd;
-                    bbox_here[3] = PP->bbox[0] + (ibbox_here[3] + 1) * dd;
-
-                    dd = (PP->bbox[4] - PP->bbox[1]) / PP->shape[1];
-                    bbox_here[1] = PP->bbox[1] + (ibbox_here[1]) * dd;
-                    bbox_here[4] = PP->bbox[1] + (ibbox_here[4] + 1) * dd;
-
-                    dd = (PP->bbox[5] - PP->bbox[2]) / PP->shape[2];
-                    bbox_here[2] = PP->bbox[2] + (ibbox_here[2]) * dd;
-                    bbox_here[5] = PP->bbox[2] + (ibbox_here[5] + 1) * dd;
-#else
-#error Not define Vertex nor Cell
-#endif
-#endif
-
-#ifdef USE_GPU_DIVIDE
-                    {
-                        const int pices = 2;
-                        double picef[pices];
-                        picef[0] = cpu_part;
-                        picef[1] = gpu_part;
-                        int shape_res[dim * pices];
-                        double bbox_res[2 * dim * pices];
-                        misc::dividBlock(dim, shape_here, bbox_here, pices, picef, shape_res, bbox_res, min_width);
-                        ng = ng0 = new Block(dim, shape_res, bbox_res, n_rank++, ingfsi, fngfsi, PP->lev, 0); // delete through KillBlocks
-                        //	       ng->checkBlock();
-                        if (BlL)
-                            BlL->insert(ng);
-                        else
-                            BlL = new MyList<Block>(ng); // delete through KillBlocks
-
-                        for (int i = 1; i < pices; i++)
-                        {
-                            ng = new Block(dim, shape_res + i * dim, bbox_res + i * 2 * dim, n_rank++, ingfsi, fngfsi, PP->lev, i); // delete through KillBlocks
-                            //	        ng->checkBlock();
-                            BlL->insert(ng);
-                        }
-                    }
-#else
-                    ng = ng0 = new Block(dim, shape_here, bbox_here, n_rank++, ingfsi, fngfsi, PP->lev); // delete through KillBlocks
-                    //	    ng->checkBlock();
-                    if (BlL)
-                        BlL->insert(ng);
-                    else
-                        BlL = new MyList<Block>(ng); // delete through KillBlocks
-#endif
-
-                    if (n_rank == end_rank + 1)
-                        n_rank = start_rank;
-
-                    // set PP->blb
-                    if (i == 0 && j == 0 && k == 0)
-                    {
-                        MyList<Block> *Bp = BlL;
-                        while (Bp->data != ng0)
-                            Bp = Bp->next; // ng0 is the first of the pices list
-                        PP->blb = Bp;
-                    }
-                }
-        // set PP->ble
-        {
-            MyList<Block> *Bp = BlL;
-            while (Bp->data != ng)
-                Bp = Bp->next; // ng is the last of the pices list
-            PP->ble = Bp;
-        }
-        PLi = PLi->next;
-    }
-    if (reacpu < nodes * 2 / 3)
-    {
-        int myrank;
-        MPI_Comm_rank(MPI_COMM_WORLD, &myrank);
-        if (myrank == start_rank)
-            cout << "Parallel::distribute CAUSTION: level#" << lev << " uses essencially " << reacpu << " processors vs " << nodes << " nodes run, your scientific computation scale is not as large as you estimate." << endl;
-    }
-
-    return BlL;
-}
-#endif
 void Parallel::setfunction(MyList<Block> *BlL, var *vn, double func(double x, double y, double z))
 {
     while (BlL)
@@ -4589,20 +4035,8 @@ bool Parallel::merge_gs(MyList<gridseg> *D, MyList<gridseg> *B, MyList<gridseg> 
     for (int i = 0; i < dim; i++)
     {
         double tdh;
-#ifdef Vertex
-#ifdef Cell
-#error Both Cell and Vertex are defined
-#endif
-        DH[i] = (D->data->uub[i] - D->data->llb[i]) / (D->data->shape[i] - 1);
-        tdh = (B->data->uub[i] - B->data->llb[i]) / (B->data->shape[i] - 1);
-#else
-#ifdef Cell
         DH[i] = (D->data->uub[i] - D->data->llb[i]) / D->data->shape[i];
         tdh = (B->data->uub[i] - B->data->llb[i]) / B->data->shape[i];
-#else
-#error Not define Vertex nor Cell
-#endif
-#endif
         if (!feq(DH[i], tdh, DH[i] / 2))
         {
             cout << "Parallel::merge_gs meets different grid segment " << DH[i] << " vs " << tdh << endl;
@@ -4641,18 +4075,7 @@ bool Parallel::merge_gs(MyList<gridseg> *D, MyList<gridseg> *B, MyList<gridseg> 
         {
             C->data->uub[i] = Mymax(D->data->uub[i], B->data->uub[i]);
             C->data->llb[i] = Mymin(D->data->llb[i], B->data->llb[i]);
-#ifdef Vertex
-#ifdef Cell
-#error Both Cell and Vertex are defined
-#endif
-            C->data->shape[i] = int((C->data->uub[i] - C->data->llb[i]) / DH[i] + 0.4) + 1;
-#else
-#ifdef Cell
             C->data->shape[i] = int((C->data->uub[i] - C->data->llb[i]) / DH[i] + 0.4);
-#else
-#error Not define Vertex nor Cell
-#endif
-#endif
         }
         if (D->data->Bg == B->data->Bg)
             C->data->Bg = D->data->Bg;
@@ -4676,20 +4099,8 @@ void Parallel::add_ghost_touch(MyList<gridseg> *&A)
         return;
 
     double DH[dim];
-#ifdef Vertex
-#ifdef Cell
-#error Both Cell and Vertex are defined
-#endif
-    for (int i = 0; i < dim; i++)
-        DH[i] = (A->data->uub[i] - A->data->llb[i]) / (A->data->shape[i] - 1) / 2;
-#else
-#ifdef Cell
     for (int i = 0; i < dim; i++)
         DH[i] = (A->data->uub[i] - A->data->llb[i]) / A->data->shape[i] / 2;
-#else
-#error Not define Vertex nor Cell
-#endif
-#endif
 
     MyList<gridseg> *C1, *C2, *A1 = A, *A2, *dc;
     dc = C1 = clone_gsl(A, false);
@@ -4833,20 +4244,10 @@ bool Parallel::cut_gs(MyList<gridseg> *D, MyList<gridseg> *B, MyList<gridseg> *&
     for (int i = 0; i < dim; i++)
     {
         double tdh;
-#ifdef Vertex
-#ifdef Cell
-#error Both Cell and Vertex are defined
-#endif
-        DH[i] = (D->data->uub[i] - D->data->llb[i]) / (D->data->shape[i] - 1);
-        tdh = (B->data->uub[i] - B->data->llb[i]) / (B->data->shape[i] - 1);
-#else
-#ifdef Cell
+
         DH[i] = (D->data->uub[i] - D->data->llb[i]) / D->data->shape[i];
         tdh = (B->data->uub[i] - B->data->llb[i]) / B->data->shape[i];
-#else
-#error Not define Vertex nor Cell
-#endif
-#endif
+
         if (!feq(DH[i], tdh, DH[i] / 2))
         {
             cout << "Parallel::cut_gs meets different grid segment " << DH[i] << " vs " << tdh << endl;
@@ -4867,18 +4268,7 @@ bool Parallel::cut_gs(MyList<gridseg> *D, MyList<gridseg> *B, MyList<gridseg> *&
     {
         C->data->llb[i] = llb[i];
         C->data->uub[i] = uub[i];
-#ifdef Vertex
-#ifdef Cell
-#error Both Cell and Vertex are defined
-#endif
-        C->data->shape[i] = int((C->data->uub[i] - C->data->llb[i]) / DH[i] + 0.4) + 1;
-#else
-#ifdef Cell
         C->data->shape[i] = int((C->data->uub[i] - C->data->llb[i]) / DH[i] + 0.4);
-#else
-#error Not define Vertex nor Cell
-#endif
-#endif
     }
     if (D->data->Bg == B->data->Bg)
         C->data->Bg = D->data->Bg;
@@ -4915,20 +4305,8 @@ MyList<Parallel::gridseg> *Parallel::gs_subtract_virtual(MyList<Parallel::gridse
     for (int i = 0; i < dim; i++)
     {
         double tdh;
-#ifdef Vertex
-#ifdef Cell
-#error Both Cell and Vertex are defined
-#endif
-        DH[i] = (A->data->uub[i] - A->data->llb[i]) / (A->data->shape[i] - 1);
-        tdh = (B->data->uub[i] - B->data->llb[i]) / (B->data->shape[i] - 1);
-#else
-#ifdef Cell
         DH[i] = (A->data->uub[i] - A->data->llb[i]) / A->data->shape[i];
         tdh = (B->data->uub[i] - B->data->llb[i]) / B->data->shape[i];
-#else
-#error Not define Vertex nor Cell
-#endif
-#endif
         if (!feq(DH[i], tdh, DH[i] / 2))
         {
             cout << "Parallel::gs_subtract_virtual meets different grid segment " << DH[i] << " vs " << tdh << endl;
@@ -4968,18 +4346,7 @@ MyList<Parallel::gridseg> *Parallel::gs_subtract_virtual(MyList<Parallel::gridse
                     C->data->llb[j] = cut_plane[j];
                     C->data->uub[j] = cut_plane[j + dim];
                 }
-#ifdef Vertex
-#ifdef Cell
-#error Both Cell and Vertex are defined
-#endif
-                C->data->shape[j] = int((C->data->uub[j] - C->data->llb[j]) / DH[j] + 0.4) + 1;
-#else
-#ifdef Cell
                 C->data->shape[j] = int((C->data->uub[j] - C->data->llb[j]) / DH[j] + 0.4);
-#else
-#error Not define Vertex nor Cell
-#endif
-#endif
             }
         }
 
@@ -5003,18 +4370,8 @@ MyList<Parallel::gridseg> *Parallel::gs_subtract_virtual(MyList<Parallel::gridse
                     C->data->llb[j] = cut_plane[j];
                     C->data->uub[j] = cut_plane[j + dim];
                 }
-#ifdef Vertex
-#ifdef Cell
-#error Both Cell and Vertex are defined
-#endif
-                C->data->shape[j] = int((C->data->uub[j] - C->data->llb[j]) / DH[j] + 0.4) + 1;
-#else
-#ifdef Cell
+
                 C->data->shape[j] = int((C->data->uub[j] - C->data->llb[j]) / DH[j] + 0.4);
-#else
-#error Not define Vertex nor Cell
-#endif
-#endif
             }
         }
     }
