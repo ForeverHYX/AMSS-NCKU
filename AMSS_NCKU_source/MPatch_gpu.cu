@@ -181,3 +181,90 @@ void Patch::Interp_Points_GPU(
     CUDA_CHECK(cudaFree(d_global_weight));
     CUDA_CHECK(cudaFree(d_err_flag));
 }
+
+void PatList_Interp_Overwrite_GPU(
+    cudaStream_t stream, 
+    MyList<Patch> *PatL, MyList<var> *VarList,
+    int NN, double **d_XX, double *d_final_shellf, int *d_final_weight, int Symmetry
+) {
+    int myrank;
+    MPI_Comm_rank(MPI_COMM_WORLD, &myrank);
+    
+    int num_var = 0;
+    MyList<var> *varl = VarList;
+    while (varl) { num_var++; varl = varl->next; }
+
+    if (!PatL || !PatL->data) return;
+    int ordn = 2 * ghost_width;
+
+    double *d_local_shellf = GPUManager::getInstance().allocate_device_memory(NN * num_var);
+    int *d_local_weight;    cudaMalloc(&d_local_weight, NN * sizeof(int));
+    cudaMemsetAsync(d_local_shellf, 0, NN * num_var * sizeof(double), stream);
+    cudaMemsetAsync(d_local_weight, 0, NN * sizeof(int), stream);
+
+    MyList<Patch> *PL = PatL;
+    while (PL) {
+        Patch *patch = PL->data;
+        double DH[3] = {patch->getdX(0), patch->getdX(1), patch->getdX(2)};
+        
+        MyList<Block> *Bp = patch->blb;
+        while (Bp) {
+            Block *BP = Bp->data;
+            if (myrank == BP->rank) {
+                double llb[3], uub[3];
+                for (int i = 0; i < dim; i++) {
+                    llb[i] = (feq(BP->bbox[i], patch->bbox[i], DH[i] / 2)) ? BP->bbox[i] + patch->lli[i] * DH[i] : BP->bbox[i] + ghost_width * DH[i];
+                    uub[i] = (feq(BP->bbox[dim + i], patch->bbox[dim + i], DH[i] / 2)) ? BP->bbox[dim + i] - patch->uui[i] * DH[i] : BP->bbox[dim + i] - ghost_width * DH[i];
+                }
+
+                int k = 0;
+                varl = VarList;
+                while (varl) {
+                    gpu_global_interp_launch(
+                        stream, NN, dim, 
+                        d_XX[0], d_XX[1], d_XX[2],
+                        BP->shape[0], BP->shape[1], BP->shape[2],
+                        BP->d_X[0], BP->d_X[1], BP->d_X[2],
+                        BP->d_fgfs[varl->data->sgfn],
+                        llb[0], llb[1], llb[2], uub[0], uub[1], uub[2], 
+                        ordn, varl->data->SoA[0], varl->data->SoA[1], varl->data->SoA[2], 
+                        Symmetry, k, num_var, d_local_shellf, d_local_weight
+                    );
+                    varl = varl->next; k++;
+                }
+            }
+            Bp = Bp->next;
+        }
+        PL = PL->next;
+    }
+
+    cudaStreamSynchronize(stream);
+
+    double *h_local_shellf = new double[NN * num_var];
+    int    *h_local_weight = new int[NN];
+    cudaMemcpy(h_local_shellf, d_local_shellf, NN * num_var * sizeof(double), cudaMemcpyDeviceToHost);
+    cudaMemcpy(h_local_weight, d_local_weight, NN * sizeof(int), cudaMemcpyDeviceToHost);
+
+    double *h_global_shellf = new double[NN * num_var];
+    int    *h_global_weight = new int[NN];
+    MPI_Allreduce(h_local_shellf, h_global_shellf, NN * num_var, MPI_DOUBLE, MPI_SUM, MPI_COMM_WORLD);
+    MPI_Allreduce(h_local_weight, h_global_weight, NN, MPI_INT, MPI_SUM, MPI_COMM_WORLD);
+
+    double *d_global_shellf = GPUManager::getInstance().allocate_device_memory(NN * num_var);
+    int *d_global_weight;    cudaMalloc(&d_global_weight, NN * sizeof(int));
+    cudaMemcpy(d_global_shellf, h_global_shellf, NN * num_var * sizeof(double), cudaMemcpyHostToDevice);
+    cudaMemcpy(d_global_weight, h_global_weight, NN * sizeof(int), cudaMemcpyHostToDevice);
+
+    gpu_overwrite_final_shellf_launch(
+        stream, NN, num_var,
+        d_global_shellf, d_global_weight,
+        d_final_shellf, d_final_weight
+    );
+
+    delete[] h_local_shellf; delete[] h_local_weight;
+    delete[] h_global_shellf; delete[] h_global_weight;
+    GPUManager::getInstance().free_device_memory(d_local_shellf, NN * num_var); 
+    cudaFree(d_local_weight);
+    GPUManager::getInstance().free_device_memory(d_global_shellf, NN * num_var); 
+    cudaFree(d_global_weight);
+}

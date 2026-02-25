@@ -326,4 +326,20 @@ void gpu_global_interp_launch(
     double* d_shellf, int* d_weight
 );
 
+void gpu_l2normhelper_launch(
+    cudaStream_t stream, 
+	int* ex, 
+    const double* d_X, const double* d_Y, const double* d_Z,
+    double xmin, double ymin, double zmin,
+    double xmax, double ymax, double zmax,
+    const double* d_f, double* d_out, int gw
+);
+
+void gpu_overwrite_final_shellf_launch(
+    cudaStream_t stream, 
+	int NN, int num_var,
+    const double* d_lev_shellf, const int* d_lev_weight,
+    double* d_final_shellf, int* d_final_weight
+);
+
 #endif /* FMISC_H */
