@@ -435,7 +435,7 @@ __global__ void global_interp_kernel(
     atomicAdd(&d_shellf[j * num_var + var_idx], val);
 
     if (var_idx == 0) {
-        d_weight[j] = 1; 
+        atomicAdd(&d_weight[j], 1);
     }
 }
 
