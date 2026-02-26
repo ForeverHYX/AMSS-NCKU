@@ -5,7 +5,6 @@
 #include "misc.h"
 #include "parameters.h"
 
-#include "prolongrestrict_gpu_manager.h"
 #include "gpu_manager.h"
 
 int Parallel::partition1(int &nx, int split_size, int min_width, int cpusize, int shape) // special for 1 diemnsion
@@ -2433,132 +2432,97 @@ void Parallel::build_gstl(MyList<Parallel::gridseg> *srci, MyList<Parallel::grid
     }
 }
 
+//   PACK: prepare target data in 'data'
+// UNPACK: copy target data from 'data' to corresponding numerical grids
+int Parallel::data_packer(double *data, MyList<Parallel::gridseg> *src, MyList<Parallel::gridseg> *dst, int rank_in, int dir,
+                          MyList<var> *VarLists /* source */, MyList<var> *VarListd /* target */, int Symmetry)
+{
+  int myrank;
+  MPI_Comm_rank(MPI_COMM_WORLD, &myrank);
 
-// 实例化 Manager
-static ProlongRestrictManager gpu_manager;
+  int DIM = dim;
 
-int Parallel::data_packer(
-    double *data, MyList<Parallel::gridseg> *src, MyList<Parallel::gridseg> *dst, int rank_in, int dir,
-    MyList<var> *VarLists, MyList<var> *VarListd, int Symmetry
-) {
-    int myrank;
-    MPI_Comm_rank(MPI_COMM_WORLD, &myrank);
+  if (dir != PACK && dir != UNPACK)
+  {
+    cout << "error dir " << dir << " for data_packer " << endl;
+    MPI_Abort(MPI_COMM_WORLD, 1);
+  }
 
-    int DIM = dim;
+  int size_out = 0;
 
-    if (dir != PACK && dir != UNPACK)
+  if (!src || !dst)
+    return size_out;
+
+  MyList<var> *varls, *varld;
+
+  varls = VarLists;
+  varld = VarListd;
+  while (varls && varld)
+  {
+    varls = varls->next;
+    varld = varld->next;
+  }
+
+  if (varls || varld)
+  {
+    cout << "error in short data packer, var lists does not match." << endl;
+    MPI_Abort(MPI_COMM_WORLD, 1);
+  }
+
+  int type; /* 1 copy, 2 restrict, 3 prolong */
+  if (src->data->Bg->lev == dst->data->Bg->lev)
+    type = 1;
+  else if (src->data->Bg->lev > dst->data->Bg->lev)
+    type = 2;
+  else
+    type = 3;
+
+  while (src && dst)
+  {
+    if ((dir == PACK && dst->data->Bg->rank == rank_in && src->data->Bg->rank == myrank) ||
+        (dir == UNPACK && src->data->Bg->rank == rank_in && dst->data->Bg->rank == myrank))
     {
-        cout << "error dir " << dir << " for data_packer " << endl;
-        MPI_Abort(MPI_COMM_WORLD, 1);
-    }
-
-    int size_out = 0;
-
-    if (!src || !dst)
-        return size_out;
-
-    MyList<var> *varls, *varld;
-
-    varls = VarLists;
-    varld = VarListd;
-    while (varls && varld)
-    {
+      varls = VarLists;
+      varld = VarListd;
+      while (varls && varld)
+      {
+        if (data)
+        {
+          if (dir == PACK)
+            switch (type)
+            {
+              // attention must be paied to the difference between src's llb,uub and dst's llb,uub
+            case 1:
+              f_copy(DIM, dst->data->llb, dst->data->uub, dst->data->shape, data + size_out,
+                     src->data->Bg->bbox, src->data->Bg->bbox + dim, src->data->Bg->shape, src->data->Bg->fgfs[varls->data->sgfn],
+                     dst->data->llb, dst->data->uub);
+              break;
+            case 2:
+              f_restrict3(DIM, dst->data->llb, dst->data->uub, dst->data->shape, data + size_out,
+                          src->data->Bg->bbox, src->data->Bg->bbox + dim, src->data->Bg->shape, src->data->Bg->fgfs[varls->data->sgfn],
+                          dst->data->llb, dst->data->uub, varls->data->SoA, Symmetry);
+              break;
+            case 3:
+              f_prolong3(DIM, src->data->Bg->bbox, src->data->Bg->bbox + dim, src->data->Bg->shape, src->data->Bg->fgfs[varls->data->sgfn],
+                         dst->data->llb, dst->data->uub, dst->data->shape, data + size_out,
+                         dst->data->llb, dst->data->uub, varls->data->SoA, Symmetry);
+            }
+          if (dir == UNPACK) // from target data to corresponding grid
+            f_copy(DIM, dst->data->Bg->bbox, dst->data->Bg->bbox + dim, dst->data->Bg->shape, dst->data->Bg->fgfs[varld->data->sgfn],
+                   dst->data->llb, dst->data->uub, dst->data->shape, data + size_out,
+                   dst->data->llb, dst->data->uub);
+        }
+        size_out += dst->data->shape[0] * dst->data->shape[1] * dst->data->shape[2];
         varls = varls->next;
         varld = varld->next;
+      }
     }
+    dst = dst->next;
+    src = src->next;
+  }
 
-    if (varls || varld)
-    {
-        cout << "error in short data packer, var lists does not match." << endl;
-        MPI_Abort(MPI_COMM_WORLD, 1);
-    }
-
-    int type; /* 1 copy, 2 restrict, 3 prolong */
-    if (src->data->Bg->lev == dst->data->Bg->lev)
-        type = 1;
-    else if (src->data->Bg->lev > dst->data->Bg->lev)
-        type = 2;
-    else
-        type = 3;
-    
-    while (src && dst)
-    {
-        if ((dir == PACK && dst->data->Bg->rank == rank_in && src->data->Bg->rank == myrank) ||
-                (dir == UNPACK && src->data->Bg->rank == rank_in && dst->data->Bg->rank == myrank))
-        {
-            varls = VarLists;
-            varld = VarListd;
-            while (varls && varld)
-            {
-                if (data)
-                {
-                    if (dir == PACK)
-                    {
-                        // 这里直接用 CPU 指针
-                        double* h_buffer_ptr = data + size_out; // 目标 buffer (CPU)
-                        double* h_src_ptr = src->data->Bg->fgfs[varls->data->sgfn]; // 源数据 (CPU)
-
-                        switch (type)
-                        {
-                        case 1: // Copy
-                            f_copy(DIM, dst->data->llb, dst->data->uub, dst->data->shape, data + size_out,
-                                         src->data->Bg->bbox, src->data->Bg->bbox + dim, src->data->Bg->shape, src->data->Bg->fgfs[varls->data->sgfn],
-                                         dst->data->llb, dst->data->uub);
-                            break;
-
-                        case 2: // Restrict (Fine -> Coarse Buffer)
-                            // Manager 会把 h_src_ptr (CPU) 拷走，算完写回 h_buffer_ptr (CPU)
-                            gpu_manager.AddTask(
-                                    TASK_RESTRICT,
-                                    h_src_ptr,    // CPU Source
-                                    h_buffer_ptr, // CPU Dest
-                                    dst->data->llb, dst->data->uub, dst->data->shape,        
-                                    src->data->Bg->bbox, src->data->Bg->bbox + dim, src->data->Bg->shape, 
-                                    dst->data->llb, dst->data->uub, 
-                                    varls->data->SoA, Symmetry
-                            );
-                            break;
-
-                        case 3: // Prolong (Coarse -> Fine Buffer)
-                            gpu_manager.AddTask(
-                                    TASK_PROLONG,
-                                    h_src_ptr,    // CPU Source
-                                    h_buffer_ptr, // CPU Dest
-                                    src->data->Bg->bbox, src->data->Bg->bbox + dim, src->data->Bg->shape, 
-                                    dst->data->llb, dst->data->uub, dst->data->shape,        
-                                    dst->data->llb, dst->data->uub, 
-                                    varls->data->SoA, Symmetry
-                            );
-                            break;
-                        }
-                    }
-                    
-                    if (dir == UNPACK)
-                    {
-                         // UNPACK 依旧是 CPU 操作，因为接收到的 data buffer 也在 CPU 上
-                         f_copy(DIM, dst->data->Bg->bbox, dst->data->Bg->bbox + dim, dst->data->Bg->shape, dst->data->Bg->fgfs[varld->data->sgfn],
-                                     dst->data->llb, dst->data->uub, dst->data->shape, data + size_out,
-                                     dst->data->llb, dst->data->uub);
-                    }
-                }
-                size_out += dst->data->shape[0] * dst->data->shape[1] * dst->data->shape[2];
-                varls = varls->next;
-                varld = varld->next;
-            }
-        }
-        dst = dst->next;
-        src = src->next;
-    }
-
-    // 批量执行 GPU 任务并拷回数据
-    if (dir == PACK && (type == 2 || type == 3)) {
-            gpu_manager.ExecuteBatch();
-    }
-
-    return size_out;
+  return size_out;
 }
-
-
 
 int Parallel::data_packermix(double *data, MyList<Parallel::gridseg> *src, MyList<Parallel::gridseg> *dst, int rank_in, int dir,
                                                          MyList<var> *VarLists /* source */, MyList<var> *VarListd /* target */, int Symmetry)

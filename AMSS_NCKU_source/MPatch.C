@@ -14,8 +14,6 @@ using namespace std;
 #include "Parallel.h"
 #include "fmisc.h"
 
-#include "Interp_Points_gpu.h"
-
 Patch::Patch(int DIM, int *shapei, double *bboxi, int levi, bool buflog, int Symmetry) : lev(levi)
 {
 

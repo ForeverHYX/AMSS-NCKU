@@ -1470,6 +1470,15 @@ void bssn_class::Read_Ansorg()
 
 void bssn_class::Evolve(int Steps)
 {
+    {
+            Helper::move_to_gpu_whole(GH, myrank, StateList);
+            Helper::move_to_gpu_whole(GH, myrank, RHSList);
+            Helper::move_to_gpu_whole(GH, myrank, MiscList);
+            Helper::move_to_gpu_whole(GH, myrank, SynchList_pre);
+            Helper::move_to_gpu_whole(GH, myrank, SynchList_cor);
+            Helper::move_to_gpu_whole(GH, myrank, ConstraintList);
+            Helper::move_to_gpu_whole(GH, myrank, DGList);       
+        }
 
     double prev_clock, curr_clock = MPI_Wtime();
     double LastDump = 0.0, LastCheck = 0.0, Last2dDump = 0.0;
@@ -1501,25 +1510,25 @@ void bssn_class::Evolve(int Steps)
         cout << "Before Step: " << ncount << " My Rank: " << myrank 
                  << " takes " << MPI_Wtime() - beg_time << " seconds!" << endl;
         beg_time = MPI_Wtime();
-        {
-            Helper::move_to_gpu_whole(GH, myrank, StateList);
-            Helper::move_to_gpu_whole(GH, myrank, RHSList);
-            Helper::move_to_gpu_whole(GH, myrank, MiscList);
-            Helper::move_to_gpu_whole(GH, myrank, SynchList_pre);
-            Helper::move_to_gpu_whole(GH, myrank, SynchList_cor);
-            Helper::move_to_gpu_whole(GH, myrank, ConstraintList);
-            Helper::move_to_gpu_whole(GH, myrank, DGList);       
-        }
+        // {
+        //     Helper::move_to_gpu_whole(GH, myrank, StateList);
+        //     Helper::move_to_gpu_whole(GH, myrank, RHSList);
+        //     Helper::move_to_gpu_whole(GH, myrank, MiscList);
+        //     Helper::move_to_gpu_whole(GH, myrank, SynchList_pre);
+        //     Helper::move_to_gpu_whole(GH, myrank, SynchList_cor);
+        //     Helper::move_to_gpu_whole(GH, myrank, ConstraintList);
+        //     Helper::move_to_gpu_whole(GH, myrank, DGList);       
+        // }
         RecursiveStep(0);
-        {
-            Helper::move_to_cpu_whole(GH, myrank, StateList);
-            Helper::move_to_cpu_whole(GH, myrank, RHSList);
-            Helper::move_to_cpu_whole(GH, myrank, MiscList);
-            Helper::move_to_cpu_whole(GH, myrank, SynchList_pre);
-            Helper::move_to_cpu_whole(GH, myrank, SynchList_cor);
-            Helper::move_to_cpu_whole(GH, myrank, ConstraintList);
-            Helper::move_to_cpu_whole(GH, myrank, DGList);      
-        }
+        // {
+        //     Helper::move_to_cpu_whole(GH, myrank, StateList);
+        //     Helper::move_to_cpu_whole(GH, myrank, RHSList);
+        //     Helper::move_to_cpu_whole(GH, myrank, MiscList);
+        //     Helper::move_to_cpu_whole(GH, myrank, SynchList_pre);
+        //     Helper::move_to_cpu_whole(GH, myrank, SynchList_cor);
+        //     Helper::move_to_cpu_whole(GH, myrank, ConstraintList);
+        //     Helper::move_to_cpu_whole(GH, myrank, DGList);      
+        // }
         cout << "After Step: " << ncount << " My Rank: " << myrank 
                  << " takes " << MPI_Wtime() - beg_time << " seconds!" << endl;
         beg_time = MPI_Wtime();
@@ -2956,8 +2965,8 @@ void bssn_class::Constraint_Out()
                         {
                             if (use_gpu == 1) {
                                 // f_compute_rhs_bssn(RHS_PARA_CALLED_Constraint_Out);
-                                cg->move_to_gpu(StateList);
-                                cg->move_to_gpu(MiscList);
+                                // cg->move_to_gpu(StateList);
+                                // cg->move_to_gpu(MiscList);
                                 
                                 gpu_compute_rhs_bssn_launch(
                                     cg->stream,
@@ -2999,8 +3008,8 @@ void bssn_class::Constraint_Out()
 
                                 GPUManager::getInstance().synchronize_all();
 
-                                cg->move_to_cpu(RHSList);
-                                cg->move_to_cpu(ConstraintList);
+                                // cg->move_to_cpu(RHSList);
+                                // cg->move_to_cpu(ConstraintList);
                             }
                             else
                                 f_compute_rhs_bssn(RHS_PARA_CALLED_Constraint_Out);

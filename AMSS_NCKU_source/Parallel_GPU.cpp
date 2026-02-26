@@ -6,7 +6,6 @@
 #include "parameters.h"
 #include "fmisc.h"
 
-#include "prolongrestrict_gpu_manager.h"
 #include "gpu_manager.h"
 #include "MPatch.h"
 
