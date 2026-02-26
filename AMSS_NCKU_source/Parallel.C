@@ -823,9 +823,6 @@ void Parallel::Dump_Data(Patch *PP, MyList<var> *DumpList, char *tag, double tim
 }
 void Parallel::Dump_Data(MyList<Patch> *PL, MyList<var> *DumpList, char *tag, double time, double dT)
 {
-    int myrank;
-    MPI_Comm_rank(MPI_COMM_WORLD, &myrank);
-    Helper::move_to_cpu_whole(PL, myrank, DumpList);
     MyList<Patch> *Pp;
     Pp = PL;
     int grd = 0;
@@ -1076,9 +1073,6 @@ void Parallel::d2Dump_Data(Patch *PP, MyList<var> *DumpList, char *tag, double t
 }
 void Parallel::d2Dump_Data(MyList<Patch> *PL, MyList<var> *DumpList, char *tag, double time, double dT)
 {
-    int myrank;
-    MPI_Comm_rank(MPI_COMM_WORLD, &myrank);
-    Helper::move_to_cpu_whole(PL, myrank, DumpList);
     MyList<Patch> *Pp;
     Pp = PL;
     int grd = 0;

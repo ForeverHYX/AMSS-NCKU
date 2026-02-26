@@ -8,7 +8,7 @@
 
 #include "gpu_manager.h"
 #include "MPatch.h"
-
+#include "helper.h"
 
 int Parallel::gpu_data_packer(
     double *d_data, MyList<Parallel::gridseg> *src, MyList<Parallel::gridseg> *dst, int rank_in, int dir,
@@ -851,4 +851,36 @@ double Parallel::L2Norm_GPU(Patch *Pat, var *vf) {
     tvf = sqrt(tvf);
 
     return tvf;
+}
+
+void Parallel::Dump_Data_GPU(MyList<Patch> *PL, MyList<var> *DumpList, char *tag, double time, double dT) {
+    int myrank;
+    MPI_Comm_rank(MPI_COMM_WORLD, &myrank);
+    Helper::move_to_cpu_whole(PL, myrank, DumpList);
+    MyList<Patch> *Pp;
+    Pp = PL;
+    int grd = 0;
+    while (Pp)
+    {
+        Patch *PP = Pp->data;
+        Dump_Data(PP, DumpList, tag, time, dT, grd);
+        grd++;
+        Pp = Pp->next;
+    }
+}
+
+void Parallel::d2Dump_Data_GPU(MyList<Patch> *PL, MyList<var> *DumpList, char *tag, double time, double dT) {
+    int myrank;
+    MPI_Comm_rank(MPI_COMM_WORLD, &myrank);
+    Helper::move_to_cpu_whole(PL, myrank, DumpList);
+    MyList<Patch> *Pp;
+    Pp = PL;
+    int grd = 0;
+    while (Pp)
+    {
+        Patch *PP = Pp->data;
+        d2Dump_Data(PP, DumpList, tag, time, dT, grd);
+        grd++;
+        Pp = Pp->next;
+    }
 }

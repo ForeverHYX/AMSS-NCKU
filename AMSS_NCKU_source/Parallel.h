@@ -213,6 +213,8 @@ namespace Parallel
         MyList<var> *VarList3 /* target (t+a*dt) */, int tindex
     );
     double L2Norm_GPU(Patch *Pat, var *vf);
+    void Dump_Data_GPU(MyList<Patch> *PL, MyList<var> *DumpList, char *tag, double time, double dT);
+    void d2Dump_Data_GPU(MyList<Patch> *PL, MyList<var> *DumpList, char *tag, double time, double dT);
 #if (PSTR == 1 || PSTR == 2 || PSTR == 3)
     MyList<Block> *distribute(MyList<Patch> *PatchLIST, int cpusize, int ingfsi, int fngfsi,
                                                         bool periodic, int start_rank, int end_rank, int nodes = 0);

@@ -167,8 +167,6 @@ void bssn_class::Step_GPU(int lev, int YN) {
 					varlrhs = varlrhs->next;
 				}
 				gpu_lowerboundset_launch(cg->stream, cg->shape, cg->d_fgfs[phi->sgfn], chitiny);
-
-				GPUManager::getInstance().synchronize_all();
 			}
 			if (BP == Pp->data->ble)
 				break;
@@ -176,6 +174,7 @@ void bssn_class::Step_GPU(int lev, int YN) {
 		}
 		Pp = Pp->next;
 	}
+	GPUManager::getInstance().synchronize_all();
 	// check error information
 	{
 		int erh = ERROR;
@@ -276,8 +275,6 @@ void bssn_class::Step_GPU(int lev, int YN) {
 					}
 
 					gpu_lowerboundset_launch(cg->stream, cg->shape, cg->d_fgfs[phi1->sgfn], chitiny);
-
-					GPUManager::getInstance().synchronize_all();
 				}
 				if (BP == Pp->data->ble)
 					break;
@@ -285,7 +282,7 @@ void bssn_class::Step_GPU(int lev, int YN) {
 			}
 			Pp = Pp->next;
 		}
-
+		GPUManager::getInstance().synchronize_all();
 		// check error information
 		{
 			int erh = ERROR;

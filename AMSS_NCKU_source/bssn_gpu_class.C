@@ -1534,7 +1534,7 @@ void bssn_class::Evolve(int Steps)
         {
 
             for (int lev = 0; lev < GH->levels; lev++)
-                Parallel::Dump_Data(GH->PatL[lev], DumpList, 0, PhysTime, dT_mon);
+                Parallel::Dump_Data_GPU(GH->PatL[lev], DumpList, 0, PhysTime, dT_mon);
 
             LastDump = 0;
 
@@ -1549,7 +1549,7 @@ void bssn_class::Evolve(int Steps)
             //       misc::tillherecheck("before 2dDump_Data");
 
             for (int lev = 0; lev < GH->levels; lev++)
-                Parallel::d2Dump_Data(GH->PatL[lev], DumpList, 0, PhysTime, dT_mon);
+                Parallel::d2Dump_Data_GPU(GH->PatL[lev], DumpList, 0, PhysTime, dT_mon);
 
             Last2dDump = 0;
 
@@ -2992,8 +2992,6 @@ void bssn_class::Constraint_Out()
                                     cg->d_fgfs[Cons_Gx->sgfn], cg->d_fgfs[Cons_Gy->sgfn], cg->d_fgfs[Cons_Gz->sgfn],
                                     Symmetry, lev, ndeps, pre
                                 );
-
-                                GPUManager::getInstance().synchronize_all();
                             }
                             else
                                 f_compute_rhs_bssn(RHS_PARA_CALLED_Constraint_Out);
@@ -3004,6 +3002,7 @@ void bssn_class::Constraint_Out()
                     }
                     Pp = Pp->next;
                 }
+                GPUManager::getInstance().synchronize_all();
             }
             Parallel::Sync_GPU(GH->PatL[lev], ConstraintList, Symmetry);
         }
@@ -3200,8 +3199,6 @@ void bssn_class::Interp_Constraint(bool infg)
                                     cg->d_fgfs[Cons_Gx->sgfn], cg->d_fgfs[Cons_Gy->sgfn], cg->d_fgfs[Cons_Gz->sgfn],
                                     Symmetry, lev, ndeps, pre
                                 );
-
-                                GPUManager::getInstance().synchronize_all();
                             }
                             else
                                 f_compute_rhs_bssn(RHS_PARA_CALLED_Interp_Constraint);
@@ -3212,6 +3209,7 @@ void bssn_class::Interp_Constraint(bool infg)
                     }
                     Pp = Pp->next;
                 }
+                GPUManager::getInstance().synchronize_all();
             }
             Parallel::Sync_GPU(GH->PatL[lev], ConstraintList, Symmetry);
         }

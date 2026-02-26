@@ -173,7 +173,6 @@ void checkpoint::writecheck_cgh(double time, cgh *GH)
 	{
 		MyList<Patch> *PL = GH->PatL[lev];
 		Helper::move_to_cpu_whole(PL, myrank, CheckList);
-		MyList<Patch> *PL = GH->PatL[lev];
 		while (PL)
 		{
 			Patch *PP = PL->data;
