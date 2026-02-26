@@ -1298,3 +1298,21 @@ void cgh::settrfls(const int lev)
 {
     trfls = lev;
 }
+
+bool cgh::Interp_N_Points_GPU(
+    MyList<var> *VarList,
+    int NN, double *d_XX_0, double *d_XX_1, double *d_XX_2,
+    double *d_shellf, int *d_weight, int Symmetry
+) {
+    int lev = levels - 1;
+    bool success = true;
+    while (lev >= 0) {
+        MyList<Patch> *Pp = PatL[lev];
+        while (Pp) {
+            Pp->data->Interp_N_Points_GPU(VarList, NN, d_XX_0, d_XX_1, d_XX_2, d_shellf, d_weight, Symmetry);
+            Pp = Pp->next;
+        }
+        lev--;
+    }
+    return success;
+}

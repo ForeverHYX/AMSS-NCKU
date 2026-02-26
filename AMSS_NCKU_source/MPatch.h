@@ -52,6 +52,11 @@ public:
         int NN, double **d_XX,
         double *d_Shellf, int Symmetry
     );
+    bool Interp_N_Points_GPU(
+        MyList<var> *VarList, 
+        int NN, double *d_XX_0, double *d_XX_1, double *d_XX_2,
+        double *d_shellf, int *d_weight, int Symmetry
+    );
 };
 
 void gpu_normalize_shellf_launch(

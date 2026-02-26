@@ -2,6 +2,7 @@
 #include <math.h>
 
 #include <iostream>
+#include "gpu_manager.h"
 
 #define MAX_ORDN 6
 #ifndef GPU_DEBUG_PRINT
@@ -402,8 +403,8 @@ __global__ void global_interp_kernel(
     double uub_0, double uub_1, double uub_2,
     int ordn, double SoA_0, double SoA_1, double SoA_2, int Symmetry,
     int var_idx, int num_var,
-    double* d_shellf, int* d_weight)
-{
+    double* d_shellf, int* d_weight
+) {
     int j = blockIdx.x * blockDim.x + threadIdx.x;
     if (j >= NN) return;
 
@@ -463,4 +464,111 @@ void gpu_global_interp_launch(
         ordn, SoA_0, SoA_1, SoA_2, Symmetry, 
         var_idx, num_var, d_shellf, d_weight
 	);
+}
+
+__forceinline__ __device__ double warpReduceSum(double val) {
+    for (int offset = warpSize / 2; offset > 0; offset /= 2) {
+        val += __shfl_down_sync(0xffffffff, val, offset);
+    }
+    return val;
+}
+
+__global__ void l2normhelper_kernel(
+	const double* __restrict__ f,
+	int imin, int imax,
+	int jmin, int jmax,
+	int kmin, int kmax,
+	int nx, int ny, int nz,
+	double* __restrict__ d_out
+) {
+    // 计算全局线程索引 (加上起始偏移量 imin, jmin, kmin)
+    int i = blockIdx.x * blockDim.x + threadIdx.x + imin;
+    int j = blockIdx.y * blockDim.y + threadIdx.y + jmin;
+    int k = blockIdx.z * blockDim.z + threadIdx.z + kmin;
+
+    double my_val = 0.0;
+
+    // 检查是否在有效计算区域内
+    if (i <= imax && j <= jmax && k <= kmax) {
+        // Fortran 列主序映射到 1D C++ 数组: f(i, j, k) -> i + j*nx + k*nx*ny
+        long long idx = (long long)i + (long long)j * nx + (long long)k * nx * ny;
+        double val = f[idx];
+        my_val = val * val;
+    }
+
+    // Warp 内规约求和
+    my_val = warpReduceSum(my_val);
+
+    // 每个 Warp 的第 0 个线程负责将其写入全局显存
+    if ((threadIdx.x % warpSize) == 0) {
+        atomicAdd(d_out, my_val);
+    }
+}
+
+void gpu_l2normhelper_launch(
+	cudaStream_t stream, 
+	const int* ex, 
+	const double* X, const double* Y, const double* Z,
+	double xmin, double ymin, double zmin,
+	double xmax, double ymax, double zmax,
+	const double* d_f, double& f_out, int gw
+) {
+    double dX = X[1] - X[0];
+    double dY = Y[1] - Y[0];
+    double dZ = Z[1] - Z[0];
+
+    // 将 Fortran 的 1-indexed 逻辑转换为 C/C++ 的 0-indexed 逻辑
+    int imin = gw;
+    int jmin = gw;
+    int kmin = gw;
+
+    int imax = ex[0] - gw - 1;
+    int jmax = ex[1] - gw - 1;
+    int kmax = ex[2] - gw - 1;
+
+    // 边界判断 (与 Fortran 逻辑完全一致)
+    if (fabs(X[ex[0] - 1] - xmax) < dX) imax = ex[0] - 1;
+    if (fabs(Y[ex[1] - 1] - ymax) < dY) jmax = ex[1] - 1;
+    if (fabs(Z[ex[2] - 1] - zmax) < dZ) kmax = ex[2] - 1;
+    
+    if (fabs(X[0] - xmin) < dX) imin = 0;
+    if (fabs(Y[0] - ymin) < dY) jmin = 0;
+    if (fabs(Z[0] - zmin) < dZ) kmin = 0;
+
+    int nx_proc = imax - imin + 1;
+    int ny_proc = jmax - jmin + 1;
+    int nz_proc = kmax - kmin + 1;
+
+    if (nx_proc <= 0 || ny_proc <= 0 || nz_proc <= 0) {
+        f_out = 0.0;
+        return;
+    }
+
+    // 分配设备端内存用于保存累加结果 (使用 Async API 降低分配延迟，需 CUDA 11.2+)
+    double* d_sum = GPUManager::getInstance().allocate_device_memory(1);
+    cudaMemsetAsync(d_sum, 0, sizeof(double), stream);
+
+    // 设置线程块大小，通常 8x8x8 = 512 线程效率较好
+    dim3 blockDim(8, 8, 8); 
+    dim3 gridDim((nx_proc + blockDim.x - 1) / blockDim.x,
+                 (ny_proc + blockDim.y - 1) / blockDim.y,
+                 (nz_proc + blockDim.z - 1) / blockDim.z);
+
+    // 启动 Kernel
+    l2normhelper_kernel<<<gridDim, blockDim, 0, stream>>>(
+        d_f, 
+        imin, imax, jmin, jmax, kmin, kmax, 
+        ex[0], ex[1], ex[2], 
+        d_sum
+    );
+
+    double h_sum = 0.0;
+    // 将结果拷回 CPU
+    cudaMemcpyAsync(&h_sum, d_sum, sizeof(double), cudaMemcpyDeviceToHost, stream);
+    
+    // 强制同步：由于后续的 MPI_Allreduce 立刻需要用到 f_out 的 CPU 数据，这里必须等待 GPU 计算并拷贝完成
+    cudaStreamSynchronize(stream);
+    GPUManager::getInstance().free_device_memory(d_sum, 1);
+
+    f_out = h_sum * dX * dY * dZ;
 }

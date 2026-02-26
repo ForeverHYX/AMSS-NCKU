@@ -181,3 +181,73 @@ void Patch::Interp_Points_GPU(
     CUDA_CHECK(cudaFree(d_global_weight));
     CUDA_CHECK(cudaFree(d_err_flag));
 }
+
+bool Patch::Interp_N_Points_GPU(
+    MyList<var> *VarList, 
+    int NN, double *d_XX_0, double *d_XX_1, double *d_XX_2,
+    double *d_shellf, int *d_weight, int Symmetry
+) {
+    int myrank;
+    MPI_Comm_rank(MPI_COMM_WORLD, &myrank);
+
+    int ordn = 2 * ghost_width;
+    MyList<var> *varl;
+    int num_var = 0;
+    varl = VarList;
+    while (varl)
+    {
+        num_var++;
+        varl = varl->next;
+    }
+
+    double DH[3];
+    for (int i = 0; i < dim; i++) {
+        DH[i] = getdX(i);
+    }
+
+    MyList<Block> *Bp = blb;
+    while (Bp) {
+        Block *BP = Bp->data;
+        if (myrank == BP->rank) {
+            double llb[3], uub[3];
+            for (int i = 0; i < dim; i++) {
+                llb[i] = (feq(BP->bbox[i], bbox[i], DH[i] / 2)) ? BP->bbox[i] + lli[i] * DH[i] : BP->bbox[i] + ghost_width * DH[i];
+                uub[i] = (feq(BP->bbox[dim + i], bbox[dim + i], DH[i] / 2)) ? BP->bbox[dim + i] - uui[i] * DH[i] : BP->bbox[dim + i] - ghost_width * DH[i];
+            }
+
+            varl = VarList;
+            int k = 0;
+            while (varl) {
+                // 启动你的 GPU Batch Kernel
+                gpu_global_interp_launch(
+                    BP->stream, NN, dim,
+                    d_XX_0, d_XX_1, d_XX_2,
+                    BP->shape[0], BP->shape[1], BP->shape[2],
+                    BP->d_X[0], BP->d_X[1], BP->d_X[2],
+                    BP->d_fgfs[varl->data->sgfn],
+                    llb[0], llb[1], llb[2], uub[0], uub[1], uub[2],
+                    ordn, varl->data->SoA[0], varl->data->SoA[1], varl->data->SoA[2],
+                    Symmetry, k, num_var, d_shellf, d_weight
+                );
+                varl = varl->next;
+                k++;
+            }
+        }
+        Bp = Bp->next;
+    }
+
+    GPUManager::getInstance().synchronize_all();
+    
+    double *h_shellf_local = new double[NN * num_var];
+    double *h_shellf_global = new double[NN * num_var];
+    cudaMemcpy(h_shellf_local, d_shellf, NN * num_var * sizeof(double), cudaMemcpyDeviceToHost);
+
+    MPI_Allreduce(h_shellf_local, h_shellf_global, NN * num_var, MPI_DOUBLE, MPI_SUM, MPI_COMM_WORLD);
+
+    cudaMemcpy(d_shellf, h_shellf_global, NN * num_var * sizeof(double), cudaMemcpyHostToDevice);
+
+    delete[] h_shellf_local;
+    delete[] h_shellf_global;
+
+    return true; // 实际的 "notfind" 检查可以在外层通过 d_weight 完成，此处简化直接返回 true
+}

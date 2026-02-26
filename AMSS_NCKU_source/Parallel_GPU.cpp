@@ -820,3 +820,35 @@ void Parallel::gpu_fill_level_data(
 
     VarList->clearList();
 }
+
+double Parallel::L2Norm_GPU(Patch *Pat, var *vf) {
+    int myrank;
+    MPI_Comm_rank(MPI_COMM_WORLD, &myrank);
+
+    double tvf, dtvf = 0;
+    int BDW = ghost_width;
+
+    MyList<Block> *BP = Pat->blb;
+    while (BP) {
+        Block *cg = BP->data;
+        if (myrank == cg->rank) {
+            gpu_l2normhelper_launch(
+                cg->stream, 
+                cg->shape, cg->X[0], cg->X[1], cg->X[2],
+                Pat->bbox[0], Pat->bbox[1], Pat->bbox[2],
+                Pat->bbox[3], Pat->bbox[4], Pat->bbox[5],
+                cg->d_fgfs[vf->sgfn], tvf, BDW
+            );
+            dtvf += tvf;
+        }
+        if (BP == Pat->ble)
+            break;
+        BP = BP->next;
+    }
+
+    MPI_Allreduce(&dtvf, &tvf, 1, MPI_DOUBLE, MPI_SUM, MPI_COMM_WORLD);
+
+    tvf = sqrt(tvf);
+
+    return tvf;
+}

@@ -83,6 +83,11 @@ public:
                             MyList<var> *FutureList, MyList<var> *tmList, bool BB,
                             monitor *ErrorMonitor);
    void settrfls(const int lev);
+   bool Interp_N_Points_GPU(
+      MyList<var> *VarList,
+      int NN, double *d_XX_0, double *d_XX_1, double *d_XX_2,
+      double *d_shellf, int *d_weight, int Symmetry
+   );
 
 #if (PSTR == 1 || PSTR == 2 || PSTR == 3)
    void construct_mylev(int nprocs);
