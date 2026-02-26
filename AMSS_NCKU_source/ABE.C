@@ -359,8 +359,6 @@ int main(int argc, char *argv[])
             MPI_Abort(MPI_COMM_WORLD, 1);
       }
 
-      ADM->move_to_gpu();
-
       End_clock = MPI_Wtime();
       if (myrank == 0)
       {

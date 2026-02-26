@@ -196,9 +196,6 @@ public:
        virtual void Constraint_Out();
        virtual void Compute_Constraint();
 
-       void move_to_gpu();
-       void move_to_cpu();
-
 #ifdef With_AHF
 protected:
        MyList<var> *AHList, *AHDList, *GaugeList;

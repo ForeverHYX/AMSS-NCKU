@@ -10,7 +10,6 @@ using namespace std;
 #include "misc.h"
 #include "fmisc.h"
 #include "parameters.h"
-#include "helper.h"
 
 checkpoint::checkpoint(bool checked, const char fname[], int myrank) : filename(0), CheckList(0), checkedrun(checked)
 {
@@ -166,13 +165,10 @@ void checkpoint::writecheck_cgh(double time, cgh *GH)
 			}
 		}
 	}
-	int myrank;
-	MPI_Comm_rank(MPI_COMM_WORLD, &myrank);
 	// write variable data
 	for (int lev = 0; lev < GH->levels; lev++)
 	{
 		MyList<Patch> *PL = GH->PatL[lev];
-		Helper::move_to_cpu_whole(PL, myrank, CheckList);
 		while (PL)
 		{
 			Patch *PP = PL->data;

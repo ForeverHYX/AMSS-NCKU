@@ -1460,25 +1460,7 @@ void bssn_class::Read_Ansorg()
 
 //================================================================================================
 
-void bssn_class::move_to_gpu() {
-    Helper::move_to_gpu_whole(GH, myrank, StateList);
-    Helper::move_to_gpu_whole(GH, myrank, RHSList);
-    Helper::move_to_gpu_whole(GH, myrank, MiscList);
-    Helper::move_to_gpu_whole(GH, myrank, SynchList_pre);
-    Helper::move_to_gpu_whole(GH, myrank, SynchList_cor);
-    Helper::move_to_gpu_whole(GH, myrank, ConstraintList);
-    Helper::move_to_gpu_whole(GH, myrank, DGList);  
-}
 
-void bssn_class::move_to_cpu() {
-    Helper::move_to_cpu_whole(GH, myrank, StateList);
-    Helper::move_to_cpu_whole(GH, myrank, RHSList);
-    Helper::move_to_cpu_whole(GH, myrank, MiscList);
-    Helper::move_to_cpu_whole(GH, myrank, SynchList_pre);
-    Helper::move_to_cpu_whole(GH, myrank, SynchList_cor);
-    Helper::move_to_cpu_whole(GH, myrank, ConstraintList);
-    Helper::move_to_cpu_whole(GH, myrank, DGList);  
-}
 
 //================================================================================================
 
@@ -1486,7 +1468,8 @@ void bssn_class::move_to_cpu() {
 
 //================================================================================================
 
-void bssn_class::Evolve(int Steps) {
+void bssn_class::Evolve(int Steps)
+{
 
     double prev_clock, curr_clock = MPI_Wtime();
     double LastDump = 0.0, LastCheck = 0.0, Last2dDump = 0.0;
@@ -1498,8 +1481,27 @@ void bssn_class::Evolve(int Steps) {
     // if (myrank % 2 == 1)
     //     use_gpu = 0;
     // use_gpu = 0;
+
+    {
+        Helper::move_to_gpu_whole(GH, myrank, StateList);
+        Helper::move_to_gpu_whole(GH, myrank, RHSList);
+        Helper::move_to_gpu_whole(GH, myrank, MiscList);
+        Helper::move_to_gpu_whole(GH, myrank, SynchList_pre);
+        Helper::move_to_gpu_whole(GH, myrank, SynchList_cor);
+        Helper::move_to_gpu_whole(GH, myrank, ConstraintList);
+        Helper::move_to_gpu_whole(GH, myrank, DGList);       
+    }
     // for step 0 constraint interpolation
     Interp_Constraint(true);
+    {
+        Helper::move_to_cpu_whole(GH, myrank, StateList);
+        Helper::move_to_cpu_whole(GH, myrank, RHSList);
+        Helper::move_to_cpu_whole(GH, myrank, MiscList);
+        Helper::move_to_cpu_whole(GH, myrank, SynchList_pre);
+        Helper::move_to_cpu_whole(GH, myrank, SynchList_cor);
+        Helper::move_to_cpu_whole(GH, myrank, ConstraintList);
+        Helper::move_to_cpu_whole(GH, myrank, DGList);      
+    }
 
     if (checkrun)
         CheckPoint->read_bssn(LastDump, Last2dDump, LastAnas);
@@ -1517,12 +1519,30 @@ void bssn_class::Evolve(int Steps) {
         cout << "Before Step: " << ncount << " My Rank: " << myrank 
                  << " takes " << MPI_Wtime() - beg_time << " seconds!" << endl;
         beg_time = MPI_Wtime();
+        {
+            Helper::move_to_gpu_whole(GH, myrank, StateList);
+            Helper::move_to_gpu_whole(GH, myrank, RHSList);
+            Helper::move_to_gpu_whole(GH, myrank, MiscList);
+            Helper::move_to_gpu_whole(GH, myrank, SynchList_pre);
+            Helper::move_to_gpu_whole(GH, myrank, SynchList_cor);
+            Helper::move_to_gpu_whole(GH, myrank, ConstraintList);
+            Helper::move_to_gpu_whole(GH, myrank, DGList);       
+        }
         RecursiveStep(0);
         cout << "After Step: " << ncount << " My Rank: " << myrank 
                  << " takes " << MPI_Wtime() - beg_time << " seconds!" << endl;
         beg_time = MPI_Wtime();
 
         Constraint_Out(); // this will affect the Dump_List
+        {
+            Helper::move_to_cpu_whole(GH, myrank, StateList);
+            Helper::move_to_cpu_whole(GH, myrank, RHSList);
+            Helper::move_to_cpu_whole(GH, myrank, MiscList);
+            Helper::move_to_cpu_whole(GH, myrank, SynchList_pre);
+            Helper::move_to_cpu_whole(GH, myrank, SynchList_cor);
+            Helper::move_to_cpu_whole(GH, myrank, ConstraintList);
+            Helper::move_to_cpu_whole(GH, myrank, DGList);      
+        }
 
         LastDump += dT_mon;
         Last2dDump += dT_mon;
