@@ -62,10 +62,4 @@ void gpu_normalize_shellf_launch(
     int* d_err_flag
 );
 
-void PatList_Interp_Overwrite_GPU(
-    cudaStream_t stream, 
-    MyList<Patch> *PatL, MyList<var> *VarList,
-    int NN, double **d_XX, double *d_final_shellf, int *d_final_weight, int Symmetry
-);
-
 #endif /* PATCH_H */
