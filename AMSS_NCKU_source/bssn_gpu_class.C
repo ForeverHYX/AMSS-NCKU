@@ -34,6 +34,7 @@ using namespace std;
 // include GPU files
 #include "gpu_manager.h"
 #include "helper.h"
+#include "macrodef.h"
 
 //================================================================================================
 
@@ -3215,15 +3216,15 @@ void bssn_class::Interp_Constraint(bool infg)
         }
     }
     //    interpolate
+    // 1. 准备插值点坐标
+    int ordn = 2 * ghost_width;
     double *x1, *y1, *z1;
     const int n = 1000;
     double lmax, lmin, dd;
     lmin = 0;
     lmax = GH->bbox[0][0][4];
     dd = (lmax - lmin) / n;
-    x1 = new double[n];
-    y1 = new double[n];
-    z1 = new double[n];
+    x1 = new double[n]; y1 = new double[n]; z1 = new double[n];
     for (int i = 0; i < n; i++)
     {
         x1[i] = 0;
@@ -3233,48 +3234,137 @@ void bssn_class::Interp_Constraint(bool infg)
 
     int InList = 0;
     MyList<var> *varl = ConstraintList;
-    while (varl)
-    {
-        InList++;
-        varl = varl->next;
-    }
+    while (varl) { InList++; varl = varl->next; }
 
-    double *shellf = new double[n * InList];
-    memset(shellf, 0, sizeof(double) * n * InList);
+    double *d_x1, *d_y1, *d_z1, *d_shellf;
+    cudaMalloc(&d_x1, n * sizeof(double));
+    cudaMalloc(&d_y1, n * sizeof(double));
+    cudaMalloc(&d_z1, n * sizeof(double));
+    cudaMemcpy(d_x1, x1, n * sizeof(double), cudaMemcpyHostToDevice);
+    cudaMemcpy(d_y1, y1, n * sizeof(double), cudaMemcpyHostToDevice);
+    cudaMemcpy(d_z1, z1, n * sizeof(double), cudaMemcpyHostToDevice);
 
-    // ==========================================
-    // GPU 批处理模式 (Batch Mode)
-    // ==========================================
-    double *d_XX_0, *d_XX_1, *d_XX_2, *d_shellf;
-    int *d_weight;
-    
-    d_XX_0 = GPUManager::getInstance().allocate_device_memory(n);
-    d_XX_1 = GPUManager::getInstance().allocate_device_memory(n);
-    d_XX_2 = GPUManager::getInstance().allocate_device_memory(n);
-    d_shellf = GPUManager::getInstance().allocate_device_memory(n * InList);
-    cudaMalloc(&d_weight, n * sizeof(int));
-
-    cudaMemcpy(d_XX_0, x1, n * sizeof(double), cudaMemcpyHostToDevice);
-    cudaMemcpy(d_XX_1, y1, n * sizeof(double), cudaMemcpyHostToDevice);
-    cudaMemcpy(d_XX_2, z1, n * sizeof(double), cudaMemcpyHostToDevice);
+    cudaMalloc(&d_shellf, n * InList * sizeof(double));
     cudaMemset(d_shellf, 0, n * InList * sizeof(double));
-    cudaMemset(d_weight, 0, n * sizeof(int));
 
-    bool fg = GH->Interp_N_Points_GPU(ConstraintList, n, d_XX_0, d_XX_1, d_XX_2, d_shellf, d_weight, Symmetry);
-    
-    if (!fg && myrank == 0) {
-        cout << "bssn_class::Interp_Constraint GPU batch logic failed!" << endl;
-        MPI_Abort(MPI_COMM_WORLD, 1);
+    // ==========================================
+    // 2. 核心修正：CPU 上执行全局几何归属判定
+    // 确保与 CPU 原版完全一致：细网格优先，先找到先认领，全 MPI 进程认领结果绝对一致
+    // ==========================================
+    void** assigned_bp = new void*[n];
+    for(int i = 0; i < n; i++) assigned_bp[i] = nullptr;
+
+    for (int i = 0; i < n; i++) {
+        double XX[3] = {x1[i], y1[i], z1[i]};
+        bool found = false;
+        
+        // 严格按照 CPU 从细到粗的逻辑进行优先级判定
+        for (int lev = GH->levels - 1; lev >= 0 && !found; lev--) {
+            MyList<Patch> *Pp = GH->PatL[lev];
+            while (Pp && !found) {
+                int pdim = dim; // 通常是3
+                double DH[3];
+                for(int d = 0; d < pdim; d++) DH[d] = Pp->data->getdX(d);
+                
+                // 判断是否在 Patch 的 Bounding Box 内
+                bool in_patch = true;
+                for(int d = 0; d < pdim; d++) {
+                    if (XX[d] < Pp->data->bbox[d] + Pp->data->lli[d] * DH[d] - DH[d] / 100 || 
+                        XX[d] > Pp->data->bbox[pdim + d] - Pp->data->uui[d] * DH[d] + DH[d] / 100) {
+                        in_patch = false; break;
+                    }
+                }
+                
+                if (in_patch) {
+                    MyList<Block> *Bp = Pp->data->blb;
+                    while (Bp && !found) {
+                        Block *BP = Bp->data;
+                        bool in_block = true;
+                        for (int d = 0; d < pdim; d++) {
+                            double llb = (feq(BP->bbox[d], Pp->data->bbox[d], DH[d] / 2)) ? 
+                                    BP->bbox[d] + Pp->data->lli[d] * DH[d] : BP->bbox[d] + ghost_width * DH[d];
+                            double uub = (feq(BP->bbox[pdim + d], Pp->data->bbox[pdim + d], DH[d] / 2)) ? 
+                                    BP->bbox[pdim + d] - Pp->data->uui[d] * DH[d] : BP->bbox[pdim + d] - ghost_width * DH[d];
+                            
+                            if (XX[d] - llb < -DH[d] / 2 || XX[d] - uub > DH[d] / 2) {
+                                in_block = false; break;
+                            }
+                        }
+                        
+                        if (in_block) {
+                            assigned_bp[i] = (void*)BP; // 全局锁定此点归属该 Block
+                            found = true;
+                        }
+                        Bp = Bp->next;
+                    }
+                }
+                Pp = Pp->next;
+            }
+        }
     }
 
+    // 3. 遍历 Block 并针对活跃点派发 GPU 任务
+    std::vector<int*> d_indices_to_free;
+
+    for (int lev = GH->levels - 1; lev >= 0; lev--) {
+        MyList<Patch> *Pp = GH->PatL[lev];
+        while (Pp) {
+            MyList<Block> *Bp = Pp->data->blb;
+            while (Bp) {
+                Block *BP = Bp->data;
+                if (myrank == BP->rank) {
+                    // 收集被分配给当前 Block 的所有插值点
+                    std::vector<int> active_points;
+                    for (int i = 0; i < n; i++) {
+                        if (assigned_bp[i] == (void*)BP) {
+                            active_points.push_back(i);
+                        }
+                    }
+
+                    int active_count = active_points.size();
+                    // 仅当此 Block 确实覆盖了目标点时，才触发 CUDA 拷贝和核函数
+                    if (active_count > 0) {
+                        int* d_active_indices;
+                        cudaMalloc(&d_active_indices, active_count * sizeof(int));
+                        cudaMemcpyAsync(d_active_indices, active_points.data(), active_count * sizeof(int), cudaMemcpyHostToDevice, BP->stream);
+                        d_indices_to_free.push_back(d_active_indices);
+
+                        varl = ConstraintList;
+                        int k = 0;
+                        while (varl) {
+                            gpu_global_interp_amr_launch(
+                                BP->stream, active_count, 3, d_active_indices,
+                                d_x1, d_y1, d_z1,
+                                BP->shape[0], BP->shape[1], BP->shape[2],
+                                BP->d_X[0], BP->d_X[1], BP->d_X[2],
+                                BP->d_fgfs[varl->data->sgfn], 
+                                ordn, varl->data->SoA[0], varl->data->SoA[1], varl->data->SoA[2],
+                                Symmetry, k, InList, d_shellf
+                            );
+                            k++;
+                            varl = varl->next;
+                        }
+                    }
+                }
+                Bp = Bp->next;
+            }
+            Pp = Pp->next;
+        }
+    }
+
+    // 4. 同步所有流，并清理临时的 GPU 索引数组
+    GPUManager::getInstance().synchronize_all();
+    for (int* ptr : d_indices_to_free) cudaFree(ptr);
+    delete[] assigned_bp;
+
+    // 5. 拷回 CPU 并做一次性全局归约
+    double *shellf = new double[n * InList];
     cudaMemcpy(shellf, d_shellf, n * InList * sizeof(double), cudaMemcpyDeviceToHost);
 
-    cudaFree(d_XX_0);
-    cudaFree(d_XX_1);
-    cudaFree(d_XX_2);
-    cudaFree(d_shellf);
-    cudaFree(d_weight);
+    double *global_shellf = new double[n * InList];
+    MPI_Allreduce(shellf, global_shellf, n * InList, MPI_DOUBLE, MPI_SUM, MPI_COMM_WORLD);
 
+    // 6. Rank 0 写文件 (复用原有逻辑，使用 global_shellf)
     if (myrank == 0) {
         ofstream outfile;
         char filename[50];
@@ -3293,10 +3383,10 @@ void bssn_class::Interp_Constraint(bool infg)
         outfile.close();
     }
 
-    delete[] shellf;
-    delete[] x1;
-    delete[] y1;
-    delete[] z1;
+    cudaFree(d_x1); cudaFree(d_y1); cudaFree(d_z1);
+    cudaFree(d_shellf); 
+    delete[] shellf; delete[] global_shellf;
+    delete[] x1; delete[] y1; delete[] z1;
 }
 // void bssn_class::Interp_Constraint(bool infg)
 // {

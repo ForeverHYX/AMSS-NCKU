@@ -335,4 +335,17 @@ void gpu_l2normhelper_launch(
 	const double* d_f, double& f_out, int gw
 );
 
+void gpu_global_interp_amr_launch(
+    cudaStream_t stream,
+    int active_count, int DIM,
+    int* d_active_indices,
+    double* d_XX_0, double* d_XX_1, double* d_XX_2,
+    int shape_0, int shape_1, int shape_2,
+    double* d_X_0, double* d_X_1, double* d_X_2,
+    double* d_field,
+    int ordn, double SoA_0, double SoA_1, double SoA_2, 
+    int Symmetry, int var_idx, int num_var,
+    double* d_shellf
+);
+
 #endif /* FMISC_H */

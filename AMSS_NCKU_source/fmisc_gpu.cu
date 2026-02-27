@@ -474,33 +474,33 @@ __forceinline__ __device__ double warpReduceSum(double val) {
 }
 
 __global__ void l2normhelper_kernel(
-	const double* __restrict__ f,
-	int imin, int imax,
-	int jmin, int jmax,
-	int kmin, int kmax,
-	int nx, int ny, int nz,
-	double* __restrict__ d_out
+    const double* __restrict__ f,
+    int imin, int imax,
+    int jmin, int jmax,
+    int kmin, int kmax,
+    int nx, int ny, int nz,
+    double* __restrict__ d_out
 ) {
-    // 计算全局线程索引 (加上起始偏移量 imin, jmin, kmin)
     int i = blockIdx.x * blockDim.x + threadIdx.x + imin;
     int j = blockIdx.y * blockDim.y + threadIdx.y + jmin;
     int k = blockIdx.z * blockDim.z + threadIdx.z + kmin;
 
     double my_val = 0.0;
 
-    // 检查是否在有效计算区域内
     if (i <= imax && j <= jmax && k <= kmax) {
-        // Fortran 列主序映射到 1D C++ 数组: f(i, j, k) -> i + j*nx + k*nx*ny
         long long idx = (long long)i + (long long)j * nx + (long long)k * nx * ny;
         double val = f[idx];
         my_val = val * val;
     }
 
-    // Warp 内规约求和
+    // Warp 内规约求和 (假设你的 warpReduceSum 内部使用了正确的 __shfl_down_sync)
     my_val = warpReduceSum(my_val);
 
-    // 每个 Warp 的第 0 个线程负责将其写入全局显存
-    if ((threadIdx.x % warpSize) == 0) {
+    // 修正: 计算当前线程在 Block 内的 1D 线性 ID
+    int tid = threadIdx.x + threadIdx.y * blockDim.x + threadIdx.z * blockDim.x * blockDim.y;
+
+    // 只有每个 Warp 的第 0 个线程 (线性 ID 是 warpSize 的整数倍) 负责写入
+    if ((tid % warpSize) == 0) {
         atomicAdd(d_out, my_val);
     }
 }
@@ -571,4 +571,67 @@ void gpu_l2normhelper_launch(
     GPUManager::getInstance().free_device_memory(d_sum, 1);
 
     f_out = h_sum * dX * dY * dZ;
+}
+
+__global__ void global_interp_amr_kernel(
+    int active_count, int DIM,
+    int* d_active_indices,
+    double* d_XX_0, double* d_XX_1, double* d_XX_2,
+    int ex0, int ex1, int ex2, 
+    double* d_X_0, double* d_X_1, double* d_X_2,
+    double* d_field,
+    int ordn, double SoA_0, double SoA_1, double SoA_2, int Symmetry,
+    int var_idx, int num_var,
+    double* d_shellf
+) {
+    int idx = blockIdx.x * blockDim.x + threadIdx.x;
+    if (idx >= active_count) return;
+
+    // 获取该点在全局 n=1000 数组中的真实索引
+    int j = d_active_indices[idx]; 
+
+    double px = d_XX_0[j];
+    double py = d_XX_1[j];
+    double pz = d_XX_2[j];
+
+    double* d_X_arr[3] = {d_X_0, d_X_1, d_X_2};
+    double SoA_arr[3] = {SoA_0, SoA_1, SoA_2};
+    const int ex[3] = {ex0, ex1, ex2};
+
+    double val = 0.0;
+    // 调用现有的设备端插值核心
+    global_interp_device(
+        ex, d_X_arr[0], d_X_arr[1], d_X_arr[2],
+        d_field, &val,
+        px, py, pz,
+        ordn, SoA_arr, Symmetry
+    );
+
+    // 直接赋值，不再需要 atomicAdd，因为每个点已被 CPU 保证全局唯一认领
+    d_shellf[j * num_var + var_idx] = val;
+}
+
+void gpu_global_interp_amr_launch(
+    cudaStream_t stream,
+    int active_count, int DIM,
+    int* d_active_indices,
+    double* d_XX_0, double* d_XX_1, double* d_XX_2,
+    int shape_0, int shape_1, int shape_2,
+    double* d_X_0, double* d_X_1, double* d_X_2,
+    double* d_field,
+    int ordn, double SoA_0, double SoA_1, double SoA_2, 
+    int Symmetry, int var_idx, int num_var,
+    double* d_shellf
+) {
+    if (active_count == 0) return;
+    int blockSize = 256;
+    int gridSize = (active_count + blockSize - 1) / blockSize;
+
+    global_interp_amr_kernel<<<gridSize, blockSize, 0, stream>>>(
+        active_count, DIM, d_active_indices,
+        d_XX_0, d_XX_1, d_XX_2, 
+        shape_0, shape_1, shape_2, d_X_0, d_X_1, d_X_2, d_field,
+        ordn, SoA_0, SoA_1, SoA_2, Symmetry, 
+        var_idx, num_var, d_shellf
+    );
 }
