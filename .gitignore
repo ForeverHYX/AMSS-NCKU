@@ -4,3 +4,4 @@ profile/
 .vscode/
 baseline/
 log*
+build/
