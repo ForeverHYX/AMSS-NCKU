@@ -3,6 +3,7 @@
 #include <cmath>
 #include "derivatives.h"
 #include "macrodef.h"
+#include "diff_new_gpu.cuh"
 
 // ---------------------------------------------------------
 // CUDA Kernel

@@ -1,3 +1,6 @@
+#ifndef KODISS_GPU_CUH
+#define KODISS_GPU_CUH
+
 #include "kodiss.h"
 
 #include "fmisc.h"
@@ -6,7 +9,7 @@
 #include "macrodef.fh"
 #include <cmath>
 
-__device__ double d_kodis_point(
+__device__ __forceinline__ double d_kodis_point(
     const int ex[3], const double* f,
     const double* X, const double* Y, const double* Z,
     double SYM1, double SYM2, double SYM3,
@@ -57,3 +60,5 @@ __device__ double d_kodis_point(
 
     return rhs_add;
 }
+
+#endif // KODISS_GPU_CUH

@@ -12,7 +12,7 @@ constexpr double ONE = 1.0;
 constexpr double TWO = 2.0;
 constexpr int NO_SYMM = 0, EQ_SYMM = 1, OCTANT = 2, CORRECTSTEP = 1;
 
-__device__ bool is_sommerfeld_boundary(
+__device__ __forceinline__ bool is_sommerfeld_boundary(
     int i, int j, int k,
     int ex0, int ex1, int ex2,
     const double* X, const double* Y, const double* Z,

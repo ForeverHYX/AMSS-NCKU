@@ -1,4 +1,5 @@
-#include "lopsidediff.h"
+#ifndef LOPISIDEDIFF_GPU_CUH
+#define LOPISIDEDIFF_GPU_CUH
 
 #include "fmisc.h"
 #include "fmisc_gpu.cuh"
@@ -10,7 +11,7 @@ __device__ __forceinline__ int d_idx3d(int i, int j, int k, const int ex[3]) {
     return i + ex[0] * (j + ex[1] * k);
 }
 
-__device__ double d_lopsided_point(
+__device__ __forceinline__ double d_lopsided_point(
     const int ex[3], const double* f,
     const double* f_rhs, const double* Sfx, const double* Sfy, const double* Sfz,
     const double* X, const double* Y, const double* Z,
@@ -132,3 +133,5 @@ __device__ double d_lopsided_point(
     (void)f_rhs;
     return rhs_add;
 }
+
+#endif // LOPISIDEDIFF_GPU_CUH

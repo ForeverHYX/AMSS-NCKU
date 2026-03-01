@@ -6,7 +6,7 @@
 
 #include "helper.h"
 #include "fadmquantites_bssn.h"
-#include "misc.h"
+#include "misc_gpu.cuh"
 
 #define PI M_PI
 

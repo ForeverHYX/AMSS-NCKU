@@ -1,3 +1,6 @@
+#ifndef DIFF_NEW_GPU_CUH
+#define DIFF_NEW_GPU_CUH
+
 #include "derivatives.h"
 
 #include "fmisc.h"
@@ -10,7 +13,7 @@
 // ==========================================
 // Device Function: 一阶导数 (4th Order)
 // ==========================================
-__device__ void d_fderivs_point(
+__device__ __forceinline__ void d_fderivs_point(
     const int ex[3], const double* f,
     double* fx, double* fy, double* fz,
     const double* X, const double* Y, const double* Z,
@@ -89,7 +92,7 @@ __device__ void d_fderivs_point(
 // ==========================================
 // Device Function: 二阶导数 (4th Order)
 // ==========================================
-__device__ void d_fdderivs_point(
+__device__ __forceinline__ void d_fdderivs_point(
     const int ex[3], const double* f,
     double* fxx, double* fxy, double* fxz,
     double* fyy, double* fyz, double* fzz,
@@ -191,3 +194,5 @@ __device__ void d_fdderivs_point(
 
     (void)onoff;
 }
+
+#endif // DIFF_NEW_GPU_CUH

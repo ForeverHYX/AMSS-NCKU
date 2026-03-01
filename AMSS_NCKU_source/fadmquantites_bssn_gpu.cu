@@ -7,7 +7,7 @@
 #include "fmisc.h" 
 #include "gpu_manager.h"
 #include "derivatives.h"
-
+#include "diff_new_gpu.cuh"
 
 __global__ void admmass_bssn_kernel(
     int ex0, int ex1, int ex2,

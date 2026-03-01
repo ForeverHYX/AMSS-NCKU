@@ -1,9 +1,9 @@
 #include "bssn_rhs.h"
 
-#include "fmisc.h"
-#include "derivatives.h"
-#include "kodiss.h"
-#include "lopsidediff.h"
+#include "fmisc_gpu.cuh"
+#include "diff_new_gpu.cuh"
+#include "kodiss_gpu.cuh"
+#include "lopsidediff_gpu.cuh"
 #include "gpu_manager.h"
 
 #include <cuda_runtime.h>

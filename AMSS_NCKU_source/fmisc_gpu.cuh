@@ -1,6 +1,17 @@
 #ifndef FMISC_GPU_CUH
 #define FMISC_GPU_CUH
 
+#include <cuda_runtime.h>
+#include <math.h>
+
+#include <iostream>
+#include "gpu_manager.h"
+
+#define MAX_ORDN 6
+#ifndef GPU_DEBUG_PRINT
+#define GPU_DEBUG_PRINT 0
+#endif
+
 __device__ __forceinline__ double d_symmetry_bd_0b(
     int ord, 
     int extc0, int extc1, int extc2,
@@ -22,17 +33,6 @@ __device__ __forceinline__ double d_symmetry_bd_0b(
 
     return func[(k * extc1 + j) * extc0 + i] * factor;
 }
-
-#include <cuda_runtime.h>
-#include <math.h>
-
-#include <iostream>
-#include "gpu_manager.h"
-
-#define MAX_ORDN 6
-#ifndef GPU_DEBUG_PRINT
-#define GPU_DEBUG_PRINT 0
-#endif
 
 __device__ __forceinline__ void gpu_stop() {
 #if GPU_STRICT_STOP

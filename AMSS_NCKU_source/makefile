@@ -58,7 +58,7 @@ initial_guess.o Newton.o Jacobian.o ilucg.o IntPnts0.o IntPnts.o
 
 TwoPunctureFILES = TwoPunctureABE.o TwoPunctures.o 
 
-CUDAFILES = fmisc_gpu.o lopsidediff_gpu.o kodiss_gpu.o diff_new_gpu.o bssn_rhs_gpu.o prolongrestrict_cell_gpu.o gpu_manager.o enforce_algebra_gpu.o sommerfeld_rout_gpu.o rungekutta4_rout_gpu.o fadmquantites_bssn_gpu.o misc_gpu.o MPatch_gpu.o surface_integral_gpu.o getnp4_gpu.o 
+CUDAFILES = fmisc_gpu.o bssn_rhs_gpu.o prolongrestrict_cell_gpu.o gpu_manager.o enforce_algebra_gpu.o sommerfeld_rout_gpu.o rungekutta4_rout_gpu.o fadmquantites_bssn_gpu.o MPatch_gpu.o surface_integral_gpu.o getnp4_gpu.o 
 
 # file dependences
 $(C++FILES) $(C++FILESGPU) $(F90FILES) $(AHFDOBJS) $(CUDAFILES): macrodef.fh
@@ -88,8 +88,8 @@ $(C++FILES) $(C++FILES_GPU) $(AHFDOBJS) $(CUDAFILES): macrodef.h
 
 TwoPunctureFILES: TwoPunctures.h
 
-$(CUDAFILES): lopsidediff.h kodiss.h derivatives.h gpu_manager.h fmisc.h rungekutta4_rout.h sommerfeld_rout.h derivatives.h \
-			  fmisc_gpu.cuh
+$(CUDAFILES): kodiss.h derivatives.h gpu_manager.h fmisc.h rungekutta4_rout.h sommerfeld_rout.h derivatives.h \
+			  fmisc_gpu.cuh diff_new_gpu.cuh misc_gpu.cuh lopsidediff_gpu.cuh kodiss_gpu.cuh 
 
 misc.o : zbesh.o
 

@@ -73,25 +73,4 @@ extern "C"
 					double &, double &, double &, int &, int &);
 }
 
-#include <cuda_runtime.h>
-
-__device__ void d_fderivs_point(
-    const int ex[3], const double* f,
-    double* fx, double* fy, double* fz,
-    const double* X, const double* Y, const double* Z,
-    double SYM1, double SYM2, double SYM3,
-    int symmetry, int onoff,
-    int i, int j, int k
-);
-
-__device__ void d_fdderivs_point(
-    const int ex[3], const double* f,
-    double* fxx, double* fxy, double* fxz,
-    double* fyy, double* fyz, double* fzz,
-    const double* X, const double* Y, const double* Z,
-    double SYM1, double SYM2, double SYM3,
-    int symmetry, int onoff,
-    int i, int j, int k
-);
-
 #endif /* DERIVATIVES */

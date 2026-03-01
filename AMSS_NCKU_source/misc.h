@@ -92,6 +92,6 @@ complex<double> First_Bessel(const complex<double> a,complex<double> x);
     void next2power(long int Nin, long int &Nout, int &M);
     int MYpow2(int i);
 
-    __device__ double wigner_d_device(int l, int m, int s, double costheta);
+    __device__ __forceinline__ double wigner_d_device(int l, int m, int s, double costheta);
 }
 #endif /* MISC_H */

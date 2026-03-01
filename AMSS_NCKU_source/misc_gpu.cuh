@@ -1,3 +1,6 @@
+#ifndef MISC_GPU_CUH
+#define MISC_GPU_CUH
+
 #include "misc.h"
 
 #include <cuda_runtime.h>
@@ -10,7 +13,7 @@ __constant__ double d_fact[20] = {
     355687428096000.0, 6402373705728000.0, 121645100408832000.0
 };
 
-__device__ double misc::wigner_d_device(int l, int m, int s, double costheta) {
+__device__ __forceinline__ double misc::wigner_d_device(int l, int m, int s, double costheta) {
     int C1 = max(0, m - s);
     int C2 = min(l + m, l - s);
     double vv = 0.0;
@@ -28,3 +31,5 @@ __device__ double misc::wigner_d_device(int l, int m, int s, double costheta) {
     
     return vv * sqrt(d_fact[l + m] * d_fact[l - m] * d_fact[l + s] * d_fact[l - s]);
 }
+
+#endif // MISC_GPU_CUH
