@@ -65,7 +65,7 @@ __device__ __forceinline__ void d_fderivs_point(
 
     // Helper lambda for symmetry boundary access
     const auto fh = [&](int ii, int jj, int kk) -> double {
-        return d_symmetry_bd_1b(2, ex, f, ii + 1, jj + 1, kk + 1, SoA);
+        return d_symmetry_bd_0b(2, ex[0], ex[1], ex[2], f, ii, jj, kk, SoA[0], SoA[1], SoA[2]);
     };
     
     if (i + 2 <= imax && i - 2 >= imin &&
@@ -149,7 +149,7 @@ __device__ __forceinline__ void d_fdderivs_point(
     const double Fdydz = F1o144 / (dY * dZ);
 
     const auto fh = [&](int ii, int jj, int kk) -> double {
-        return d_symmetry_bd_1b(2, ex, f, ii + 1, jj + 1, kk + 1, SoA);
+        return d_symmetry_bd_0b(2, ex[0], ex[1], ex[2], f, ii, jj, kk, SoA[0], SoA[1], SoA[2]);
     };
     
     // --- 4th Order Accuracy ---

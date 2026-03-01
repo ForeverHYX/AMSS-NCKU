@@ -39,7 +39,7 @@ __device__ __forceinline__ double d_kodis_point(
     double SoA[3] = {SYM1, SYM2, SYM3};
 
     const auto fh = [&](int ii, int jj, int kk) -> double {
-        return d_symmetry_bd_1b(3, ex, f, ii + 1, jj + 1, kk + 1, SoA);
+        return d_symmetry_bd_0b(2, ex[0], ex[1], ex[2], f, ii, jj, kk, SoA[0], SoA[1], SoA[2]);
     };
 
     double rhs_add = 0.0;
