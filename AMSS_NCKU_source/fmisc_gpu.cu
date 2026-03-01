@@ -153,66 +153,189 @@ __device__ bool d_decide3d(
 	return false;
 }
 
+// __device__ void global_interp_device(
+// 	const int* ex, const double* X, const double* Y, const double* Z,
+// 	const double* f, double* f_int,
+// 	double x1, double y1, double z1,
+// 	int ORDN, const double* SoA, int symmetry
+// ) {
+// 	if (ORDN > MAX_ORDN) { f_int[0] = NAN; gpu_stop(); return; }
+
+// 	const int NO_SYMM = 0, EQUATORIAL = 1, OCTANT = 2;
+// 	int imin = 1, jmin = 1, kmin = 1;
+
+// 	double dX = X_at_1b(X, imin + 1) - X_at_1b(X, imin);
+// 	double dY = X_at_1b(Y, jmin + 1) - X_at_1b(Y, jmin);
+// 	double dZ = X_at_1b(Z, kmin + 1) - X_at_1b(Z, kmin);
+
+// 	double x1a[MAX_ORDN];
+// 	for (int j = 0; j < ORDN; ++j) x1a[j] = (double)j;
+
+// 	int cxI[3];
+// 	cxI[0] = (int)((x1 - X_at_1b(X, 1)) / dX + 0.4) + 1;
+// 	cxI[1] = (int)((y1 - X_at_1b(Y, 1)) / dY + 0.4) + 1;
+// 	cxI[2] = (int)((z1 - X_at_1b(Z, 1)) / dZ + 0.4) + 1;
+
+// 	int cxB[3], cxT[3], cmin[3], cmax[3];
+// 	for (int m = 0; m < 3; ++m) {
+// 		cxB[m] = cxI[m] - ORDN / 2 + 1;
+// 		cxT[m] = cxB[m] + ORDN - 1;
+// 		cmin[m] = 1;
+// 		cmax[m] = ex[m];
+// 	}
+// 	if (symmetry == OCTANT && fabs(X_at_1b(X, 1)) < dX) cmin[0] = -ORDN / 2 + 1;
+// 	if (symmetry == OCTANT && fabs(X_at_1b(Y, 1)) < dY) cmin[1] = -ORDN / 2 + 1;
+// 	if (symmetry != NO_SYMM && fabs(X_at_1b(Z, 1)) < dZ) cmin[2] = -ORDN / 2 + 1;
+
+// 	for (int m = 0; m < 3; ++m) {
+// 		if (cxB[m] < cmin[m]) { cxB[m] = cmin[m]; cxT[m] = cxB[m] + ORDN - 1; }
+// 		if (cxT[m] > cmax[m]) { cxT[m] = cmax[m]; cxB[m] = cxT[m] + 1 - ORDN; }
+// 	}
+
+// 	double cx[3];
+// 	cx[0] = (cxB[0] > 0) ? (x1 - X_at_1b(X, cxB[0])) / dX : (x1 + X_at_1b(X, 1 - cxB[0])) / dX;
+// 	cx[1] = (cxB[1] > 0) ? (y1 - X_at_1b(Y, cxB[1])) / dY : (y1 + X_at_1b(Y, 1 - cxB[1])) / dY;
+// 	cx[2] = (cxB[2] > 0) ? (z1 - X_at_1b(Z, cxB[2])) / dZ : (z1 + X_at_1b(Z, 1 - cxB[2])) / dZ;
+
+// 	double ya[MAX_ORDN * MAX_ORDN * MAX_ORDN];
+// 	if (d_decide3d(ex, f, f, cxB, cxT, SoA, ya, ORDN, symmetry)) {
+// #if GPU_DEBUG_PRINT
+//         printf("global_interp position: %f %f %f\n", x1, y1, z1);
+//         printf("data range: %f %f %f %f %f %f\n",
+//                X_at_1b(X, 1), X_at_1b(X, ex[0]),
+//                X_at_1b(Y, 1), X_at_1b(Y, ex[1]),
+//                X_at_1b(Z, 1), X_at_1b(Z, ex[2]));
+// #endif
+// 		f_int[0] = NAN;
+// 		gpu_stop();
+// 		return;
+// 	}
+
+// 	double ddy = 0.0;
+// 	d_polin3_1b(x1a, x1a, x1a, ya, cx[0], cx[1], cx[2], f_int[0], ddy, ORDN);
+// }
+
+__device__ __forceinline__ double fetch_f_sym(
+    const double* f, const int ex[3], 
+    int gx, int gy, int gz, 
+    const double SoA[3]) 
+{
+    double sign = 1.0;
+    
+    // 处理对称性导致的负索引跨界
+    if (gx < 1) { gx = 1 - gx; sign *= SoA[0]; }
+    if (gy < 1) { gy = 1 - gy; sign *= SoA[1]; }
+    if (gz < 1) { gz = 1 - gz; sign *= SoA[2]; }
+    
+    // 越界检查 (对应原 d_decide3d 中的 gont = true)
+    if (gx > ex[0] || gy > ex[1] || gz > ex[2]) {
+        return NAN; 
+    }
+    
+    return sign * f_at_1b(f, ex, gx, gy, gz);
+}
+
+// ---------------------------------------------------------
+// 计算标准均匀网格 [0, 1, ..., ordn-1] 上的拉格朗日插值权重
+// ---------------------------------------------------------
+__device__ void compute_lagrange_weights(double x, int ordn, double* w) {
+    for (int i = 0; i < ordn; ++i) {
+        double num = 1.0;
+        double den = 1.0;
+        for (int j = 0; j < ordn; ++j) {
+            if (i != j) {
+                num *= (x - (double)j);
+                den *= (double)(i - j);
+            }
+        }
+        w[i] = num / den;
+    }
+}
+
+// ---------------------------------------------------------
+// 优化后的核心设备端插值函数
+// ---------------------------------------------------------
 __device__ void global_interp_device(
-	const int* ex, const double* X, const double* Y, const double* Z,
-	const double* f, double* f_int,
-	double x1, double y1, double z1,
-	int ORDN, const double* SoA, int symmetry
+    const int* ex, const double* X, const double* Y, const double* Z,
+    const double* f, double* f_int,
+    double x1, double y1, double z1,
+    int ORDN, const double* SoA, int symmetry
 ) {
-	if (ORDN > MAX_ORDN) { f_int[0] = NAN; gpu_stop(); return; }
+    if (ORDN > MAX_ORDN) { f_int[0] = NAN; gpu_stop(); return; }
 
-	const int NO_SYMM = 0, EQUATORIAL = 1, OCTANT = 2;
-	int imin = 1, jmin = 1, kmin = 1;
+    const int NO_SYMM = 0, EQUATORIAL = 1, OCTANT = 2;
+    int imin = 1, jmin = 1, kmin = 1;
 
-	double dX = X_at_1b(X, imin + 1) - X_at_1b(X, imin);
-	double dY = X_at_1b(Y, jmin + 1) - X_at_1b(Y, jmin);
-	double dZ = X_at_1b(Z, kmin + 1) - X_at_1b(Z, kmin);
+    // 建议：如果 dX, dY, dZ 是全局一致的，应在 CPU 算好 1.0/dX 传进来，用乘法代替除法
+    double dX = X_at_1b(X, imin + 1) - X_at_1b(X, imin);
+    double dY = X_at_1b(Y, jmin + 1) - X_at_1b(Y, jmin);
+    double dZ = X_at_1b(Z, kmin + 1) - X_at_1b(Z, kmin);
 
-	double x1a[MAX_ORDN];
-	for (int j = 0; j < ORDN; ++j) x1a[j] = (double)j;
+    // 寻找最近的网格点索引
+    int cxI[3];
+    cxI[0] = (int)((x1 - X_at_1b(X, 1)) / dX + 0.4) + 1;
+    cxI[1] = (int)((y1 - X_at_1b(Y, 1)) / dY + 0.4) + 1;
+    cxI[2] = (int)((z1 - X_at_1b(Z, 1)) / dZ + 0.4) + 1;
 
-	int cxI[3];
-	cxI[0] = (int)((x1 - X_at_1b(X, 1)) / dX + 0.4) + 1;
-	cxI[1] = (int)((y1 - X_at_1b(Y, 1)) / dY + 0.4) + 1;
-	cxI[2] = (int)((z1 - X_at_1b(Z, 1)) / dZ + 0.4) + 1;
+    // 确定插值窗口的起止范围
+    int cxB[3], cxT[3], cmin[3], cmax[3];
+    for (int m = 0; m < 3; ++m) {
+        cxB[m] = cxI[m] - ORDN / 2 + 1;
+        cxT[m] = cxB[m] + ORDN - 1;
+        cmin[m] = 1;
+        cmax[m] = ex[m];
+    }
+    
+    if (symmetry == OCTANT && fabs(X_at_1b(X, 1)) < dX) cmin[0] = -ORDN / 2 + 1;
+    if (symmetry == OCTANT && fabs(X_at_1b(Y, 1)) < dY) cmin[1] = -ORDN / 2 + 1;
+    if (symmetry != NO_SYMM && fabs(X_at_1b(Z, 1)) < dZ) cmin[2] = -ORDN / 2 + 1;
 
-	int cxB[3], cxT[3], cmin[3], cmax[3];
-	for (int m = 0; m < 3; ++m) {
-		cxB[m] = cxI[m] - ORDN / 2 + 1;
-		cxT[m] = cxB[m] + ORDN - 1;
-		cmin[m] = 1;
-		cmax[m] = ex[m];
-	}
-	if (symmetry == OCTANT && fabs(X_at_1b(X, 1)) < dX) cmin[0] = -ORDN / 2 + 1;
-	if (symmetry == OCTANT && fabs(X_at_1b(Y, 1)) < dY) cmin[1] = -ORDN / 2 + 1;
-	if (symmetry != NO_SYMM && fabs(X_at_1b(Z, 1)) < dZ) cmin[2] = -ORDN / 2 + 1;
+    // 边界偏移修正
+    for (int m = 0; m < 3; ++m) {
+        if (cxB[m] < cmin[m]) { cxB[m] = cmin[m]; cxT[m] = cxB[m] + ORDN - 1; }
+        if (cxT[m] > cmax[m]) { cxT[m] = cmax[m]; cxB[m] = cxT[m] + 1 - ORDN; }
+    }
 
-	for (int m = 0; m < 3; ++m) {
-		if (cxB[m] < cmin[m]) { cxB[m] = cmin[m]; cxT[m] = cxB[m] + ORDN - 1; }
-		if (cxT[m] > cmax[m]) { cxT[m] = cmax[m]; cxB[m] = cxT[m] + 1 - ORDN; }
-	}
+    // 计算相对于插值窗口起始点的局部坐标
+    double cx[3];
+    cx[0] = (cxB[0] > 0) ? (x1 - X_at_1b(X, cxB[0])) / dX : (x1 + X_at_1b(X, 1 - cxB[0])) / dX;
+    cx[1] = (cxB[1] > 0) ? (y1 - X_at_1b(Y, cxB[1])) / dY : (y1 + X_at_1b(Y, 1 - cxB[1])) / dY;
+    cx[2] = (cxB[2] > 0) ? (z1 - X_at_1b(Z, cxB[2])) / dZ : (z1 + X_at_1b(Z, 1 - cxB[2])) / dZ;
 
-	double cx[3];
-	cx[0] = (cxB[0] > 0) ? (x1 - X_at_1b(X, cxB[0])) / dX : (x1 + X_at_1b(X, 1 - cxB[0])) / dX;
-	cx[1] = (cxB[1] > 0) ? (y1 - X_at_1b(Y, cxB[1])) / dY : (y1 + X_at_1b(Y, 1 - cxB[1])) / dY;
-	cx[2] = (cxB[2] > 0) ? (z1 - X_at_1b(Z, cxB[2])) / dZ : (z1 + X_at_1b(Z, 1 - cxB[2])) / dZ;
+    // 预计算三个方向的 1D 拉格朗日权重 (只占用极少量寄存器)
+    double wx[MAX_ORDN], wy[MAX_ORDN], wz[MAX_ORDN];
+    compute_lagrange_weights(cx[0], ORDN, wx);
+    compute_lagrange_weights(cx[1], ORDN, wy);
+    compute_lagrange_weights(cx[2], ORDN, wz);
 
-	double ya[MAX_ORDN * MAX_ORDN * MAX_ORDN];
-	if (d_decide3d(ex, f, f, cxB, cxT, SoA, ya, ORDN, symmetry)) {
+    // 三重循环：直接计算分离权重的乘积并累加
+    double val = 0.0;
+    for (int k = 0; k < ORDN; ++k) {
+        int gz = cxB[2] + k;
+        for (int j = 0; j < ORDN; ++j) {
+            int gy = cxB[1] + j;
+            for (int i = 0; i < ORDN; ++i) {
+                int gx = cxB[0] + i;
+                
+                // 动态拉取数据并处理对称性
+                double f_val = fetch_f_sym(f, ex, gx, gy, gz, SoA);
+                
+                if (isnan(f_val)) {
 #if GPU_DEBUG_PRINT
-        printf("global_interp position: %f %f %f\n", x1, y1, z1);
-        printf("data range: %f %f %f %f %f %f\n",
-               X_at_1b(X, 1), X_at_1b(X, ex[0]),
-               X_at_1b(Y, 1), X_at_1b(Y, ex[1]),
-               X_at_1b(Z, 1), X_at_1b(Z, ex[2]));
+                    printf("global_interp error at global idx: %d %d %d\n", gx, gy, gz);
 #endif
-		f_int[0] = NAN;
-		gpu_stop();
-		return;
-	}
+                    f_int[0] = NAN;
+                    gpu_stop();
+                    return;
+                }
+                
+                val += wx[i] * wy[j] * wz[k] * f_val;
+            }
+        }
+    }
 
-	double ddy = 0.0;
-	d_polin3_1b(x1a, x1a, x1a, ya, cx[0], cx[1], cx[2], f_int[0], ddy, ORDN);
+    // 输出结果，同时去掉了对 `dy` 的计算（如果你不需要导数）
+    f_int[0] = val;
 }
 
 __device__ double d_symmetry_bd_1b(
