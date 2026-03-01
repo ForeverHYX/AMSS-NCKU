@@ -27,7 +27,7 @@ constexpr double eta = 2.0;
 constexpr double F8 = 8.0;
 constexpr double F16 = 16.0;
 
-static __global__ void rhs_kernel(
+__global__ void rhs_kernel_std(
     int ex0, int ex1, int ex2, double T, double* X, double* Y, double* Z,
     double* chi, double* trK,
     double* dxx, double* gxy, double* gxz,
@@ -860,7 +860,7 @@ void gpu_compute_rhs_bssn_launch_std( // launch kernel with device pointers
     );
 
     // 1. Kernel 1: Derivatives & Connection Coefficients
-    rhs_kernel<<<grid, block, 0, stream>>>(
+    rhs_kernel_std<<<grid, block, 0, stream>>>(
         ex[0], ex[1], ex[2], T, d_X, d_Y, d_Z,
         d_chi, d_trK,
         d_dxx, d_gxy, d_gxz,

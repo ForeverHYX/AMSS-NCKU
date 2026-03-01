@@ -7,7 +7,7 @@ echo ">>> Running CMake..."
 cmake -B build
 
 echo ">>> Compiling Benchmark..."
-cmake --build build
+cmake --build build -j
 
 echo ">>> Running Benchmark..."
 cd build
