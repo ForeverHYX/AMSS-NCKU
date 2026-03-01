@@ -11,9 +11,10 @@ struct GPUManager::Impl {
     std::unordered_map<size_t, std::vector<double*>> memory_pool;
     std::mutex pool_mutex;
 
-    static constexpr int NUM_STREAMS = 4; // 强烈建议开多个流以支持并发
+    static constexpr int NUM_STREAMS = 16; // 强烈建议开多个流以支持并发
     cudaStream_t stream_pool[NUM_STREAMS];
     std::atomic<unsigned int> stream_idx{0};
+    cudaStream_t memory_stream;
 };
 
 // 单例获取
@@ -27,6 +28,7 @@ GPUManager::GPUManager() : pimpl(new Impl()) {
     for (int i = 0; i < Impl::NUM_STREAMS; ++i) {
         CUDA_CHECK(cudaStreamCreate(&pimpl->stream_pool[i]));
     }
+    CUDA_CHECK(cudaStreamCreate(&pimpl->memory_stream));
 }
 
 GPUManager::~GPUManager() {
@@ -34,39 +36,26 @@ GPUManager::~GPUManager() {
     for (int i = 0; i < Impl::NUM_STREAMS; ++i) {
         cudaStreamDestroy(pimpl->stream_pool[i]);
     }
+    cudaStreamDestroy(pimpl->memory_stream);
     delete pimpl;
 }
 
 // 显存池操作路由到 pimpl
 double* GPUManager::allocate_device_memory(size_t num_elements) {
-    // std::lock_guard<std::mutex> lock(pimpl->pool_mutex);
-    // if (pimpl->memory_pool.find(num_elements) != pimpl->memory_pool.end() && 
-    //     !pimpl->memory_pool[num_elements].empty()) {
-    //     double* d_ptr = pimpl->memory_pool[num_elements].back();
-    //     pimpl->memory_pool[num_elements].pop_back();
-    //     // CUDA_CHECK(cudaMemset(d_ptr, 0, num_elements * sizeof(double)));
-    //     return d_ptr;
-    // }
     double* d_ptr = nullptr;
-    CUDA_CHECK(cudaMalloc((void**)&d_ptr, num_elements * sizeof(double)));
-    CUDA_CHECK(cudaMemset(d_ptr, 0, num_elements * sizeof(double)));
+    CUDA_CHECK(cudaMallocAsync((void**)&d_ptr, num_elements * sizeof(double), pimpl->memory_stream));
+    CUDA_CHECK(cudaMemsetAsync(d_ptr, 0, num_elements * sizeof(double), pimpl->memory_stream));
+    CUDA_CHECK(cudaStreamSynchronize(pimpl->memory_stream));
     return d_ptr;
 }
 
 void GPUManager::free_device_memory(double* d_ptr, size_t num_elements) {
     if (d_ptr == nullptr) return;
-    // std::lock_guard<std::mutex> lock(pimpl->pool_mutex);
-    // pimpl->memory_pool[num_elements].push_back(d_ptr);
-    CUDA_CHECK(cudaFree(d_ptr));
+    CUDA_CHECK(cudaFreeAsync(d_ptr, pimpl->memory_stream));
+    CUDA_CHECK(cudaStreamSynchronize(pimpl->memory_stream));
 }
 
 void GPUManager::clear_pool() {
-    // std::lock_guard<std::mutex> lock(pimpl->pool_mutex);
-    // for (auto& pair : pimpl->memory_pool) {
-    //     for (double* d_ptr : pair.second) {
-    //         cudaFree(d_ptr);
-    //     }
-    // }
     pimpl->memory_pool.clear();
 }
 
@@ -80,9 +69,11 @@ void GPUManager::synchronize_all() {
 }
 
 void GPUManager::sync_to_gpu(const double* h_ptr, double* d_ptr, size_t num_elements) {
-    CUDA_CHECK(cudaMemcpy(d_ptr, h_ptr, num_elements * sizeof(double), cudaMemcpyHostToDevice));
+    CUDA_CHECK(cudaMemcpyAsync(d_ptr, h_ptr, num_elements * sizeof(double), cudaMemcpyHostToDevice, getInstance().pimpl->memory_stream));
+    CUDA_CHECK(cudaStreamSynchronize(getInstance().pimpl->memory_stream));
 }
 
 void GPUManager::sync_to_cpu(double* h_ptr, const double* d_ptr, size_t num_elements) {
-    CUDA_CHECK(cudaMemcpy(h_ptr, d_ptr, num_elements * sizeof(double), cudaMemcpyDeviceToHost));
+    CUDA_CHECK(cudaMemcpyAsync(h_ptr, d_ptr, num_elements * sizeof(double), cudaMemcpyDeviceToHost, getInstance().pimpl->memory_stream));
+    CUDA_CHECK(cudaStreamSynchronize(getInstance().pimpl->memory_stream));
 }

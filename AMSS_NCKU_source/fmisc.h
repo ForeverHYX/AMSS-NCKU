@@ -264,30 +264,6 @@ extern "C"
 
 #include <cuda_runtime.h>
 
-__device__ void global_interp_device(
-	const int* ex, const double* X, const double* Y, const double* Z,
-	const double* f, double* f_int,
-	double x1, double y1, double z1,
-	int ORDN, const double* SoA, int symmetry
-);
-
-__device__ double d_symmetry_bd_1b(
-	int ord, const int extc[3], const double* func,
-	int i1b, int j1b, int k1b, const double SoA[3]
-);
-
-__device__ void d_polin3_1b(
-	const double* x1a, const double* x2a, const double* x3a,
-	const double* ya, double x1, double x2, double x3,
-	double& y, double& dy, int ordn
-);
-
-__device__ bool d_decide3d(
-	const int ex[3], const double* f, const double* fpi,
-	const int cxB[3], const int cxT[3], const double SoA[3],
-	double* ya, int ordn, int Symmetry
-);
-
 void gpu_lowerboundset_launch(
     cudaStream_t &stream,
     int ex[3],

@@ -1,6 +1,7 @@
 #include "derivatives.h"
 
 #include "fmisc.h"
+#include "fmisc_gpu.cuh"
 
 #include "macrodef.fh"
 #include <cmath>

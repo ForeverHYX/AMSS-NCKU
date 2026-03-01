@@ -4,6 +4,7 @@
 
 #include "gpu_manager.h"
 #include "fmisc.h"
+#include "fmisc_gpu.cuh"
 
 constexpr int ORDN = 6;
 constexpr double ZEO = 0.0;
