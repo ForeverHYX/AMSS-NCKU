@@ -2778,7 +2778,7 @@ void bssn_class::compute_Porg_rhs(double **BH_PS, double **BH_RHS, var *forx, va
         GPUManager::getInstance().sync_to_gpu(&h_pox[2], d_pox[2], 1);
 
         int lev = ilev;
-
+        GPUManager::getInstance().synchronize_memory();
         while (lev >= 0) {
             bool found = Parallel::PatList_Interp_Points_GPU(GPUManager::getInstance().get_stream(), GH->PatL[lev], DG_List, 1, d_pox, d_shellf, Symmetry);
             if (found) {
@@ -2793,18 +2793,20 @@ void bssn_class::compute_Porg_rhs(double **BH_PS, double **BH_RHS, var *forx, va
         }
         else {
             GPUManager::getInstance().sync_to_cpu(h_shellf, d_shellf, InList);
+            GPUManager::getInstance().synchronize_memory();
             BH_RHS[n][0] = -h_shellf[0];
             BH_RHS[n][1] = -h_shellf[1];
             BH_RHS[n][2] = -h_shellf[2];
         }
     }
 
-    // 清理资源
-    DG_List->clearList();
     for (int i = 0; i < 3; i++) {
         GPUManager::getInstance().free_device_memory(d_pox[i], 1);
     }
     GPUManager::getInstance().free_device_memory(d_shellf, InList);
+    // 清理资源
+    DG_List->clearList();
+    GPUManager::getInstance().synchronize_memory();
 }
 // void bssn_class::compute_Porg_rhs(double **BH_PS, double **BH_RHS, var *forx, var *fory, var *forz, int ilev)
 // {
@@ -3301,7 +3303,7 @@ void bssn_class::Interp_Constraint(bool infg)
             }
         }
     }
-
+    GPUManager::getInstance().synchronize_memory();
     // 3. 遍历 Block 并针对活跃点派发 GPU 任务
     std::vector<int*> d_indices_to_free;
 
@@ -3324,8 +3326,8 @@ void bssn_class::Interp_Constraint(bool infg)
                     // 仅当此 Block 确实覆盖了目标点时，才触发 CUDA 拷贝和核函数
                     if (active_count > 0) {
                         int* d_active_indices;
-                        d_active_indices = GPUManager::getInstance().allocate_device_memory<int>(active_count);
-                        GPUManager::getInstance().sync_to_gpu(active_points.data(), d_active_indices, active_count);
+                        d_active_indices = GPUManager::getInstance().allocate_device_memory<int>(active_count, BP->stream);
+                        GPUManager::getInstance().sync_to_gpu(active_points.data(), d_active_indices, active_count, BP->stream);
                         d_indices_to_free.push_back(d_active_indices);
 
                         varl = ConstraintList;
@@ -3389,6 +3391,7 @@ void bssn_class::Interp_Constraint(bool infg)
     GPUManager::getInstance().free_device_memory(d_shellf, n * InList * sizeof(double));
     delete[] shellf; delete[] global_shellf;
     delete[] x1; delete[] y1; delete[] z1;
+    GPUManager::getInstance().synchronize_memory();
 }
 // void bssn_class::Interp_Constraint(bool infg)
 // {
@@ -3564,6 +3567,7 @@ void bssn_class::Compute_Constraint()
                     {
                         cg->move_to_gpu(StateList);
                         cg->move_to_gpu(MiscList);
+                        GPUManager::getInstance().synchronize_memory();
 
                         gpu_compute_rhs_bssn_launch(
                             cg->stream,
@@ -3602,9 +3606,10 @@ void bssn_class::Compute_Constraint()
                             cg->d_fgfs[Cons_Gx->sgfn], cg->d_fgfs[Cons_Gy->sgfn], cg->d_fgfs[Cons_Gz->sgfn],
                             Symmetry, lev, ndeps, pre
                         );
-                        GPUManager::getInstance().synchronize_all();
                         cg->move_to_cpu(RHSList);
                         cg->move_to_cpu(ConstraintList);
+                        GPUManager::getInstance().synchronize_all();
+                        GPUManager::getInstance().synchronize_memory();
                     }
                     if (BP == Pp->data->ble)
                         break;
@@ -3614,6 +3619,7 @@ void bssn_class::Compute_Constraint()
             }
         }
         Parallel::Sync(GH->PatL[lev], ConstraintList, Symmetry);
+        Parallel::Sync_GPU(GH->PatL[lev], ConstraintList, Symmetry);
     }
     // prolong restrict constraint quantities
     for (lev = GH->levels - 1; lev > 0; lev--)

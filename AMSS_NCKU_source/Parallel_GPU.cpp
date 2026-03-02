@@ -228,6 +228,7 @@ void Parallel::gpu_transfer(
         if (node == myrank) { // 同节点 D2D 直接拷贝，不涉及 MPI
             if ((length = gpu_data_packer(0, src[myrank], dst[myrank], node, PACK, VarList1, VarList2, Symmetry))) {
                 rec_data_d[node] = GPUManager::getInstance().allocate_device_memory<double>(length);
+                GPUManager::getInstance().synchronize_memory();
                 gpu_data_packer(rec_data_d[node], src[myrank], dst[myrank], node, PACK, VarList1, VarList2, Symmetry);
             }
         }
@@ -236,13 +237,13 @@ void Parallel::gpu_transfer(
             if ((length = gpu_data_packer(0, src[myrank], dst[myrank], node, PACK, VarList1, VarList2, Symmetry))) {
                 send_data_d[node] = GPUManager::getInstance().allocate_device_memory<double>(length);
                 send_data_h[node] = new double[length]; // 分配 CPU 内存
-
+                GPUManager::getInstance().synchronize_memory();
                 // 1. GPU 内部完成打包
                 gpu_data_packer(send_data_d[node], src[myrank], dst[myrank], node, PACK, VarList1, VarList2, Symmetry);
                 
                 // 2. D2H: 将打包好的连续数组拷回 CPU
                 GPUManager::getInstance().sync_to_cpu(send_data_h[node], send_data_d[node], length);
-                
+                GPUManager::getInstance().synchronize_memory();
                 // 3. 将 CPU 指针交给 MPI (绝对安全)
                 MPI_Isend((void *)send_data_h[node], length, MPI_DOUBLE, node, 1, MPI_COMM_WORLD, reqs + req_no++);
             }
@@ -250,7 +251,7 @@ void Parallel::gpu_transfer(
             if ((length = gpu_data_packer(0, src[node], dst[node], node, UNPACK, VarList1, VarList2, Symmetry))) {
                 rec_data_d[node] = GPUManager::getInstance().allocate_device_memory<double>(length);
                 rec_data_h[node] = new double[length]; // 分配 CPU 内存
-                
+                GPUManager::getInstance().synchronize_memory();
                 // 接收到 CPU 内存
                 MPI_Irecv((void *)rec_data_h[node], length, MPI_DOUBLE, node, 1, MPI_COMM_WORLD, reqs + req_no++);
             }
@@ -274,7 +275,7 @@ void Parallel::gpu_transfer(
                 
                 // 1. H2D: 将收到的 CPU 数据推上 GPU
                 GPUManager::getInstance().sync_to_gpu(rec_data_h[node], rec_data_d[node], length);
-                
+                GPUManager::getInstance().synchronize_memory();
                 // 2. GPU 内部完成解包映射
                 gpu_data_packer(rec_data_d[node], src[node], dst[node], node, UNPACK, VarList1, VarList2, Symmetry);
             }
@@ -295,6 +296,7 @@ void Parallel::gpu_transfer(
     delete[] rec_data_d;
     delete[] send_data_h;
     delete[] rec_data_h;
+    GPUManager::getInstance().synchronize_memory();
 }
 #endif
 
@@ -575,8 +577,8 @@ bool Parallel::PatList_Interp_Points_GPU(
         return false;
     }
 
-    double *d_local_shellf = GPUManager::getInstance().allocate_device_memory<double>(NN * num_var);
-    int *d_local_weight = GPUManager::getInstance().allocate_device_memory<int>(NN);
+    double *d_local_shellf = GPUManager::getInstance().allocate_device_memory<double>(NN * num_var, stream);
+    int *d_local_weight = GPUManager::getInstance().allocate_device_memory<int>(NN, stream);
 
     int ordn = 2 * ghost_width;
 
@@ -626,36 +628,36 @@ bool Parallel::PatList_Interp_Points_GPU(
         PL = PL->next;
     }
 
-    GPUManager::getInstance().synchronize_all();
-
 #if MPI_CUDA_AWARE
     // TODO
 #else
     double *h_local_shellf = new double[NN * num_var];
     int    *h_local_weight = new int[NN];
-    GPUManager::getInstance().sync_to_cpu(h_local_shellf, d_local_shellf, NN * num_var);
-    GPUManager::getInstance().sync_to_cpu(h_local_weight, d_local_weight, NN);
+    GPUManager::getInstance().sync_to_cpu(h_local_shellf, d_local_shellf, NN * num_var, stream);
+    GPUManager::getInstance().sync_to_cpu(h_local_weight, d_local_weight, NN, stream);
 
     double *h_global_shellf = new double[NN * num_var];
     int    *h_global_weight = new int[NN];
-
+    GPUManager::synchronize_stream(stream);
     MPI_Allreduce(h_local_shellf, h_global_shellf, NN * num_var, MPI_DOUBLE, MPI_SUM, MPI_COMM_WORLD);
     MPI_Allreduce(h_local_weight, h_global_weight, NN, MPI_INT, MPI_SUM, MPI_COMM_WORLD);
 #endif
-    GPUManager::getInstance().sync_to_gpu(h_global_shellf, d_Shellf, NN * num_var);
+    GPUManager::getInstance().sync_to_gpu(h_global_shellf, d_Shellf, NN * num_var, stream);
     
-    int *d_global_weight = GPUManager::getInstance().allocate_device_memory<int>(NN);
-    GPUManager::getInstance().sync_to_gpu(h_global_weight, d_global_weight, NN);
+    int *d_global_weight = GPUManager::getInstance().allocate_device_memory<int>(NN, stream);
+    GPUManager::getInstance().sync_to_gpu(h_global_weight, d_global_weight, NN, stream);
 
-    int *d_err_flag = GPUManager::getInstance().allocate_device_memory<int>(1);
+    int *d_err_flag = GPUManager::getInstance().allocate_device_memory<int>(1, stream);
 
     gpu_normalize_shellf_launch(stream, NN, num_var, d_Shellf, d_global_weight, d_err_flag);
-    GPUManager::getInstance().synchronize_all();
 
     int h_err_flag = 0;
-    GPUManager::getInstance().sync_to_cpu(&h_err_flag, d_err_flag, 1);
+    GPUManager::getInstance().sync_to_cpu(&h_err_flag, d_err_flag, 1, stream);
 
     bool success = true;
+
+    GPUManager::synchronize_stream(stream);
+
     if (h_err_flag > 0) {
         checkpatchlist(PatL, false);
         success = false;
@@ -665,11 +667,11 @@ bool Parallel::PatList_Interp_Points_GPU(
     delete[] h_local_weight;
     delete[] h_global_shellf; 
     delete[] h_global_weight;
-    GPUManager::getInstance().free_device_memory(d_local_shellf, NN * num_var);
-    GPUManager::getInstance().free_device_memory(d_local_weight, NN);
-    GPUManager::getInstance().free_device_memory(d_global_weight, NN);
-    GPUManager::getInstance().free_device_memory(d_err_flag, 1);
-
+    GPUManager::getInstance().free_device_memory(d_local_shellf, NN * num_var, stream);
+    GPUManager::getInstance().free_device_memory(d_local_weight, NN, stream);
+    GPUManager::getInstance().free_device_memory(d_global_weight, NN, stream);
+    GPUManager::getInstance().free_device_memory(d_err_flag, 1, stream);
+    GPUManager::synchronize_stream(stream);
     return success;
 }
 

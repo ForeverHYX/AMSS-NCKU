@@ -345,6 +345,8 @@ void Patch::Interp_Points(MyList<var> *VarList,
 
     int *d_weight = GPUManager::getInstance().allocate_device_memory<int>(NN);
 
+	GPUManager::getInstance().synchronize_memory();
+
     // 2. Block-Centric 遍历：以 Block 为单位启动 Kernel
     MyList<Block> *Bp = blb;
     while (Bp)
@@ -398,7 +400,7 @@ void Patch::Interp_Points(MyList<var> *VarList,
 
     // 4. 清理 GPU 临时内存
     for (int i = 0; i < dim; i++) {
-        if (d_XX[i]) GPUManager::getInstance().free_device_memory(d_XX[i], NN);
+        GPUManager::getInstance().free_device_memory(d_XX[i], NN);
     }
     GPUManager::getInstance().free_device_memory(d_shellf, NN * num_var);
     GPUManager::getInstance().free_device_memory(d_weight, NN);
@@ -483,6 +485,7 @@ void Patch::Interp_Points(MyList<var> *VarList,
     delete[] DH;
     delete[] llb;
     delete[] uub;
+	GPUManager::getInstance().synchronize_memory();
 }
 
 // void Patch::Interp_Points(MyList<var> *VarList,

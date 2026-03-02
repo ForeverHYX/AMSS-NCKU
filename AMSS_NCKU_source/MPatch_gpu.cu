@@ -69,7 +69,7 @@ void Patch::Interp_Points_GPU(
 
     double *d_local_shellf = GPUManager::getInstance().allocate_device_memory<double>(NN * num_var);
     int *d_local_weight = GPUManager::getInstance().allocate_device_memory<int>(NN);
-
+    GPUManager::getInstance().synchronize_memory();
     MyList<Block> *Bp = blb;
     while (Bp) {
         Block *BP = Bp->data;
@@ -127,21 +127,24 @@ void Patch::Interp_Points_GPU(
     double *h_global_shellf = new double[NN * num_var];
     int    *h_global_weight = new int[NN];
 
+    GPUManager::getInstance().synchronize_memory();
+
     MPI_Allreduce(h_local_shellf, h_global_shellf, NN * num_var, MPI_DOUBLE, MPI_SUM, MPI_COMM_WORLD);
     MPI_Allreduce(h_local_weight, h_global_weight, NN, MPI_INT, MPI_SUM, MPI_COMM_WORLD);
 
-    GPUManager::getInstance().sync_to_gpu(h_global_shellf, d_Shellf, NN * num_var);
-    int *d_global_weight = GPUManager::getInstance().allocate_device_memory<int>(NN);
-    GPUManager::getInstance().sync_to_gpu(h_global_weight, d_global_weight, NN);
+    GPUManager::getInstance().sync_to_gpu(h_global_shellf, d_Shellf, NN * num_var, stream);
+    int *d_global_weight = GPUManager::getInstance().allocate_device_memory<int>(NN, stream);
+    GPUManager::getInstance().sync_to_gpu(h_global_weight, d_global_weight, NN, stream);
 #endif
 
-    int *d_err_flag = GPUManager::getInstance().allocate_device_memory<int>(1);
+    int *d_err_flag = GPUManager::getInstance().allocate_device_memory<int>(1, stream);
 
     gpu_normalize_shellf_launch(stream, NN, num_var, d_Shellf, d_global_weight, d_err_flag);
-    GPUManager::getInstance().synchronize_all();
 
     int h_err_flag = 0;
-    GPUManager::getInstance().sync_to_cpu(&h_err_flag, d_err_flag, 1);
+    GPUManager::getInstance().sync_to_cpu(&h_err_flag, d_err_flag, 1, stream);
+
+    GPUManager::synchronize_stream(stream);
 
     if (h_err_flag > 0) {
         if (myrank == 0) {
@@ -150,6 +153,7 @@ void Patch::Interp_Points_GPU(
                 h_XX[i] = new double[NN];
                 GPUManager::getInstance().sync_to_cpu(h_XX[i], d_XX[i], NN);
             }
+            GPUManager::getInstance().synchronize_memory();
             
             for (int i = 0; i < NN; i++) {
                 if (h_global_weight[i] > 1) {
@@ -175,6 +179,7 @@ void Patch::Interp_Points_GPU(
     GPUManager::getInstance().free_device_memory(d_local_weight, NN);
     GPUManager::getInstance().free_device_memory(d_global_weight, NN);
     GPUManager::getInstance().free_device_memory(d_err_flag, 1);
+    GPUManager::getInstance().synchronize_memory();
 }
 
 bool Patch::Interp_N_Points_GPU(
@@ -213,7 +218,6 @@ bool Patch::Interp_N_Points_GPU(
             varl = VarList;
             int k = 0;
             while (varl) {
-                // 启动你的 GPU Batch Kernel
                 gpu_global_interp_launch(
                     BP->stream, NN, dim,
                     d_XX_0, d_XX_1, d_XX_2,
@@ -236,11 +240,12 @@ bool Patch::Interp_N_Points_GPU(
     double *h_shellf_local = new double[NN * num_var];
     double *h_shellf_global = new double[NN * num_var];
     GPUManager::getInstance().sync_to_cpu(h_shellf_local, d_shellf, NN * num_var);
+    GPUManager::getInstance().synchronize_memory();
     MPI_Allreduce(h_shellf_local, h_shellf_global, NN * num_var, MPI_DOUBLE, MPI_SUM, MPI_COMM_WORLD);
     GPUManager::getInstance().sync_to_gpu(h_shellf_global, d_shellf, NN * num_var);
 
     delete[] h_shellf_local;
     delete[] h_shellf_global;
-
+    GPUManager::getInstance().synchronize_memory();
     return true;
 }

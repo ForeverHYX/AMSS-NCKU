@@ -19,6 +19,7 @@ void move_to_gpu_whole(MyList<Patch> *Pp, int myrank, MyList<var> *VarList) {
         }
         Pp = Pp->next;
     }
+    GPUManager::getInstance().synchronize_all();
 }
 
 void move_to_gpu_whole(cgh *GH, int myrank, MyList<var> *VarList) {
@@ -39,6 +40,7 @@ void move_to_cpu_whole(MyList<Patch> *Pp, int myrank, MyList<var> *VarList) {
         }
         Pp = Pp->next;
     }
+    GPUManager::getInstance().synchronize_all();
 }
 
 void move_to_cpu_whole(cgh *GH, int myrank, MyList<var> *VarList) {

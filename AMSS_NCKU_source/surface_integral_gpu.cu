@@ -245,10 +245,10 @@ void surface_integral::gpu_surf_MassPAng(
 
     // int n;
     double *d_pox[3];
-    for (int i = 0; i < 3; i++) d_pox[i] = GPUManager::getInstance().allocate_device_memory<double>(n_tot);
+    for (int i = 0; i < 3; i++) d_pox[i] = GPUManager::getInstance().allocate_device_memory<double>(n_tot, this->stream);
     gpu_scale_normals_launch(this->stream, n_tot, rex, d_nx_g, d_ny_g, d_nz_g, d_pox[0], d_pox[1], d_pox[2]);
 
-    double* d_shellf = GPUManager::getInstance().allocate_device_memory<double>(n_tot * InList);
+    double* d_shellf = GPUManager::getInstance().allocate_device_memory<double>(n_tot * InList, this->stream);
 
     GH->PatL[lev]->data->Interp_Points_GPU(this->stream, DG_List, n_tot, d_pox, d_shellf, Symmetry);
 
@@ -271,14 +271,14 @@ void surface_integral::gpu_surf_MassPAng(
     }
 
     double h_reductions[7] = {0}; 
-    double* d_reductions = GPUManager::getInstance().allocate_device_memory<double>(7);
+    double* d_reductions = GPUManager::getInstance().allocate_device_memory<double>(7, this->stream);
     gpu_surf_MassPAng_launch(
         this->stream,
         Nmin, Nmax, N_phi, InList, Symmetry,
         d_shellf, d_pox[0], d_pox[1], d_pox[2], d_nx_g, d_ny_g, d_nz_g, d_wtcostheta, d_reductions
     );
-    GPUManager::getInstance().synchronize_all();
-    GPUManager::getInstance().sync_to_cpu(h_reductions, d_reductions, 7);
+    GPUManager::getInstance().sync_to_cpu(h_reductions, d_reductions, 7, this->stream);
+    GPUManager::synchronize_stream(this->stream);
     double Mass_out = h_reductions[0];
     double p_outx   = h_reductions[1];
     double p_outy   = h_reductions[2];
@@ -314,13 +314,14 @@ void surface_integral::gpu_surf_MassPAng(
     Rout[5] = sy;
     Rout[6] = sz;
 
-    GPUManager::getInstance().free_device_memory(d_pox[0], n_tot);
-    GPUManager::getInstance().free_device_memory(d_pox[1], n_tot);
-    GPUManager::getInstance().free_device_memory(d_pox[2], n_tot);
-    GPUManager::getInstance().free_device_memory(d_shellf, n_tot * InList);
-    GPUManager::getInstance().free_device_memory(d_reductions, 7);
+    GPUManager::getInstance().free_device_memory(d_pox[0], n_tot, this->stream);
+    GPUManager::getInstance().free_device_memory(d_pox[1], n_tot, this->stream);
+    GPUManager::getInstance().free_device_memory(d_pox[2], n_tot, this->stream);
+    GPUManager::getInstance().free_device_memory(d_shellf, n_tot * InList, this->stream);
+    GPUManager::getInstance().free_device_memory(d_reductions, 7, this->stream);
 
     DG_List->clearList();
+    GPUManager::synchronize_stream(this->stream);
 }
 
 __global__ void surf_Wave_kernel(
@@ -475,12 +476,12 @@ void surface_integral::gpu_surf_Wave(
     // 1. 生成球面插值点坐标 (完全在 GPU 上，无 Host 开销)
     double *d_pox[3];
     for (int i = 0; i < 3; i++) {
-        d_pox[i] = GPUManager::getInstance().allocate_device_memory<double>(n_tot);
+        d_pox[i] = GPUManager::getInstance().allocate_device_memory<double>(n_tot, this->stream);
     }
     gpu_scale_normals_launch(this->stream, n_tot, rex, d_nx_g, d_ny_g, d_nz_g, d_pox[0], d_pox[1], d_pox[2]);
 
     // 2. 准备接收插值结果的 GPU 数组
-    double* d_shellf = GPUManager::getInstance().allocate_device_memory<double>(n_tot * InList);
+    double* d_shellf = GPUManager::getInstance().allocate_device_memory<double>(n_tot * InList, this->stream);
 
     // 3. 执行全 GPU 的插值过程
     GH->PatL[lev]->data->Interp_Points_GPU(this->stream, DG_List, n_tot, d_pox, d_shellf, Symmetry);
@@ -499,8 +500,8 @@ void surface_integral::gpu_surf_Wave(
     }
 
     // 5. 准备 GPU 端的输出数组，并清零
-    double *d_RP_out = GPUManager::getInstance().allocate_device_memory<double>(NN);
-    double *d_IP_out = GPUManager::getInstance().allocate_device_memory<double>(NN);
+    double *d_RP_out = GPUManager::getInstance().allocate_device_memory<double>(NN, this->stream);
+    double *d_IP_out = GPUManager::getInstance().allocate_device_memory<double>(NN, this->stream);
 
     // 6. 提取变量自带的对称性 SoA 标记（用于传入 Kernel 做边界判断）
     double R_SoA[3] = {Rpsi4->SoA[0], Rpsi4->SoA[1], Rpsi4->SoA[2]};
@@ -516,14 +517,13 @@ void surface_integral::gpu_surf_Wave(
         I_SoA[0], I_SoA[1], I_SoA[2],
         d_RP_out, d_IP_out
     );
-
-    // 同步并拉取积分计算结果
-    GPUManager::getInstance().synchronize_all();
     
     double *h_RP_out = new double[NN];
     double *h_IP_out = new double[NN];
-    GPUManager::getInstance().sync_to_cpu(h_RP_out, d_RP_out, NN);
-    GPUManager::getInstance().sync_to_cpu(h_IP_out, d_IP_out, NN);
+    GPUManager::getInstance().sync_to_cpu(h_RP_out, d_RP_out, NN, this->stream);
+    GPUManager::getInstance().sync_to_cpu(h_IP_out, d_IP_out, NN, this->stream);
+
+    GPUManager::synchronize_stream(this->stream);
 
     // 8. 全局规约 (还原 Host 侧的乘法系数及 MPI 聚合)
     for (int ii = 0; ii < NN; ii++) {
@@ -545,4 +545,5 @@ void surface_integral::gpu_surf_Wave(
     delete[] h_RP_out;
     delete[] h_IP_out;
     DG_List->clearList();
+    GPUManager::synchronize_stream(this->stream);
 }

@@ -34,21 +34,27 @@ GPUManager::~GPUManager() {
     cudaStreamDestroy(pimpl->memory_stream);
     delete pimpl;
 }
-
+// GPUManager::getInstance().synchronize_all();
 template<typename T>
-T* GPUManager::allocate_device_memory(size_t num_elements) {
+T* GPUManager::allocate_device_memory(size_t num_elements, cudaStream_t stream) {
     T* d_ptr = nullptr;
+    if (stream == 0) {
+        stream = pimpl->memory_stream;
+    }
     CUDA_CHECK(cudaMallocAsync((void**)&d_ptr, num_elements * sizeof(T), pimpl->memory_stream));
     CUDA_CHECK(cudaMemsetAsync(d_ptr, 0, num_elements * sizeof(T), pimpl->memory_stream));
-    CUDA_CHECK(cudaStreamSynchronize(pimpl->memory_stream));
+    // CUDA_CHECK(cudaStreamSynchronize(pimpl->memory_stream));
     return d_ptr;
 }
 
 template<typename T>
-void GPUManager::free_device_memory(T* d_ptr, size_t num_elements = 0) {
+void GPUManager::free_device_memory(T* d_ptr, size_t num_elements, cudaStream_t stream) {
     if (d_ptr == nullptr) return;
-    CUDA_CHECK(cudaFreeAsync(d_ptr, pimpl->memory_stream));
-    CUDA_CHECK(cudaStreamSynchronize(pimpl->memory_stream));
+    if (stream == 0) {
+        stream = pimpl->memory_stream;
+    }
+    CUDA_CHECK(cudaFreeAsync(d_ptr, stream));
+    // CUDA_CHECK(cudaStreamSynchronize(stream));
 }
 
 cudaStream_t GPUManager::get_stream() {
@@ -57,15 +63,21 @@ cudaStream_t GPUManager::get_stream() {
 }
 
 template<typename T>
-void GPUManager::sync_to_gpu(const T* h_ptr, T* d_ptr, size_t num_elements) {
-    CUDA_CHECK(cudaMemcpyAsync(d_ptr, h_ptr, num_elements * sizeof(T), cudaMemcpyHostToDevice, getInstance().pimpl->memory_stream));
-    CUDA_CHECK(cudaStreamSynchronize(getInstance().pimpl->memory_stream));
+void GPUManager::sync_to_gpu(const T* h_ptr, T* d_ptr, size_t num_elements, cudaStream_t stream) {
+    if (stream == 0) {
+        stream = getInstance().pimpl->memory_stream;
+    }
+    CUDA_CHECK(cudaMemcpyAsync(d_ptr, h_ptr, num_elements * sizeof(T), cudaMemcpyHostToDevice, stream));
+    // CUDA_CHECK(cudaStreamSynchronize(stream));
 }
 
 template<typename T>
-void GPUManager::sync_to_cpu(T* h_ptr, const T* d_ptr, size_t num_elements) {
-    CUDA_CHECK(cudaMemcpyAsync(h_ptr, d_ptr, num_elements * sizeof(T), cudaMemcpyDeviceToHost, getInstance().pimpl->memory_stream));
-    CUDA_CHECK(cudaStreamSynchronize(getInstance().pimpl->memory_stream));
+void GPUManager::sync_to_cpu(T* h_ptr, const T* d_ptr, size_t num_elements, cudaStream_t stream) {
+    if (stream == 0) {
+        stream = getInstance().pimpl->memory_stream;
+    }
+    CUDA_CHECK(cudaMemcpyAsync(h_ptr, d_ptr, num_elements * sizeof(T), cudaMemcpyDeviceToHost, stream));
+    // CUDA_CHECK(cudaStreamSynchronize(stream));
 }
 
 void GPUManager::synchronize_memory() {
@@ -80,11 +92,11 @@ void GPUManager::synchronize_stream(cudaStream_t stream) {
     CUDA_CHECK(cudaStreamSynchronize(stream));
 }
 
-template double* GPUManager::allocate_device_memory<double>(size_t num_elements);
-template int* GPUManager::allocate_device_memory<int>(size_t num_elements);
-template void GPUManager::free_device_memory<double>(double* d_ptr, size_t num_elements);
-template void GPUManager::free_device_memory<int>(int* d_ptr, size_t num_elements);
-template void GPUManager::sync_to_gpu<double>(const double* h_ptr, double* d_ptr, size_t num_elements);
-template void GPUManager::sync_to_gpu<int>(const int* h_ptr, int* d_ptr, size_t num_elements);
-template void GPUManager::sync_to_cpu<double>(double* h_ptr, const double* d_ptr, size_t num_elements);
-template void GPUManager::sync_to_cpu<int>(int* h_ptr, const int* d_ptr, size_t num_elements);
+template double* GPUManager::allocate_device_memory<double>(size_t num_elements, cudaStream_t stream = 0);
+template int* GPUManager::allocate_device_memory<int>(size_t num_elements, cudaStream_t stream = 0);
+template void GPUManager::free_device_memory<double>(double* d_ptr, size_t num_elements, cudaStream_t stream = 0);
+template void GPUManager::free_device_memory<int>(int* d_ptr, size_t num_elements, cudaStream_t stream = 0);
+template void GPUManager::sync_to_gpu<double>(const double* h_ptr, double* d_ptr, size_t num_elements, cudaStream_t stream = 0);
+template void GPUManager::sync_to_gpu<int>(const int* h_ptr, int* d_ptr, size_t num_elements, cudaStream_t stream = 0);
+template void GPUManager::sync_to_cpu<double>(double* h_ptr, const double* d_ptr, size_t num_elements, cudaStream_t stream = 0);
+template void GPUManager::sync_to_cpu<int>(int* h_ptr, const int* d_ptr, size_t num_elements, cudaStream_t stream = 0);

@@ -303,7 +303,7 @@ void gpu_l2normhelper_launch(
         return;
     }
 
-    double* d_sum = GPUManager::getInstance().allocate_device_memory<double>(1);
+    double* d_sum = GPUManager::getInstance().allocate_device_memory<double>(1, stream);
 
     // 设置线程块大小，通常 8x8x8 = 512 线程效率较好
     dim3 blockDim(8, 8, 8); 
@@ -319,14 +319,11 @@ void gpu_l2normhelper_launch(
         d_sum
     );
 
-    // 强制同步：由于后续的 MPI_Allreduce 立刻需要用到 f_out 的 CPU 数据，这里必须等待 GPU 计算并拷贝完成
-    cudaStreamSynchronize(stream);
-
     double h_sum = 0.0;
     // 将结果拷回 CPU
-    GPUManager::getInstance().sync_to_cpu(&h_sum, d_sum, 1);
-    GPUManager::getInstance().free_device_memory(d_sum, 1);
-
+    GPUManager::getInstance().sync_to_cpu(&h_sum, d_sum, 1, stream);
+    GPUManager::getInstance().free_device_memory(d_sum, 1, stream);
+    GPUManager::synchronize_stream(stream);
     f_out = h_sum * dX * dY * dZ;
 }
 

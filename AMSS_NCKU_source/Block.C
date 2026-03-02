@@ -54,7 +54,7 @@ Block::Block(int DIM, int *shapei, double *bboxi, int ranki, int ingfsi, int fng
 			for (int j = 0; j < shape[i]; j++)
 				X[i][j] = bbox[i] + (j + 0.5) * h;
             d_X[i] = GPUManager::getInstance().allocate_device_memory<double>(shape[i]);
-            GPUManager::sync_to_gpu(X[i], d_X[i], shape[i]);
+            GPUManager::getInstance().sync_to_gpu(X[i], d_X[i], shape[i]);
 		}
 
 		int nn = shape[0] * shape[1] * shape[2];
@@ -94,6 +94,7 @@ Block::Block(int DIM, int *shapei, double *bboxi, int ranki, int ingfsi, int fng
 	}
 
 	stream = GPUManager::getInstance().get_stream();
+	GPUManager::getInstance().synchronize_memory();
 }
 Block::~Block()
 {
@@ -121,6 +122,7 @@ Block::~Block()
 		fgfs = 0;
         d_fgfs = 0;
 	}
+	GPUManager::getInstance().synchronize_memory();
 }
 void Block::checkBlock()
 {
@@ -197,7 +199,7 @@ void Block::swapList(MyList<var> *VarList1, MyList<var> *VarList2, int myrank)
 void Block::require_on_gpu(int var_index) {
     if (!gpu_valid[var_index] && cpu_valid[var_index]) {
         int nn = shape[0] * shape[1] * shape[2];
-        GPUManager::sync_to_gpu(fgfs[var_index], d_fgfs[var_index], nn);
+        GPUManager::getInstance().sync_to_gpu(fgfs[var_index], d_fgfs[var_index], nn);
         gpu_valid[var_index] = true; 
     }
 }
@@ -205,7 +207,7 @@ void Block::require_on_gpu(int var_index) {
 void Block::require_on_cpu(int var_index) {
     if (!cpu_valid[var_index] && gpu_valid[var_index]) {
         int nn = shape[0] * shape[1] * shape[2];
-        GPUManager::sync_to_cpu(fgfs[var_index], d_fgfs[var_index], nn);
+        GPUManager::getInstance().sync_to_cpu(fgfs[var_index], d_fgfs[var_index], nn);
         cpu_valid[var_index] = true; 
     }
 }

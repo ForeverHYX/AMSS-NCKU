@@ -174,6 +174,7 @@ surface_integral::surface_integral(int iSymmetry) : Symmetry(iSymmetry) {
     GPUManager::getInstance().sync_to_gpu(nx_g, d_nx_g, n_tot);
     GPUManager::getInstance().sync_to_gpu(ny_g, d_ny_g, n_tot);
     GPUManager::getInstance().sync_to_gpu(nz_g, d_nz_g, n_tot);
+    GPUManager::getInstance().synchronize_memory();
 }
 
 //|============================================================================
@@ -190,6 +191,7 @@ surface_integral::~surface_integral() {
     GPUManager::getInstance().free_device_memory(d_nx_g, n_tot);
     GPUManager::getInstance().free_device_memory(d_ny_g, n_tot);
     GPUManager::getInstance().free_device_memory(d_nz_g, n_tot);
+    GPUManager::getInstance().synchronize_memory();
 }
 //|----------------------------------------------------------------
 //  spin weighted spinw component of psi4, general routine
