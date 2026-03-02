@@ -13,6 +13,7 @@
 #include <cmath>
 #include <strstream>
 #include <chrono>
+#include <omp.h>
 using namespace std;
 using Clock = std::chrono::steady_clock;
 using TimePoint = std::chrono::time_point<Clock>;
@@ -96,6 +97,8 @@ int parse_parts(string str, string &sgrp, string &skey, string &sval, int &ind)
 int main(int argc, char *argv[])
 {
   TimePoint t_total_start = Clock::now();
+
+  cout << "  [OpenMP] Using " << omp_get_max_threads() << " thread(s)" << endl;
 
   double mp, mm, b, Mp, Mm, admtol, Newtontol;
   int nA, nB, nphi, Newtonmaxit;

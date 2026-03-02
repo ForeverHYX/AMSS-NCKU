@@ -11,7 +11,7 @@ filein  =
 LDLIBS  = -lifcoremt -L$(CUDA_DIR)/lib64 -lcudart
 
 # Compiler flags
-CXXAPPFLAGS  = -O3 -Wno-deprecated -Dfortran3 -Dnewc -I$(CUDA_DIR)/include
+CXXAPPFLAGS  = -O3 -qopenmp -Wno-deprecated -Dfortran3 -Dnewc -I$(CUDA_DIR)/include
 f90appflags  = -O3 -fpp
 #f90appflags  = -O3 -x f95-cpp-input
 

@@ -31,7 +31,7 @@ export I_MPI_FABRICS=shm
 export I_MPI_PIN_DOMAIN=core
 
 ulimit -s unlimited
-export OMP_NUM_THREADS=1
+export OMP_NUM_THREADS=48
 
 export I_MPI_DEBUG=0 # Mysterious parameters for MPI_AllReduce
 

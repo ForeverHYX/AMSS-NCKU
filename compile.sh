@@ -18,7 +18,10 @@ export I_MPI_PIN_DOMAIN=core
 export I_MPI_DEBUG=5 
 
 ulimit -s unlimited
-export OMP_NUM_THREADS=1
+# TwoPunctureABE uses OpenMP: set thread count here (16 recommended for the solver;
+# the BSSN main run still uses OMP_NUM_THREADS=1 set below).
+export OMP_NUM_THREADS=16
+# For the BSSN GPU run, reset to 1 before mpirun (done in run.sh).
 
 # ================= 2. 变量定义 [关键修复] =================
 # 获取当前脚本所在的绝对路径，防止 cd 后相对路径失效
