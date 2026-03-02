@@ -18,6 +18,8 @@ constexpr double ANTI = -1.0;
 
 
 // ================= 新增预计算常量 =================
+constexpr double ONE = 1.0;
+constexpr double TWO = 2.0;
 constexpr double FOUR_PI  = 4.0 * M_PI;
 constexpr double EIGHT_PI = 8.0 * M_PI;
 constexpr double F16_PI   = 16.0 * M_PI;

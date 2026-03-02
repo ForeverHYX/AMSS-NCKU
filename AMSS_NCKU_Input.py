@@ -23,7 +23,7 @@ GPU_Calculation  = "yes"                          ## Use GPU or not
 CPU_Part         = 0.0
 GPU_Part         = 1.0
 
-Run_TwoPuncture  = "yes"
+Run_TwoPuncture  = "no"
 
 #################################################
 
