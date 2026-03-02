@@ -1,6 +1,6 @@
-MPI_DIR = /home/jjsnam/spack/opt/spack/linux-haswell/intel-oneapi-mpi-2021.17.2-tzh7zdi7akujs3w3z6xura62oofpnlw7/mpi/2021.17/
+MPI_DIR = /home/foreverhyx/spack/opt/spack/linux-x86_64_v3/intel-oneapi-mpi-2021.17.2-geoxesl7gjei2ybcrfbkeglnhcpiukzn/mpi/2021.17
 
-CUDA_DIR = /home/jjsnam/spack/opt/spack/linux-icelake/cuda-13.0.2-nxiq75wz7g54wiu5ublimzvgspxrweit/
+CUDA_DIR = /home/foreverhyx/spack/opt/spack/linux-icelake/cuda-13.0.2-r2bcws4tslasb4sd35jta22m6zxcnzf4
 CUDA_COMPUTE_CAPABILITY = 80
 
 # Simplified includes - Intel MPI wrappers handle most paths automatically

@@ -12,7 +12,13 @@
 #include <string>
 #include <cmath>
 #include <strstream>
+#include <chrono>
 using namespace std;
+using Clock = std::chrono::steady_clock;
+using TimePoint = std::chrono::time_point<Clock>;
+static double elapsed_sec(TimePoint t0, TimePoint t1) {
+  return std::chrono::duration<double>(t1 - t0).count();
+}
 #else
 #include <iostream.h>
 #include <iomanip.h>
@@ -89,6 +95,8 @@ int parse_parts(string str, string &sgrp, string &skey, string &sval, int &ind)
 //=======================================
 int main(int argc, char *argv[])
 {
+  TimePoint t_total_start = Clock::now();
+
   double mp, mm, b, Mp, Mm, admtol, Newtontol;
   int nA, nB, nphi, Newtonmaxit;
   double P_plusx, P_plusy, P_plusz;
@@ -96,6 +104,7 @@ int main(int argc, char *argv[])
   double S_plusx, S_plusy, S_plusz;
   double S_minusx, S_minusy, S_minusz;
   // read parameter from file
+  TimePoint t_parse_start = Clock::now();
   {
     const int LEN = 256;
     char pline[LEN];
@@ -175,6 +184,7 @@ int main(int argc, char *argv[])
     }
     inf.close();
   }
+  TimePoint t_parse_end = Clock::now();
   // echo parameters
   {
     cout << "///////////////////////////////////////////////////////////////" << endl;
@@ -209,13 +219,27 @@ int main(int argc, char *argv[])
   ADM = new TwoPunctures(mp, mm, b, P_plusx, P_plusy, P_plusz, S_plusx, S_plusy, S_plusz,
                          P_minusx, P_minusy, P_minusz, S_minusx, S_minusy, S_minusz,
                          nA, nB, nphi, Mp, Mm, admtol, Newtontol, Newtonmaxit);
+
+  TimePoint t_solve_start = Clock::now();
   ADM->Solve();
+  TimePoint t_solve_end = Clock::now();
+
+  TimePoint t_save_start = Clock::now();
   ADM->Save("Ansorg.psid");
+  TimePoint t_save_end = Clock::now();
 
   delete ADM;
   //=======================caculation done=============================================================
+  TimePoint t_total_end = Clock::now();
+
   cout << "===============================================================" << endl;
   cout << "Initial data is successfully producede!!" << endl;
+  cout << "---------------------------------------------------------------" << endl;
+  cout << "  [Timing] Parameter parsing : " << elapsed_sec(t_parse_start, t_parse_end) << " s" << endl;
+  cout << "  [Timing] Solve()           : " << elapsed_sec(t_solve_start, t_solve_end) << " s" << endl;
+  cout << "  [Timing] Save()            : " << elapsed_sec(t_save_start, t_save_end)  << " s" << endl;
+  cout << "  [Timing] Total             : " << elapsed_sec(t_total_start, t_total_end) << " s" << endl;
+  cout << "===============================================================" << endl;
 
   exit(0);
 }
