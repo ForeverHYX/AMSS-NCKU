@@ -53,7 +53,7 @@ Block::Block(int DIM, int *shapei, double *bboxi, int ranki, int ingfsi, int fng
 			double h = (bbox[dim + i] - bbox[i]) / shape[i];
 			for (int j = 0; j < shape[i]; j++)
 				X[i][j] = bbox[i] + (j + 0.5) * h;
-            d_X[i] = GPUManager::getInstance().allocate_device_memory(shape[i]);
+            d_X[i] = GPUManager::getInstance().allocate_device_memory<double>(shape[i]);
             GPUManager::sync_to_gpu(X[i], d_X[i], shape[i]);
 		}
 
@@ -74,7 +74,7 @@ Block::Block(int DIM, int *shapei, double *bboxi, int ranki, int ingfsi, int fng
 			}
 			memset(fgfs[i], 0, sizeof(double) * nn);
             
-            d_fgfs[i] = GPUManager::getInstance().allocate_device_memory(nn);
+            d_fgfs[i] = GPUManager::getInstance().allocate_device_memory<double>(nn);
 
             cpu_valid[i] = true;
             gpu_valid[i] = false;

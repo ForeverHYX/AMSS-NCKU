@@ -32,6 +32,11 @@ int main(int argc, char *argv[])
       MPI_Comm_size(MPI_COMM_WORLD, &nprocs);
       MPI_Comm_rank(MPI_COMM_WORLD, &myrank);
 
+      int device_count = 0;
+      cudaGetDeviceCount(&device_count);
+      cudaSetDevice(myrank % device_count);
+      cout << "Process " << myrank << " is using GPU " << myrank % device_count << endl;
+
       double Begin_clock, End_clock;
       if (myrank == 0)
       {

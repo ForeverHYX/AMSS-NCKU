@@ -109,8 +109,8 @@ surface_integral::surface_integral(int iSymmetry) : Symmetry(iSymmetry) {
 
     stream = GPUManager::getInstance().get_stream();
 
-    d_arcostheta = GPUManager::getInstance().allocate_device_memory(N_theta);
-    d_wtcostheta = GPUManager::getInstance().allocate_device_memory(N_theta);
+    d_arcostheta = GPUManager::getInstance().allocate_device_memory<double>(N_theta);
+    d_wtcostheta = GPUManager::getInstance().allocate_device_memory<double>(N_theta);
 
     // note: theta in [0,pi/2], upper half sphere, corresponds to 1 < costheta < 0
     misc::gaulegf(-1.0, 1.0, arcostheta, wtcostheta, N_theta);
@@ -151,9 +151,9 @@ surface_integral::surface_integral(int iSymmetry) : Symmetry(iSymmetry) {
     nx_g = new double[n_tot];
     ny_g = new double[n_tot];
     nz_g = new double[n_tot];
-    d_nx_g = GPUManager::getInstance().allocate_device_memory(n_tot);
-    d_ny_g = GPUManager::getInstance().allocate_device_memory(n_tot);
-    d_nz_g = GPUManager::getInstance().allocate_device_memory(n_tot);
+    d_nx_g = GPUManager::getInstance().allocate_device_memory<double>(n_tot);
+    d_ny_g = GPUManager::getInstance().allocate_device_memory<double>(n_tot);
+    d_nz_g = GPUManager::getInstance().allocate_device_memory<double>(n_tot);
 
     int n = 0;
     double costheta, sintheta, ph;

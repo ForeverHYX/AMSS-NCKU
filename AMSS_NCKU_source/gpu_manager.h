@@ -26,15 +26,26 @@ private:
 public:
     static GPUManager& getInstance();
 
-    double* allocate_device_memory(size_t num_elements);
-    void free_device_memory(double* d_ptr, size_t num_elements);
+    template<typename T> T* allocate_device_memory(size_t num_elements);
+    template<typename T> void free_device_memory(T* d_ptr, size_t num_elements);
     void clear_pool();
 
-    static void sync_to_gpu(const double* h_ptr, double* d_ptr, size_t num_elements);
-    static void sync_to_cpu(double* h_ptr, const double* d_ptr, size_t num_elements);
+    template<typename T> static void sync_to_gpu(const T* h_ptr, T* d_ptr, size_t num_elements);
+    template<typename T> static void sync_to_cpu(T* h_ptr, const T* d_ptr, size_t num_elements);
 
     cudaStream_t get_stream();
     void synchronize_all();
+    void synchronize_memory();
+    static void synchronize_stream(cudaStream_t stream);
 };
+
+extern template double* GPUManager::allocate_device_memory<double>(size_t num_elements);
+extern template int* GPUManager::allocate_device_memory<int>(size_t num_elements);
+extern template void GPUManager::free_device_memory<double>(double* d_ptr, size_t num_elements);
+extern template void GPUManager::free_device_memory<int>(int* d_ptr, size_t num_elements);
+extern template void GPUManager::sync_to_gpu<double>(const double* h_ptr, double* d_ptr, size_t num_elements);
+extern template void GPUManager::sync_to_gpu<int>(const int* h_ptr, int* d_ptr, size_t num_elements);
+extern template void GPUManager::sync_to_cpu<double>(double* h_ptr, const double* d_ptr, size_t num_elements);
+extern template void GPUManager::sync_to_cpu<int>(int* h_ptr, const int* d_ptr, size_t num_elements);
 
 #endif /* GPU_MANAGER_H */

@@ -337,17 +337,13 @@ void Patch::Interp_Points(MyList<var> *VarList,
     // 1. 分配 GPU 内存并将所有插值点坐标一次性拷贝至 GPU
     double *d_XX[3] = {nullptr, nullptr, nullptr};
     for (int i = 0; i < dim; i++) {
-        cudaMalloc((void**)&d_XX[i], NN * sizeof(double));
-        cudaMemcpy(d_XX[i], XX[i], NN * sizeof(double), cudaMemcpyHostToDevice);
+		d_XX[i] = GPUManager::getInstance().allocate_device_memory<double>(NN);
+        GPUManager::getInstance().sync_to_gpu(XX[i], d_XX[i], NN);
     }
 
-    double *d_shellf;
-    cudaMalloc((void**)&d_shellf, NN * num_var * sizeof(double));
-    cudaMemset(d_shellf, 0, NN * num_var * sizeof(double));
+    double *d_shellf = GPUManager::getInstance().allocate_device_memory<double>(NN * num_var);
 
-    int *d_weight;
-    cudaMalloc((void**)&d_weight, NN * sizeof(int));
-    cudaMemset(d_weight, 0, NN * sizeof(int));
+    int *d_weight = GPUManager::getInstance().allocate_device_memory<int>(NN);
 
     // 2. Block-Centric 遍历：以 Block 为单位启动 Kernel
     MyList<Block> *Bp = blb;
@@ -397,16 +393,15 @@ void Patch::Interp_Points(MyList<var> *VarList,
     }
 
     GPUManager::getInstance().synchronize_all();
-    cudaMemcpy(shellf, d_shellf, NN * num_var * sizeof(double), cudaMemcpyDeviceToHost);
-    cudaMemcpy(weight, d_weight, NN * sizeof(int), cudaMemcpyDeviceToHost);
+    GPUManager::getInstance().sync_to_cpu(shellf, d_shellf, NN * num_var);
+    GPUManager::getInstance().sync_to_cpu(weight, d_weight, NN);
 
     // 4. 清理 GPU 临时内存
     for (int i = 0; i < dim; i++) {
-        if (d_XX[i]) cudaFree(d_XX[i]);
+        if (d_XX[i]) GPUManager::getInstance().free_device_memory(d_XX[i], NN);
     }
-    cudaFree(d_shellf);
-    cudaFree(d_weight);
-
+    GPUManager::getInstance().free_device_memory(d_shellf, NN * num_var);
+    GPUManager::getInstance().free_device_memory(d_weight, NN);
     // ================== GPU 零拷贝重构部分 结束 ==================
 
     MPI_Allreduce(shellf, Shellf, NN * num_var, MPI_DOUBLE, MPI_SUM, MPI_COMM_WORLD);

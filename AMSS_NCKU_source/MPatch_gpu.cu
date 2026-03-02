@@ -67,11 +67,8 @@ void Patch::Interp_Points_GPU(
 
     // TODO: Sanity check
 
-    double *d_local_shellf = GPUManager::getInstance().allocate_device_memory(NN * num_var);
-    int *d_local_weight; CUDA_CHECK(cudaMalloc(&d_local_weight, NN * sizeof(int)));
-    
-    cudaMemset(d_local_shellf, 0, NN * num_var * sizeof(double));
-    cudaMemset(d_local_weight, 0, NN * sizeof(int));
+    double *d_local_shellf = GPUManager::getInstance().allocate_device_memory<double>(NN * num_var);
+    int *d_local_weight = GPUManager::getInstance().allocate_device_memory<int>(NN);
 
     MyList<Block> *Bp = blb;
     while (Bp) {
@@ -125,7 +122,7 @@ void Patch::Interp_Points_GPU(
     double *h_local_shellf = new double[NN * num_var];
     int    *h_local_weight = new int[NN];
     GPUManager::getInstance().sync_to_cpu(h_local_shellf, d_local_shellf, NN * num_var);
-    cudaMemcpy(h_local_weight, d_local_weight, NN * sizeof(int), cudaMemcpyDeviceToHost);
+    GPUManager::getInstance().sync_to_cpu(h_local_weight, d_local_weight, NN);
 
     double *h_global_shellf = new double[NN * num_var];
     int    *h_global_weight = new int[NN];
@@ -134,19 +131,17 @@ void Patch::Interp_Points_GPU(
     MPI_Allreduce(h_local_weight, h_global_weight, NN, MPI_INT, MPI_SUM, MPI_COMM_WORLD);
 
     GPUManager::getInstance().sync_to_gpu(h_global_shellf, d_Shellf, NN * num_var);
-    int *d_global_weight; cudaMalloc(&d_global_weight, NN * sizeof(int));
-    cudaMemcpy(d_global_weight, h_global_weight, NN * sizeof(int), cudaMemcpyHostToDevice);
+    int *d_global_weight = GPUManager::getInstance().allocate_device_memory<int>(NN);
+    GPUManager::getInstance().sync_to_gpu(h_global_weight, d_global_weight, NN);
 #endif
 
-    int *d_err_flag;
-    cudaMalloc(&d_err_flag, sizeof(int));
-    cudaMemset(d_err_flag, 0, sizeof(int));
+    int *d_err_flag = GPUManager::getInstance().allocate_device_memory<int>(1);
 
     gpu_normalize_shellf_launch(stream, NN, num_var, d_Shellf, d_global_weight, d_err_flag);
     GPUManager::getInstance().synchronize_all();
 
     int h_err_flag = 0;
-    cudaMemcpy(&h_err_flag, d_err_flag, sizeof(int), cudaMemcpyDeviceToHost);
+    GPUManager::getInstance().sync_to_cpu(&h_err_flag, d_err_flag, 1);
 
     if (h_err_flag > 0) {
         if (myrank == 0) {
@@ -177,9 +172,9 @@ void Patch::Interp_Points_GPU(
     delete[] h_local_shellf; delete[] h_local_weight;
     delete[] h_global_shellf; delete[] h_global_weight;
     GPUManager::getInstance().free_device_memory(d_local_shellf, NN * num_var);
-    CUDA_CHECK(cudaFree(d_local_weight));
-    CUDA_CHECK(cudaFree(d_global_weight));
-    CUDA_CHECK(cudaFree(d_err_flag));
+    GPUManager::getInstance().free_device_memory(d_local_weight, NN);
+    GPUManager::getInstance().free_device_memory(d_global_weight, NN);
+    GPUManager::getInstance().free_device_memory(d_err_flag, 1);
 }
 
 bool Patch::Interp_N_Points_GPU(
@@ -240,14 +235,12 @@ bool Patch::Interp_N_Points_GPU(
     
     double *h_shellf_local = new double[NN * num_var];
     double *h_shellf_global = new double[NN * num_var];
-    cudaMemcpy(h_shellf_local, d_shellf, NN * num_var * sizeof(double), cudaMemcpyDeviceToHost);
-
+    GPUManager::getInstance().sync_to_cpu(h_shellf_local, d_shellf, NN * num_var);
     MPI_Allreduce(h_shellf_local, h_shellf_global, NN * num_var, MPI_DOUBLE, MPI_SUM, MPI_COMM_WORLD);
-
-    cudaMemcpy(d_shellf, h_shellf_global, NN * num_var * sizeof(double), cudaMemcpyHostToDevice);
+    GPUManager::getInstance().sync_to_gpu(h_shellf_global, d_shellf, NN * num_var);
 
     delete[] h_shellf_local;
     delete[] h_shellf_global;
 
-    return true; // 实际的 "notfind" 检查可以在外层通过 d_weight 完成，此处简化直接返回 true
+    return true;
 }

@@ -168,18 +168,18 @@ void Parallel::gpu_transfer(
         send_data[node] = rec_data[node] = 0;
         if (node == myrank) {
             if (length = gpu_data_packer(0, src[myrank], dst[myrank], node, PACK, VarList1, VarList2, Symmetry)) {
-                CUDA_CHECK(cudaMalloc((void**)&rec_data[node], length * sizeof(double)));
+                rec_data[node] = GPUManager::getInstance().allocate_device_memory<double>(length);
                 gpu_data_packer(rec_data[node], src[myrank], dst[myrank], node, PACK, VarList1, VarList2, Symmetry);
             }
         }
         else {
             if (length = gpu_data_packer(0, src[myrank], dst[myrank], node, PACK, VarList1, VarList2, Symmetry)) {
-                CUDA_CHECK(cudaMalloc((void**)&send_data[node], length * sizeof(double)));
+                send_data[node] = GPUManager::getInstance().allocate_device_memory<double>(length);
                 gpu_data_packer(send_data[node], src[myrank], dst[myrank], node, PACK, VarList1, VarList2, Symmetry);
                 MPI_Isend((void *)send_data[node], length, MPI_DOUBLE, node, 1, MPI_COMM_WORLD, reqs + req_no ++);
             }
             if (length = gpu_data_packer(0, src[node], dst[node], node, UNPACK, VarList1, VarList2, Symmetry)) {
-                CUDA_CHECK(cudaMalloc((void**)&rec_data[node], length * sizeof(double)));
+                rec_data[node] = GPUManager::getInstance().allocate_device_memory<double>(length);
                 MPI_Irecv((void *)rec_data[node], length, MPI_DOUBLE, node, 1, MPI_COMM_WORLD, reqs + req_no ++);
             }
         }
@@ -190,8 +190,8 @@ void Parallel::gpu_transfer(
     }
         
     for (node = 0; node < cpusize; node++) {
-        if (send_data[node]) CUDA_CHECK(cudaFree(send_data[node]));
-        if (rec_data[node]) CUDA_CHECK(cudaFree(rec_data[node]));
+        if (send_data[node]) GPUManager::getInstance().free_device_memory(send_data[node], gpu_data_packer(0, src[node], dst[node], node, PACK, VarList1, VarList2, Symmetry));
+        if (rec_data[node]) GPUManager::getInstance().free_device_memory(rec_data[node], gpu_data_packer(0, src[node], dst[node], node, UNPACK, VarList1, VarList2, Symmetry));
     }
 
     delete[] reqs;
@@ -221,35 +221,34 @@ void Parallel::gpu_transfer(
     double **rec_data_h  = new double *[cpusize]; // CPU 接收暂存
     int length;
 
-    // puts("Starting GPU transfer...");
     for (node = 0; node < cpusize; node++) {
         send_data_d[node] = rec_data_d[node] = nullptr;
         send_data_h[node] = rec_data_h[node] = nullptr;
 
         if (node == myrank) { // 同节点 D2D 直接拷贝，不涉及 MPI
             if ((length = gpu_data_packer(0, src[myrank], dst[myrank], node, PACK, VarList1, VarList2, Symmetry))) {
-                CUDA_CHECK(cudaMalloc((void**)&rec_data_d[node], length * sizeof(double)));
+                rec_data_d[node] = GPUManager::getInstance().allocate_device_memory<double>(length);
                 gpu_data_packer(rec_data_d[node], src[myrank], dst[myrank], node, PACK, VarList1, VarList2, Symmetry);
             }
         }
         else { // 跨节点通信，走 CPU Staging
             // PACK 阶段
             if ((length = gpu_data_packer(0, src[myrank], dst[myrank], node, PACK, VarList1, VarList2, Symmetry))) {
-                CUDA_CHECK(cudaMalloc((void**)&send_data_d[node], length * sizeof(double)));
+                send_data_d[node] = GPUManager::getInstance().allocate_device_memory<double>(length);
                 send_data_h[node] = new double[length]; // 分配 CPU 内存
 
                 // 1. GPU 内部完成打包
                 gpu_data_packer(send_data_d[node], src[myrank], dst[myrank], node, PACK, VarList1, VarList2, Symmetry);
                 
                 // 2. D2H: 将打包好的连续数组拷回 CPU
-                CUDA_CHECK(cudaMemcpy(send_data_h[node], send_data_d[node], length * sizeof(double), cudaMemcpyDeviceToHost));
+                GPUManager::getInstance().sync_to_cpu(send_data_h[node], send_data_d[node], length);
                 
                 // 3. 将 CPU 指针交给 MPI (绝对安全)
                 MPI_Isend((void *)send_data_h[node], length, MPI_DOUBLE, node, 1, MPI_COMM_WORLD, reqs + req_no++);
             }
             // UNPACK 的准备阶段
             if ((length = gpu_data_packer(0, src[node], dst[node], node, UNPACK, VarList1, VarList2, Symmetry))) {
-                CUDA_CHECK(cudaMalloc((void**)&rec_data_d[node], length * sizeof(double)));
+                rec_data_d[node] = GPUManager::getInstance().allocate_device_memory<double>(length);
                 rec_data_h[node] = new double[length]; // 分配 CPU 内存
                 
                 // 接收到 CPU 内存
@@ -274,7 +273,7 @@ void Parallel::gpu_transfer(
                 length = gpu_data_packer(0, src[node], dst[node], node, UNPACK, VarList1, VarList2, Symmetry);
                 
                 // 1. H2D: 将收到的 CPU 数据推上 GPU
-                CUDA_CHECK(cudaMemcpy(rec_data_d[node], rec_data_h[node], length * sizeof(double), cudaMemcpyHostToDevice));
+                GPUManager::getInstance().sync_to_gpu(rec_data_h[node], rec_data_d[node], length);
                 
                 // 2. GPU 内部完成解包映射
                 gpu_data_packer(rec_data_d[node], src[node], dst[node], node, UNPACK, VarList1, VarList2, Symmetry);
@@ -284,8 +283,8 @@ void Parallel::gpu_transfer(
         
     // 释放所有资源
     for (node = 0; node < cpusize; node++) {
-        if (send_data_d[node]) CUDA_CHECK(cudaFree(send_data_d[node]));
-        if (rec_data_d[node]) CUDA_CHECK(cudaFree(rec_data_d[node]));
+        if (send_data_d[node]) GPUManager::getInstance().free_device_memory(send_data_d[node], gpu_data_packer(0, src[node], dst[node], node, PACK, VarList1, VarList2, Symmetry));
+        if (rec_data_d[node]) GPUManager::getInstance().free_device_memory(rec_data_d[node], gpu_data_packer(0, src[node], dst[node], node, UNPACK, VarList1, VarList2, Symmetry));
         if (send_data_h[node]) delete[] send_data_h[node];
         if (rec_data_h[node]) delete[] rec_data_h[node];
     }
@@ -576,11 +575,8 @@ bool Parallel::PatList_Interp_Points_GPU(
         return false;
     }
 
-    double *d_local_shellf = GPUManager::getInstance().allocate_device_memory(NN * num_var);
-    int *d_local_weight; cudaMalloc(&d_local_weight, NN * sizeof(int));
-    
-    cudaMemset(d_local_shellf, 0, NN * num_var * sizeof(double));
-    cudaMemset(d_local_weight, 0, NN * sizeof(int));
+    double *d_local_shellf = GPUManager::getInstance().allocate_device_memory<double>(NN * num_var);
+    int *d_local_weight = GPUManager::getInstance().allocate_device_memory<int>(NN);
 
     int ordn = 2 * ghost_width;
 
@@ -633,12 +629,12 @@ bool Parallel::PatList_Interp_Points_GPU(
     GPUManager::getInstance().synchronize_all();
 
 #if MPI_CUDA_AWARE
-    
+    // TODO
 #else
     double *h_local_shellf = new double[NN * num_var];
     int    *h_local_weight = new int[NN];
     GPUManager::getInstance().sync_to_cpu(h_local_shellf, d_local_shellf, NN * num_var);
-    cudaMemcpy(h_local_weight, d_local_weight, NN * sizeof(int), cudaMemcpyDeviceToHost);
+    GPUManager::getInstance().sync_to_cpu(h_local_weight, d_local_weight, NN);
 
     double *h_global_shellf = new double[NN * num_var];
     int    *h_global_weight = new int[NN];
@@ -648,19 +644,16 @@ bool Parallel::PatList_Interp_Points_GPU(
 #endif
     GPUManager::getInstance().sync_to_gpu(h_global_shellf, d_Shellf, NN * num_var);
     
-    int *d_global_weight; 
-    cudaMalloc(&d_global_weight, NN * sizeof(int));
-    cudaMemcpy(d_global_weight, h_global_weight, NN * sizeof(int), cudaMemcpyHostToDevice);
+    int *d_global_weight = GPUManager::getInstance().allocate_device_memory<int>(NN);
+    GPUManager::getInstance().sync_to_gpu(h_global_weight, d_global_weight, NN);
 
-    int *d_err_flag;
-    cudaMalloc(&d_err_flag, sizeof(int));
-    cudaMemset(d_err_flag, 0, sizeof(int));
+    int *d_err_flag = GPUManager::getInstance().allocate_device_memory<int>(1);
 
     gpu_normalize_shellf_launch(stream, NN, num_var, d_Shellf, d_global_weight, d_err_flag);
     GPUManager::getInstance().synchronize_all();
 
     int h_err_flag = 0;
-    cudaMemcpy(&h_err_flag, d_err_flag, sizeof(int), cudaMemcpyDeviceToHost);
+    GPUManager::getInstance().sync_to_cpu(&h_err_flag, d_err_flag, 1);
 
     bool success = true;
     if (h_err_flag > 0) {
@@ -673,9 +666,9 @@ bool Parallel::PatList_Interp_Points_GPU(
     delete[] h_global_shellf; 
     delete[] h_global_weight;
     GPUManager::getInstance().free_device_memory(d_local_shellf, NN * num_var);
-    cudaFree(d_local_weight);
-    cudaFree(d_global_weight);
-    cudaFree(d_err_flag);
+    GPUManager::getInstance().free_device_memory(d_local_weight, NN);
+    GPUManager::getInstance().free_device_memory(d_global_weight, NN);
+    GPUManager::getInstance().free_device_memory(d_err_flag, 1);
 
     return success;
 }

@@ -2765,9 +2765,9 @@ void bssn_class::compute_Porg_rhs(double **BH_PS, double **BH_RHS, var *forx, va
 
     double *d_pox[3];
     for (int i = 0; i < 3; i++) {
-        d_pox[i] = GPUManager::getInstance().allocate_device_memory(1);
+        d_pox[i] = GPUManager::getInstance().allocate_device_memory<double>(1);
     }
-    double *d_shellf = GPUManager::getInstance().allocate_device_memory(InList);
+    double *d_shellf = GPUManager::getInstance().allocate_device_memory<double>(InList);
     double h_shellf[3] = {0.0, 0.0, 0.0};
 
     for (int n = 0; n < BH_num; n++) {
@@ -3237,15 +3237,14 @@ void bssn_class::Interp_Constraint(bool infg)
     while (varl) { InList++; varl = varl->next; }
 
     double *d_x1, *d_y1, *d_z1, *d_shellf;
-    cudaMalloc(&d_x1, n * sizeof(double));
-    cudaMalloc(&d_y1, n * sizeof(double));
-    cudaMalloc(&d_z1, n * sizeof(double));
-    cudaMemcpy(d_x1, x1, n * sizeof(double), cudaMemcpyHostToDevice);
-    cudaMemcpy(d_y1, y1, n * sizeof(double), cudaMemcpyHostToDevice);
-    cudaMemcpy(d_z1, z1, n * sizeof(double), cudaMemcpyHostToDevice);
+    d_x1 = GPUManager::getInstance().allocate_device_memory<double>(n);
+    d_y1 = GPUManager::getInstance().allocate_device_memory<double>(n);
+    d_z1 = GPUManager::getInstance().allocate_device_memory<double>(n);
+    GPUManager::getInstance().sync_to_gpu(x1, d_x1, n);
+    GPUManager::getInstance().sync_to_gpu(y1, d_y1, n);
+    GPUManager::getInstance().sync_to_gpu(z1, d_z1, n);
 
-    cudaMalloc(&d_shellf, n * InList * sizeof(double));
-    cudaMemset(d_shellf, 0, n * InList * sizeof(double));
+    d_shellf = GPUManager::getInstance().allocate_device_memory<double>(n * InList);
 
     // ==========================================
     // 2. 核心修正：CPU 上执行全局几何归属判定
@@ -3325,8 +3324,8 @@ void bssn_class::Interp_Constraint(bool infg)
                     // 仅当此 Block 确实覆盖了目标点时，才触发 CUDA 拷贝和核函数
                     if (active_count > 0) {
                         int* d_active_indices;
-                        cudaMalloc(&d_active_indices, active_count * sizeof(int));
-                        cudaMemcpyAsync(d_active_indices, active_points.data(), active_count * sizeof(int), cudaMemcpyHostToDevice, BP->stream);
+                        d_active_indices = GPUManager::getInstance().allocate_device_memory<int>(active_count);
+                        GPUManager::getInstance().sync_to_gpu(active_points.data(), d_active_indices, active_count);
                         d_indices_to_free.push_back(d_active_indices);
 
                         varl = ConstraintList;
@@ -3352,14 +3351,17 @@ void bssn_class::Interp_Constraint(bool infg)
         }
     }
 
+    double *shellf = new double[n * InList];
+    GPUManager::getInstance().sync_to_cpu(shellf, d_shellf, n * InList);
+
     // 4. 同步所有流，并清理临时的 GPU 索引数组
     GPUManager::getInstance().synchronize_all();
-    for (int* ptr : d_indices_to_free) cudaFree(ptr);
+    for (int* ptr : d_indices_to_free) GPUManager::getInstance().free_device_memory(ptr, 0);
+    GPUManager::getInstance().free_device_memory(d_x1, n * sizeof(double));
+    GPUManager::getInstance().free_device_memory(d_y1, n * sizeof(double));
+    GPUManager::getInstance().free_device_memory(d_z1, n * sizeof(double));
+    GPUManager::getInstance().free_device_memory(d_shellf, n * InList * sizeof(double));
     delete[] assigned_bp;
-
-    // 5. 拷回 CPU 并做一次性全局归约
-    double *shellf = new double[n * InList];
-    cudaMemcpy(shellf, d_shellf, n * InList * sizeof(double), cudaMemcpyDeviceToHost);
 
     double *global_shellf = new double[n * InList];
     MPI_Allreduce(shellf, global_shellf, n * InList, MPI_DOUBLE, MPI_SUM, MPI_COMM_WORLD);
@@ -3383,8 +3385,6 @@ void bssn_class::Interp_Constraint(bool infg)
         outfile.close();
     }
 
-    cudaFree(d_x1); cudaFree(d_y1); cudaFree(d_z1);
-    cudaFree(d_shellf); 
     delete[] shellf; delete[] global_shellf;
     delete[] x1; delete[] y1; delete[] z1;
 }

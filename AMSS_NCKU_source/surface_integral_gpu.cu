@@ -245,11 +245,10 @@ void surface_integral::gpu_surf_MassPAng(
 
     // int n;
     double *d_pox[3];
-    for (int i = 0; i < 3; i++) d_pox[i] = GPUManager::getInstance().allocate_device_memory(n_tot);
+    for (int i = 0; i < 3; i++) d_pox[i] = GPUManager::getInstance().allocate_device_memory<double>(n_tot);
     gpu_scale_normals_launch(this->stream, n_tot, rex, d_nx_g, d_ny_g, d_nz_g, d_pox[0], d_pox[1], d_pox[2]);
 
-    double* d_shellf = GPUManager::getInstance().allocate_device_memory(n_tot * InList);
-    CUDA_CHECK(cudaMemset(d_shellf, 0, n_tot * InList * sizeof(double)));
+    double* d_shellf = GPUManager::getInstance().allocate_device_memory<double>(n_tot * InList);
 
     GH->PatL[lev]->data->Interp_Points_GPU(this->stream, DG_List, n_tot, d_pox, d_shellf, Symmetry);
 
@@ -272,8 +271,7 @@ void surface_integral::gpu_surf_MassPAng(
     }
 
     double h_reductions[7] = {0}; 
-    double* d_reductions = GPUManager::getInstance().allocate_device_memory(7 * sizeof(double));
-    cudaMemset(d_reductions, 0, 7 * sizeof(double));
+    double* d_reductions = GPUManager::getInstance().allocate_device_memory<double>(7);
     gpu_surf_MassPAng_launch(
         this->stream,
         Nmin, Nmax, N_phi, InList, Symmetry,
@@ -320,6 +318,7 @@ void surface_integral::gpu_surf_MassPAng(
     GPUManager::getInstance().free_device_memory(d_pox[1], n_tot);
     GPUManager::getInstance().free_device_memory(d_pox[2], n_tot);
     GPUManager::getInstance().free_device_memory(d_shellf, n_tot * InList);
+    GPUManager::getInstance().free_device_memory(d_reductions, 7);
 
     DG_List->clearList();
 }
@@ -476,13 +475,12 @@ void surface_integral::gpu_surf_Wave(
     // 1. 生成球面插值点坐标 (完全在 GPU 上，无 Host 开销)
     double *d_pox[3];
     for (int i = 0; i < 3; i++) {
-        d_pox[i] = GPUManager::getInstance().allocate_device_memory(n_tot);
+        d_pox[i] = GPUManager::getInstance().allocate_device_memory<double>(n_tot);
     }
     gpu_scale_normals_launch(this->stream, n_tot, rex, d_nx_g, d_ny_g, d_nz_g, d_pox[0], d_pox[1], d_pox[2]);
 
     // 2. 准备接收插值结果的 GPU 数组
-    double* d_shellf = GPUManager::getInstance().allocate_device_memory(n_tot * InList);
-    CUDA_CHECK(cudaMemset(d_shellf, 0, n_tot * InList * sizeof(double)));
+    double* d_shellf = GPUManager::getInstance().allocate_device_memory<double>(n_tot * InList);
 
     // 3. 执行全 GPU 的插值过程
     GH->PatL[lev]->data->Interp_Points_GPU(this->stream, DG_List, n_tot, d_pox, d_shellf, Symmetry);
@@ -501,10 +499,8 @@ void surface_integral::gpu_surf_Wave(
     }
 
     // 5. 准备 GPU 端的输出数组，并清零
-    double *d_RP_out = GPUManager::getInstance().allocate_device_memory(NN * sizeof(double));
-    double *d_IP_out = GPUManager::getInstance().allocate_device_memory(NN * sizeof(double));
-    CUDA_CHECK(cudaMemset(d_RP_out, 0, NN * sizeof(double)));
-    CUDA_CHECK(cudaMemset(d_IP_out, 0, NN * sizeof(double)));
+    double *d_RP_out = GPUManager::getInstance().allocate_device_memory<double>(NN);
+    double *d_IP_out = GPUManager::getInstance().allocate_device_memory<double>(NN);
 
     // 6. 提取变量自带的对称性 SoA 标记（用于传入 Kernel 做边界判断）
     double R_SoA[3] = {Rpsi4->SoA[0], Rpsi4->SoA[1], Rpsi4->SoA[2]};

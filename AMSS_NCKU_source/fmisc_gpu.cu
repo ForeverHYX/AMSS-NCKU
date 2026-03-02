@@ -303,9 +303,7 @@ void gpu_l2normhelper_launch(
         return;
     }
 
-    // 分配设备端内存用于保存累加结果 (使用 Async API 降低分配延迟，需 CUDA 11.2+)
-    double* d_sum = GPUManager::getInstance().allocate_device_memory(1);
-    cudaMemsetAsync(d_sum, 0, sizeof(double), stream);
+    double* d_sum = GPUManager::getInstance().allocate_device_memory<double>(1);
 
     // 设置线程块大小，通常 8x8x8 = 512 线程效率较好
     dim3 blockDim(8, 8, 8); 
@@ -323,7 +321,7 @@ void gpu_l2normhelper_launch(
 
     double h_sum = 0.0;
     // 将结果拷回 CPU
-    cudaMemcpyAsync(&h_sum, d_sum, sizeof(double), cudaMemcpyDeviceToHost, stream);
+    GPUManager::getInstance().sync_to_cpu(&h_sum, d_sum, 1);
     
     // 强制同步：由于后续的 MPI_Allreduce 立刻需要用到 f_out 的 CPU 数据，这里必须等待 GPU 计算并拷贝完成
     cudaStreamSynchronize(stream);
