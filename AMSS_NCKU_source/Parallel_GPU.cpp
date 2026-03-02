@@ -190,8 +190,8 @@ void Parallel::gpu_transfer(
     }
         
     for (node = 0; node < cpusize; node++) {
-        if (send_data[node]) GPUManager::getInstance().free_device_memory(send_data[node], gpu_data_packer(0, src[node], dst[node], node, PACK, VarList1, VarList2, Symmetry));
-        if (rec_data[node]) GPUManager::getInstance().free_device_memory(rec_data[node], gpu_data_packer(0, src[node], dst[node], node, UNPACK, VarList1, VarList2, Symmetry));
+        if (send_data[node]) GPUManager::getInstance().free_device_memory(send_data[node], 0);
+        if (rec_data[node]) GPUManager::getInstance().free_device_memory(rec_data[node], 0);
     }
 
     delete[] reqs;
@@ -283,8 +283,8 @@ void Parallel::gpu_transfer(
         
     // 释放所有资源
     for (node = 0; node < cpusize; node++) {
-        if (send_data_d[node]) GPUManager::getInstance().free_device_memory(send_data_d[node], gpu_data_packer(0, src[node], dst[node], node, PACK, VarList1, VarList2, Symmetry));
-        if (rec_data_d[node]) GPUManager::getInstance().free_device_memory(rec_data_d[node], gpu_data_packer(0, src[node], dst[node], node, UNPACK, VarList1, VarList2, Symmetry));
+        if (send_data_d[node]) GPUManager::getInstance().free_device_memory(send_data_d[node], 0);
+        if (rec_data_d[node]) GPUManager::getInstance().free_device_memory(rec_data_d[node], 0);
         if (send_data_h[node]) delete[] send_data_h[node];
         if (rec_data_h[node]) delete[] rec_data_h[node];
     }

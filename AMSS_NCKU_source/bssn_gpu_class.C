@@ -3351,16 +3351,14 @@ void bssn_class::Interp_Constraint(bool infg)
         }
     }
 
-    double *shellf = new double[n * InList];
-    GPUManager::getInstance().sync_to_cpu(shellf, d_shellf, n * InList);
-
     // 4. 同步所有流，并清理临时的 GPU 索引数组
     GPUManager::getInstance().synchronize_all();
     for (int* ptr : d_indices_to_free) GPUManager::getInstance().free_device_memory(ptr, 0);
-    GPUManager::getInstance().free_device_memory(d_x1, n * sizeof(double));
-    GPUManager::getInstance().free_device_memory(d_y1, n * sizeof(double));
-    GPUManager::getInstance().free_device_memory(d_z1, n * sizeof(double));
-    GPUManager::getInstance().free_device_memory(d_shellf, n * InList * sizeof(double));
+
+    // 5. 拷回 CPU 并做一次性全局归约
+    double *shellf = new double[n * InList];
+    GPUManager::getInstance().sync_to_cpu(shellf, d_shellf, n * InList);
+
     delete[] assigned_bp;
 
     double *global_shellf = new double[n * InList];
@@ -3385,6 +3383,10 @@ void bssn_class::Interp_Constraint(bool infg)
         outfile.close();
     }
 
+    GPUManager::getInstance().free_device_memory(d_x1, n * sizeof(double));
+    GPUManager::getInstance().free_device_memory(d_y1, n * sizeof(double));
+    GPUManager::getInstance().free_device_memory(d_z1, n * sizeof(double));
+    GPUManager::getInstance().free_device_memory(d_shellf, n * InList * sizeof(double));
     delete[] shellf; delete[] global_shellf;
     delete[] x1; delete[] y1; delete[] z1;
 }

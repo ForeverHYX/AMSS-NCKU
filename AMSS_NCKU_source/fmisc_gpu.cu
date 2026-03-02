@@ -319,12 +319,12 @@ void gpu_l2normhelper_launch(
         d_sum
     );
 
+    // 强制同步：由于后续的 MPI_Allreduce 立刻需要用到 f_out 的 CPU 数据，这里必须等待 GPU 计算并拷贝完成
+    cudaStreamSynchronize(stream);
+
     double h_sum = 0.0;
     // 将结果拷回 CPU
     GPUManager::getInstance().sync_to_cpu(&h_sum, d_sum, 1);
-    
-    // 强制同步：由于后续的 MPI_Allreduce 立刻需要用到 f_out 的 CPU 数据，这里必须等待 GPU 计算并拷贝完成
-    cudaStreamSynchronize(stream);
     GPUManager::getInstance().free_device_memory(d_sum, 1);
 
     f_out = h_sum * dX * dY * dZ;
