@@ -892,7 +892,7 @@ void gpu_compute_rhs_bssn_launch_opt( // launch kernel with device pointers
     double* d_Gmx_Res, double* d_Gmy_Res, double* d_Gmz_Res,
     int symmetry, int lev, double eps, int co
 ) {
-    dim3 block = ex[0] % 32 == 0 ? dim3(32, 4, 2) : dim3(16, 4, 4); // 调整 block size 以适应架构
+    dim3 block(8, 8, 4); // 调整 block size 以适应架构
     dim3 grid(
         (ex[0] + block.x - 1) / block.x,
         (ex[1] + block.y - 1) / block.y,

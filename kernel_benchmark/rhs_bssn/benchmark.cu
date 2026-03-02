@@ -83,22 +83,28 @@ struct GridShape {
 };
 
 // ==========================================
-// 辅助内存与检验宏
+// 辅助内存分配与初始化宏
 // ==========================================
 
-// 常规输入变量 ([-0.5, 0.5])
+// 常规输入变量 (通常给坐标等)
 #define ALLOC_INPUT(name, size) \
     double *name; \
     CHECK_CUDA(cudaMallocManaged(&name, size * sizeof(double))); \
     for(size_t i = 0; i < size; ++i) name[i] = ((double)rand() / RAND_MAX) - 0.5;
 
-// 安全正数变量 (如 chi, Lap 存在+1作为分母，需避免为-1导致除零)
+// 安全正数变量 (给 chi, Lap 等作为分母或根号内项)
 #define ALLOC_INPUT_POS(name, size) \
     double *name; \
     CHECK_CUDA(cudaMallocManaged(&name, size * sizeof(double))); \
     for(size_t i = 0; i < size; ++i) name[i] = ((double)rand() / RAND_MAX) * 0.5 + 0.1;
 
-// 输出变量：分配 std_name 和 opt_name 并给相同的初始随机值 (因为 kernel 中有 += 操作)
+// 物理微扰变量 (防 NaN 核心：确保度规矩阵正定)
+#define ALLOC_INPUT_SMALL(name, size) \
+    double *name; \
+    CHECK_CUDA(cudaMallocManaged(&name, size * sizeof(double))); \
+    for(size_t i = 0; i < size; ++i) name[i] = (((double)rand() / RAND_MAX) - 0.5) * 0.01;
+
+// 输出变量：给相同的初始随机脏数据，以验证 Kernel 是否能正确覆写而不是乱加
 #define ALLOC_OUTPUT(name, size) \
     double *std_##name, *opt_##name; \
     CHECK_CUDA(cudaMallocManaged(&std_##name, size * sizeof(double))); \
@@ -113,14 +119,19 @@ struct GridShape {
 #define FREE_INPUT(name) CHECK_CUDA(cudaFree(name));
 #define FREE_OUTPUT(name) CHECK_CUDA(cudaFree(std_##name)); CHECK_CUDA(cudaFree(opt_##name));
 
-// 校验函数与宏
+// 校验函数
 bool check_error(const double* std_arr, const double* opt_arr, size_t size, const std::string& name) {
     double max_err = 0.0;
     for(size_t i = 0; i < size; ++i) {
         double err = std::abs(std_arr[i] - opt_arr[i]);
+        if (std::isnan(err)) {
+            std::cout << "    " << ANSI_RED << "[FATAL]" << ANSI_RESET << " NaN detected in " << name << "!\n";
+            return false;
+        }
         if (err > max_err) max_err = err;
     }
-    if (max_err > 1e-8) { // GR 偏微分方程的容差建议放宽到 1e-8
+    // 数值相对论的大型偏微分方程经过复杂重算后，1e-8 的舍入误差是可以接受的
+    if (max_err > 1e-8) { 
         std::cout << "    [FAIL] Mismatch in " << std::left << std::setw(10) << name 
                   << " | Max Error = " << std::scientific << max_err << "\n";
         return false;
@@ -140,22 +151,24 @@ void run_benchmark(const GridShape& grid) {
     std::cout << "Testing Level " << grid.level << " | Shape: [" 
               << grid.shape[0] << "," << grid.shape[1] << "," << grid.shape[2] << "]\n";
 
-    // 1. 分配所有输入数组
+    // 1. 分配输入数组（采用修正后的安全初始化）
     ALLOC_INPUT(X, num_elements); ALLOC_INPUT(Y, num_elements); ALLOC_INPUT(Z, num_elements);
-    ALLOC_INPUT_POS(chi, num_elements); ALLOC_INPUT(trK, num_elements);
-    ALLOC_INPUT(dxx, num_elements); ALLOC_INPUT(gxy, num_elements); ALLOC_INPUT(gxz, num_elements);
-    ALLOC_INPUT(dyy, num_elements); ALLOC_INPUT(gyz, num_elements); ALLOC_INPUT(dzz, num_elements);
-    ALLOC_INPUT(Axx, num_elements); ALLOC_INPUT(Axy, num_elements); ALLOC_INPUT(Axz, num_elements);
-    ALLOC_INPUT(Ayy, num_elements); ALLOC_INPUT(Ayz, num_elements); ALLOC_INPUT(Azz, num_elements);
-    ALLOC_INPUT(Gamx, num_elements); ALLOC_INPUT(Gamy, num_elements); ALLOC_INPUT(Gamz, num_elements);
-    ALLOC_INPUT_POS(Lap, num_elements);
-    ALLOC_INPUT(betax, num_elements); ALLOC_INPUT(betay, num_elements); ALLOC_INPUT(betaz, num_elements);
-    ALLOC_INPUT(dtSfx, num_elements); ALLOC_INPUT(dtSfy, num_elements); ALLOC_INPUT(dtSfz, num_elements);
-    ALLOC_INPUT(rho, num_elements); ALLOC_INPUT(Sx, num_elements); ALLOC_INPUT(Sy, num_elements); ALLOC_INPUT(Sz, num_elements);
-    ALLOC_INPUT(Sxx, num_elements); ALLOC_INPUT(Sxy, num_elements); ALLOC_INPUT(Sxz, num_elements);
-    ALLOC_INPUT(Syy, num_elements); ALLOC_INPUT(Syz, num_elements); ALLOC_INPUT(Szz, num_elements);
+    
+    ALLOC_INPUT_POS(chi, num_elements); ALLOC_INPUT_POS(Lap, num_elements); ALLOC_INPUT_POS(rho, num_elements);
+    
+    ALLOC_INPUT_SMALL(trK, num_elements);
+    ALLOC_INPUT_SMALL(dxx, num_elements); ALLOC_INPUT_SMALL(gxy, num_elements); ALLOC_INPUT_SMALL(gxz, num_elements);
+    ALLOC_INPUT_SMALL(dyy, num_elements); ALLOC_INPUT_SMALL(gyz, num_elements); ALLOC_INPUT_SMALL(dzz, num_elements);
+    ALLOC_INPUT_SMALL(Axx, num_elements); ALLOC_INPUT_SMALL(Axy, num_elements); ALLOC_INPUT_SMALL(Axz, num_elements);
+    ALLOC_INPUT_SMALL(Ayy, num_elements); ALLOC_INPUT_SMALL(Ayz, num_elements); ALLOC_INPUT_SMALL(Azz, num_elements);
+    ALLOC_INPUT_SMALL(Gamx, num_elements); ALLOC_INPUT_SMALL(Gamy, num_elements); ALLOC_INPUT_SMALL(Gamz, num_elements);
+    ALLOC_INPUT_SMALL(betax, num_elements); ALLOC_INPUT_SMALL(betay, num_elements); ALLOC_INPUT_SMALL(betaz, num_elements);
+    ALLOC_INPUT_SMALL(dtSfx, num_elements); ALLOC_INPUT_SMALL(dtSfy, num_elements); ALLOC_INPUT_SMALL(dtSfz, num_elements);
+    ALLOC_INPUT_SMALL(Sx, num_elements); ALLOC_INPUT_SMALL(Sy, num_elements); ALLOC_INPUT_SMALL(Sz, num_elements);
+    ALLOC_INPUT_SMALL(Sxx, num_elements); ALLOC_INPUT_SMALL(Sxy, num_elements); ALLOC_INPUT_SMALL(Sxz, num_elements);
+    ALLOC_INPUT_SMALL(Syy, num_elements); ALLOC_INPUT_SMALL(Syz, num_elements); ALLOC_INPUT_SMALL(Szz, num_elements);
 
-    // 虽未被读取但存在于签名的 Dummy 指针
+    // 原 std Kernel 中间变量，随便初始化即可，会被完全覆盖
     ALLOC_INPUT(Gamxxx, num_elements); ALLOC_INPUT(Gamxxy, num_elements); ALLOC_INPUT(Gamxxz, num_elements);
     ALLOC_INPUT(Gamxyy, num_elements); ALLOC_INPUT(Gamxyz, num_elements); ALLOC_INPUT(Gamxzz, num_elements);
     ALLOC_INPUT(Gamyxx, num_elements); ALLOC_INPUT(Gamyxy, num_elements); ALLOC_INPUT(Gamyxz, num_elements);
@@ -165,7 +178,7 @@ void run_benchmark(const GridShape& grid) {
     ALLOC_INPUT(Rxx, num_elements); ALLOC_INPUT(Rxy, num_elements); ALLOC_INPUT(Rxz, num_elements);
     ALLOC_INPUT(Ryy, num_elements); ALLOC_INPUT(Ryz, num_elements); ALLOC_INPUT(Rzz, num_elements);
 
-    // 2. 分配带有两套拷贝的 RHS / Res 数组
+    // 2. 分配带有两套拷贝的 RHS / Res 输出数组
     ALLOC_OUTPUT(chi_rhs, num_elements); ALLOC_OUTPUT(trK_rhs, num_elements);
     ALLOC_OUTPUT(gxx_rhs, num_elements); ALLOC_OUTPUT(gxy_rhs, num_elements); ALLOC_OUTPUT(gxz_rhs, num_elements);
     ALLOC_OUTPUT(gyy_rhs, num_elements); ALLOC_OUTPUT(gyz_rhs, num_elements); ALLOC_OUTPUT(gzz_rhs, num_elements);
@@ -184,16 +197,17 @@ void run_benchmark(const GridShape& grid) {
     int ex[3] = {grid.shape[0], grid.shape[1], grid.shape[2]};
     cudaStream_t stream;
     CHECK_CUDA(cudaStreamCreate(&stream));
+    
     int symmetry = 0; double eps = 0.1; int co = 0; double T = 0.0;
+    int warmup = 3;
+    int iterations = 20;
 
-    // 3. 性能测试: Standard
     cudaEvent_t start, stop;
     cudaEventCreate(&start); cudaEventCreate(&stop);
-    
-    int warmup = 2;
-    int iterations = 10;
-    
-    // Warmup Standard
+
+    // ==========================================
+    // 3. 性能测试: Standard (原版)
+    // ==========================================
     for(int i = 0; i < warmup; ++i) {
         gpu_compute_rhs_bssn_launch_std(stream, ex, T, X, Y, Z, chi, trK, dxx, gxy, gxz, dyy, gyz, dzz,
             Axx, Axy, Axz, Ayy, Ayz, Azz, Gamx, Gamy, Gamz, Lap, betax, betay, betaz, dtSfx, dtSfy, dtSfz,
@@ -227,7 +241,9 @@ void run_benchmark(const GridShape& grid) {
     cudaEventElapsedTime(&std_ms, start, stop);
     std_ms /= iterations;
 
-    // 4. 性能测试: Optimized
+    // ==========================================
+    // 4. 性能测试: Optimized (优化解耦版)
+    // ==========================================
     for(int i = 0; i < warmup; ++i) {
         gpu_compute_rhs_bssn_launch_opt(stream, ex, T, X, Y, Z, chi, trK, dxx, gxy, gxz, dyy, gyz, dzz,
             Axx, Axy, Axz, Ayy, Ayz, Azz, Gamx, Gamy, Gamz, Lap, betax, betay, betaz, dtSfx, dtSfy, dtSfz,
@@ -261,13 +277,15 @@ void run_benchmark(const GridShape& grid) {
     cudaEventElapsedTime(&opt_ms, start, stop);
     opt_ms /= iterations;
 
-    // 输出性能比对
+    // 打印性能信息
     std::cout << std::fixed << std::setprecision(3);
     std::cout << "  Standard Time : " << std_ms << " ms\n";
     std::cout << "  Optimized Time: " << opt_ms << " ms\n";
     std::cout << "  Speedup       : " << ANSI_BLUE << std_ms / opt_ms << ANSI_RESET << " x\n";
 
+    // ==========================================
     // 5. 结果正确性强校验
+    // ==========================================
     CHECK_CUDA(cudaDeviceSynchronize());
     bool all_passed = true;
     
@@ -280,6 +298,7 @@ void run_benchmark(const GridShape& grid) {
     CHECK_RESULT(Lap_rhs, num_elements);
     CHECK_RESULT(betax_rhs, num_elements); CHECK_RESULT(betay_rhs, num_elements); CHECK_RESULT(betaz_rhs, num_elements);
     CHECK_RESULT(dtSfx_rhs, num_elements); CHECK_RESULT(dtSfy_rhs, num_elements); CHECK_RESULT(dtSfz_rhs, num_elements);
+    
     CHECK_RESULT(ham_Res, num_elements); 
     CHECK_RESULT(movx_Res, num_elements); CHECK_RESULT(movy_Res, num_elements); CHECK_RESULT(movz_Res, num_elements);
     CHECK_RESULT(Gmx_Res, num_elements); CHECK_RESULT(Gmy_Res, num_elements); CHECK_RESULT(Gmz_Res, num_elements);
@@ -290,7 +309,9 @@ void run_benchmark(const GridShape& grid) {
         std::cout << "  " << ANSI_RED << "[FAILED]" << ANSI_RESET << " Some outputs diverged. Check your optimizations!\n";
     }
 
+    // ==========================================
     // 6. 内存释放
+    // ==========================================
     FREE_INPUT(X); FREE_INPUT(Y); FREE_INPUT(Z);
     FREE_INPUT(chi); FREE_INPUT(trK);
     FREE_INPUT(dxx); FREE_INPUT(gxy); FREE_INPUT(gxz); FREE_INPUT(dyy); FREE_INPUT(gyz); FREE_INPUT(dzz);
