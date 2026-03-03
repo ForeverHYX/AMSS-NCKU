@@ -16,20 +16,22 @@
 
 constexpr double SYM = 1.0;
 constexpr double ANTI = -1.0;
-constexpr double ZEO = 0.0;
+
+
+// ================= 新增预计算常量 =================
 constexpr double ONE = 1.0;
 constexpr double TWO = 2.0;
-constexpr double FOUR = 4.0;
-constexpr double EIGHT = 8.0;
-constexpr double PI = M_PI;
+constexpr double FOUR_PI  = 4.0 * M_PI;
+constexpr double EIGHT_PI = 8.0 * M_PI;
+constexpr double F16_PI   = 16.0 * M_PI;
+// ===============================================
+
 constexpr double F1o3 = 1.0 / 3.0;
 constexpr double F2o3 = 2.0 / 3.0;
 constexpr double F3o2 = 1.5;
 constexpr double HALF = 0.5;
 constexpr double FF = 0.75;
 constexpr double eta = 2.0;
-constexpr double F8 = 8.0;
-constexpr double F16 = 16.0;
 
 __launch_bounds__(256, 2)
 __global__ void bssn_ricci_kernel(
@@ -482,7 +484,7 @@ __global__ void bssn_rhs_eval_kernel(
     Ayz_rhs[idx] = chin1 * (src_yz - l_gyz * f_trace) + alpn1 * (val_trK * l_Ayz - TWO * term_yz) + l_Axy * betaxz + l_Ayy * betayz + l_Axz * betaxy + l_Azz * betazy - l_Ayz * betaxx + F1o3 * l_Ayz * div_beta;
     Axz_rhs[idx] = chin1 * (src_xz - l_gxz * f_trace) + alpn1 * (val_trK * l_Axz - TWO * term_xz) + l_Axx * betaxz + l_Axy * betayz + l_Ayz * betayx + l_Azz * betazx - l_Axz * betayy + F1o3 * l_Axz * div_beta;
 
-    trK_rhs[idx] = -chin1 * trK_rhs_val + alpn1 * (F1o3 * val_trK * val_trK + trA2 + FOUR * PI * (rho[idx] + S));
+    trK_rhs[idx] = -chin1 * trK_rhs_val + alpn1 * (F1o3 * val_trK * val_trK + trA2 + FOUR_PI * (rho[idx] + S));
 
     const double FF = 0.75; const double eta = 2.0;
     double l_dtSfx = dtSfx[idx], l_dtSfy = dtSfy[idx], l_dtSfz = dtSfz[idx];

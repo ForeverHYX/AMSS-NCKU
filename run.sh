@@ -23,21 +23,18 @@ rm -rf GW150914/figure
 
 . ~/spack/share/spack/setup-env.sh
 # spack load openmpi
-spack load intel-oneapi-compilers
+spack load intel-oneapi-compilers@2025.3.2
 spack load intel-oneapi-mpi
 
 spack load cuda
 
-export LD_LIBRARY_PATH=/home/jjsnam/spack/opt/spack/linux-icelake/cuda-13.0.2-nxiq75wz7g54wiu5ublimzvgspxrweit/lib64:${LD_LIBRARY_PATH}
-
-source ~/anaconda3/etc/profile.d/conda.sh
-conda activate AMSS
+export LD_LIBRARY_PATH=/home/foreverhyx/spack/opt/spack/linux-icelake/cuda-13.0.2-r2bcws4tslasb4sd35jta22m6zxcnzf4/lib64:$LD_LIBRARY_PATH
 
 export I_MPI_FABRICS=shm
 export I_MPI_PIN_DOMAIN=core
 
 ulimit -s unlimited
-export OMP_NUM_THREADS=1
+export OMP_NUM_THREADS=48
 
 export I_MPI_DEBUG=0 # Mysterious parameters for MPI_AllReduce
 

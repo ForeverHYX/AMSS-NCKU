@@ -12,6 +12,7 @@
 #include <cmath>
 #include <cstdio>
 #include <complex>
+#include <omp.h>
 using namespace std;
 #else
 #include <assert.h>
@@ -891,24 +892,20 @@ double TwoPunctures::norm1(double *v, int n)
 /* -------------------------------------------------------------------------*/
 double TwoPunctures::norm2(double *v, int n)
 {
-  int i;
   double result = 0;
-
-  for (i = 0; i < n; i++)
+#pragma omp parallel for reduction(+:result) schedule(static)
+  for (int i = 0; i < n; i++)
     result += v[i] * v[i];
-
   return sqrt(result);
 }
 
 /* -------------------------------------------------------------------------*/
 double TwoPunctures::scalarproduct(double *v, double *w, int n)
 {
-  int i;
   double result = 0;
-
-  for (i = 0; i < n; i++)
+#pragma omp parallel for reduction(+:result) schedule(static)
+  for (int i = 0; i < n; i++)
     result += v[i] * w[i];
-
   return result;
 }
 
@@ -1121,27 +1118,48 @@ void TwoPunctures::rx3_To_xyz(int nvar, double x, double r, double phi,
 /* --------------------------------------------------------------------------*/
 void TwoPunctures::Derivatives_AB3(int nvar, int n1, int n2, int n3, derivs v)
 {
-  int i, j, k, ivar, N, *indx;
-  double *p, *dp, *d2p, *q, *dq, *r, *dr;
+  /* OpenMP parallelized spectral derivative computation.
+   *
+   * Thread-local buffers are pre-allocated once per call (one set per thread),
+   * avoiding the per-iteration malloc overhead that would otherwise dominate.
+   * The three direction passes are separated by implicit OMP barriers that
+   * enforce the required data-dependency order (A → B → phi).
+   */
+  int N = maximum3(n1, n2, n3);
+  int nthreads = omp_get_max_threads();
 
-  N = maximum3(n1, n2, n3);
-  p = dvector(0, N);
-  dp = dvector(0, N);
-  d2p = dvector(0, N);
-  q = dvector(0, N);
-  dq = dvector(0, N);
-  r = dvector(0, N);
-  dr = dvector(0, N);
-  indx = ivector(0, N);
+  /* Allocate one buffer set per thread */
+  double **p_tb   = new double*[nthreads];
+  double **dp_tb  = new double*[nthreads];
+  double **d2p_tb = new double*[nthreads];
+  double **q_tb   = new double*[nthreads];
+  double **dq_tb  = new double*[nthreads];
+  double **r_tb   = new double*[nthreads];
+  double **dr_tb  = new double*[nthreads];
+  int   **indx_tb = new int*[nthreads];
 
-  for (ivar = 0; ivar < nvar; ivar++)
+  for (int t = 0; t < nthreads; t++) {
+    p_tb[t]    = dvector(0, N);
+    dp_tb[t]   = dvector(0, N);
+    d2p_tb[t]  = dvector(0, N);
+    q_tb[t]    = dvector(0, N);
+    dq_tb[t]   = dvector(0, N);
+    r_tb[t]    = dvector(0, N);
+    dr_tb[t]   = dvector(0, N);
+    indx_tb[t] = ivector(0, N);
+  }
+
+  for (int ivar = 0; ivar < nvar; ivar++)
   {
-    for (k = 0; k < n3; k++)
-    { /* Calculation of Derivatives w.r.t. A-Dir. */
-      for (j = 0; j < n2; j++)
-      { /* (Chebyshev_Zeros)*/
-        for (i = 0; i < n1; i++)
-        {
+    /* ---- A-direction: parallelize k×j ---- */
+#pragma omp parallel for collapse(2) schedule(static)
+    for (int k = 0; k < n3; k++)
+      for (int j = 0; j < n2; j++)
+      {
+        int tid = omp_get_thread_num();
+        double *p = p_tb[tid], *dp = dp_tb[tid], *d2p = d2p_tb[tid];
+        int    *indx = indx_tb[tid];
+        for (int i = 0; i < n1; i++) {
           indx[i] = Index(ivar, i, j, k, nvar, n1, n2, n3);
           p[i] = v.d0[indx[i]];
         }
@@ -1150,19 +1168,22 @@ void TwoPunctures::Derivatives_AB3(int nvar, int n1, int n2, int n3, derivs v)
         chder(dp, d2p, n1);
         chebft_Zeros(dp, n1, 1);
         chebft_Zeros(d2p, n1, 1);
-        for (i = 0; i < n1; i++)
-        {
-          v.d1[indx[i]] = dp[i];
+        for (int i = 0; i < n1; i++) {
+          v.d1[indx[i]]  = dp[i];
           v.d11[indx[i]] = d2p[i];
         }
       }
-    }
-    for (k = 0; k < n3; k++)
-    { /* Calculation of Derivatives w.r.t. B-Dir. */
-      for (i = 0; i < n1; i++)
-      { /* (Chebyshev_Zeros)*/
-        for (j = 0; j < n2; j++)
-        {
+
+    /* ---- B-direction: parallelize k×i (reads v.d1 written above) ---- */
+#pragma omp parallel for collapse(2) schedule(static)
+    for (int k = 0; k < n3; k++)
+      for (int i = 0; i < n1; i++)
+      {
+        int tid = omp_get_thread_num();
+        double *p = p_tb[tid], *dp = dp_tb[tid], *d2p = d2p_tb[tid];
+        double *q = q_tb[tid], *dq = dq_tb[tid];
+        int    *indx = indx_tb[tid];
+        for (int j = 0; j < n2; j++) {
           indx[j] = Index(ivar, i, j, k, nvar, n1, n2, n3);
           p[j] = v.d0[indx[j]];
           q[j] = v.d1[indx[j]];
@@ -1175,20 +1196,24 @@ void TwoPunctures::Derivatives_AB3(int nvar, int n1, int n2, int n3, derivs v)
         chebft_Zeros(dp, n2, 1);
         chebft_Zeros(d2p, n2, 1);
         chebft_Zeros(dq, n2, 1);
-        for (j = 0; j < n2; j++)
-        {
-          v.d2[indx[j]] = dp[j];
+        for (int j = 0; j < n2; j++) {
+          v.d2[indx[j]]  = dp[j];
           v.d22[indx[j]] = d2p[j];
           v.d12[indx[j]] = dq[j];
         }
       }
-    }
-    for (i = 0; i < n1; i++)
-    { /* Calculation of Derivatives w.r.t. phi-Dir. (Fourier)*/
-      for (j = 0; j < n2; j++)
+
+    /* ---- phi-direction: parallelize i×j (reads v.d1,v.d2 written above) ---- */
+#pragma omp parallel for collapse(2) schedule(static)
+    for (int i = 0; i < n1; i++)
+      for (int j = 0; j < n2; j++)
       {
-        for (k = 0; k < n3; k++)
-        {
+        int tid = omp_get_thread_num();
+        double *p = p_tb[tid], *dp = dp_tb[tid], *d2p = d2p_tb[tid];
+        double *q = q_tb[tid], *dq = dq_tb[tid];
+        double *r = r_tb[tid], *dr = dr_tb[tid];
+        int    *indx = indx_tb[tid];
+        for (int k = 0; k < n3; k++) {
           indx[k] = Index(ivar, i, j, k, nvar, n1, n2, n3);
           p[k] = v.d0[indx[k]];
           q[k] = v.d1[indx[k]];
@@ -1205,24 +1230,34 @@ void TwoPunctures::Derivatives_AB3(int nvar, int n1, int n2, int n3, derivs v)
         fourft(r, n3, 0);
         fourder(r, dr, n3);
         fourft(dr, n3, 1);
-        for (k = 0; k < n3; k++)
-        {
-          v.d3[indx[k]] = dp[k];
+        for (int k = 0; k < n3; k++) {
+          v.d3[indx[k]]  = dp[k];
           v.d33[indx[k]] = d2p[k];
           v.d13[indx[k]] = dq[k];
           v.d23[indx[k]] = dr[k];
         }
       }
-    }
   }
-  free_dvector(p, 0, N);
-  free_dvector(dp, 0, N);
-  free_dvector(d2p, 0, N);
-  free_dvector(q, 0, N);
-  free_dvector(dq, 0, N);
-  free_dvector(r, 0, N);
-  free_dvector(dr, 0, N);
-  free_ivector(indx, 0, N);
+
+  /* Free thread-local buffers */
+  for (int t = 0; t < nthreads; t++) {
+    free_dvector(p_tb[t],   0, N);
+    free_dvector(dp_tb[t],  0, N);
+    free_dvector(d2p_tb[t], 0, N);
+    free_dvector(q_tb[t],   0, N);
+    free_dvector(dq_tb[t],  0, N);
+    free_dvector(r_tb[t],   0, N);
+    free_dvector(dr_tb[t],  0, N);
+    free_ivector(indx_tb[t], 0, N);
+  }
+  delete[] p_tb;
+  delete[] dp_tb;
+  delete[] d2p_tb;
+  delete[] q_tb;
+  delete[] dq_tb;
+  delete[] r_tb;
+  delete[] dr_tb;
+  delete[] indx_tb;
 }
 /* --------------------------------------------------------------------------*/
 void TwoPunctures::Newton(int const nvar, int const n1, int const n2, int const n3,
@@ -1295,18 +1330,23 @@ void TwoPunctures::F_of_v(int nvar, int n1, int n2, int n3, derivs v, double *F,
   allocate_derivs(&U, nvar);
 
   sources = (double *)calloc(n1 * n2 * n3, sizeof(double));
-  if (0)
+
+  Derivatives_AB3(nvar, n1, n2, n3, v);
+  /* Parallel main loop: F[indx] and u.*[indx] writes are to disjoint indices
+   * per (i,j,k) tuple. Each thread uses its own private U_p and values_p. */
+#pragma omp parallel                                              \
+  private(i, j, k, ivar, indx, al, be, A, B, X, R, x, r, phi, y, z, Am1)
   {
-    double *s_x, *s_y, *s_z;
-    int i3D;
-    s_x = (double *)calloc(n1 * n2 * n3, sizeof(double));
-    s_y = (double *)calloc(n1 * n2 * n3, sizeof(double));
-    s_z = (double *)calloc(n1 * n2 * n3, sizeof(double));
+    double *values_p = dvector(0, nvar - 1);
+    derivs  U_p;
+    allocate_derivs(&U_p, nvar);
+#pragma omp for collapse(2) schedule(static)
     for (i = 0; i < n1; i++)
+    {
       for (j = 0; j < n2; j++)
+      {
         for (k = 0; k < n3; k++)
         {
-          i3D = Index(0, i, j, k, 1, n1, n2, n3);
 
           al = Pih * (2 * i + 1) / n1;
           A = -cos(al);
@@ -1318,137 +1358,49 @@ void TwoPunctures::F_of_v(int nvar, int n1, int n2, int n3, derivs v, double *F,
           for (ivar = 0; ivar < nvar; ivar++)
           {
             indx = Index(ivar, i, j, k, nvar, n1, n2, n3);
-            U.d0[ivar] = Am1 * v.d0[indx];                    /* U*/
-            U.d1[ivar] = v.d0[indx] + Am1 * v.d1[indx];       /* U_A*/
-            U.d2[ivar] = Am1 * v.d2[indx];                    /* U_B*/
-            U.d3[ivar] = Am1 * v.d3[indx];                    /* U_3*/
-            U.d11[ivar] = 2 * v.d1[indx] + Am1 * v.d11[indx]; /* U_AA*/
-            U.d12[ivar] = v.d2[indx] + Am1 * v.d12[indx];     /* U_AB*/
-            U.d13[ivar] = v.d3[indx] + Am1 * v.d13[indx];     /* U_AB*/
-            U.d22[ivar] = Am1 * v.d22[indx];                  /* U_BB*/
-            U.d23[ivar] = Am1 * v.d23[indx];                  /* U_B3*/
-            U.d33[ivar] = Am1 * v.d33[indx];                  /* U_33*/
+            U_p.d0[ivar] = Am1 * v.d0[indx];                    /* U*/
+            U_p.d1[ivar] = v.d0[indx] + Am1 * v.d1[indx];       /* U_A*/
+            U_p.d2[ivar] = Am1 * v.d2[indx];                    /* U_B*/
+            U_p.d3[ivar] = Am1 * v.d3[indx];                    /* U_3*/
+            U_p.d11[ivar] = 2 * v.d1[indx] + Am1 * v.d11[indx]; /* U_AA*/
+            U_p.d12[ivar] = v.d2[indx] + Am1 * v.d12[indx];     /* U_AB*/
+            U_p.d13[ivar] = v.d3[indx] + Am1 * v.d13[indx];     /* U_AB*/
+            U_p.d22[ivar] = Am1 * v.d22[indx];                  /* U_BB*/
+            U_p.d23[ivar] = Am1 * v.d23[indx];                  /* U_B3*/
+            U_p.d33[ivar] = Am1 * v.d33[indx];                  /* U_33*/
           }
           /* Calculation of (X,R) and*/
           /* (U_X, U_R, U_3, U_XX, U_XR, U_X3, U_RR, U_R3, U_33)*/
-          AB_To_XR(nvar, A, B, &X, &R, U);
+          AB_To_XR(nvar, A, B, &X, &R, U_p);
           /* Calculation of (x,r) and*/
           /* (U, U_x, U_r, U_3, U_xx, U_xr, U_x3, U_rr, U_r3, U_33)*/
-          C_To_c(nvar, X, R, &(s_x[i3D]), &r, U);
+          C_To_c(nvar, X, R, &x, &r, U_p);
           /* Calculation of (y,z) and*/
           /* (U, U_x, U_y, U_z, U_xx, U_xy, U_xz, U_yy, U_yz, U_zz)*/
-          rx3_To_xyz(nvar, s_x[i3D], r, phi, &(s_y[i3D]), &(s_z[i3D]), U);
-        }
-    //    Set_Rho_ADM(cctkGH, n1*n2*n3, sources, s_x, s_y, s_z);  //external fortran code
-    free(s_z);
-    free(s_y);
-    free(s_x);
-  }
-  else
-    for (i = 0; i < n1; i++)
-      for (j = 0; j < n2; j++)
-        for (k = 0; k < n3; k++)
-          sources[Index(0, i, j, k, 1, n1, n2, n3)] = 0.0;
-
-  Derivatives_AB3(nvar, n1, n2, n3, v);
-  double psi, psi2, psi4, psi7, r_plus, r_minus;
-  FILE *debugfile = NULL;
-  if (0)
-  {
-    debugfile = fopen("res.dat", "w");
-    assert(debugfile);
-  }
-  for (i = 0; i < n1; i++)
-  {
-    for (j = 0; j < n2; j++)
-    {
-      for (k = 0; k < n3; k++)
-      {
-
-        al = Pih * (2 * i + 1) / n1;
-        A = -cos(al);
-        be = Pih * (2 * j + 1) / n2;
-        B = -cos(be);
-        phi = 2. * Pi * k / n3;
-
-        Am1 = A - 1;
-        for (ivar = 0; ivar < nvar; ivar++)
-        {
-          indx = Index(ivar, i, j, k, nvar, n1, n2, n3);
-          U.d0[ivar] = Am1 * v.d0[indx];                    /* U*/
-          U.d1[ivar] = v.d0[indx] + Am1 * v.d1[indx];       /* U_A*/
-          U.d2[ivar] = Am1 * v.d2[indx];                    /* U_B*/
-          U.d3[ivar] = Am1 * v.d3[indx];                    /* U_3*/
-          U.d11[ivar] = 2 * v.d1[indx] + Am1 * v.d11[indx]; /* U_AA*/
-          U.d12[ivar] = v.d2[indx] + Am1 * v.d12[indx];     /* U_AB*/
-          U.d13[ivar] = v.d3[indx] + Am1 * v.d13[indx];     /* U_AB*/
-          U.d22[ivar] = Am1 * v.d22[indx];                  /* U_BB*/
-          U.d23[ivar] = Am1 * v.d23[indx];                  /* U_B3*/
-          U.d33[ivar] = Am1 * v.d33[indx];                  /* U_33*/
-        }
-        /* Calculation of (X,R) and*/
-        /* (U_X, U_R, U_3, U_XX, U_XR, U_X3, U_RR, U_R3, U_33)*/
-        AB_To_XR(nvar, A, B, &X, &R, U);
-        /* Calculation of (x,r) and*/
-        /* (U, U_x, U_r, U_3, U_xx, U_xr, U_x3, U_rr, U_r3, U_33)*/
-        C_To_c(nvar, X, R, &x, &r, U);
-        /* Calculation of (y,z) and*/
-        /* (U, U_x, U_y, U_z, U_xx, U_xy, U_xz, U_yy, U_yz, U_zz)*/
-        rx3_To_xyz(nvar, x, r, phi, &y, &z, U);
-        NonLinEquations(sources[Index(0, i, j, k, 1, n1, n2, n3)],
-                        A, B, X, R, x, r, phi, y, z, U, values);
-        for (ivar = 0; ivar < nvar; ivar++)
-        {
-          indx = Index(ivar, i, j, k, nvar, n1, n2, n3);
-          F[indx] = values[ivar] * FAC;
-          /* if ((i<5) && ((j<5) || (j>n2-5)))*/
-          /*     F[indx] = 0.0;*/
-          u.d0[indx] = U.d0[ivar];   /*  U*/
-          u.d1[indx] = U.d1[ivar];   /*      U_x*/
-          u.d2[indx] = U.d2[ivar];   /*      U_y*/
-          u.d3[indx] = U.d3[ivar];   /*      U_z*/
-          u.d11[indx] = U.d11[ivar]; /*      U_xx*/
-          u.d12[indx] = U.d12[ivar]; /*      U_xy*/
-          u.d13[indx] = U.d13[ivar]; /*      U_xz*/
-          u.d22[indx] = U.d22[ivar]; /*      U_yy*/
-          u.d23[indx] = U.d23[ivar]; /*      U_yz*/
-          u.d33[indx] = U.d33[ivar]; /*      U_zz*/
-        }
-        if (debugfile && (k == 0))
-        {
-          r_plus = sqrt((x - par_b) * (x - par_b) + y * y + z * z);
-          r_minus = sqrt((x + par_b) * (x + par_b) + y * y + z * z);
-          psi = 1. +
-                0.5 * par_m_plus / r_plus +
-                0.5 * par_m_minus / r_minus +
-                U.d0[0];
-          psi2 = psi * psi;
-          psi4 = psi2 * psi2;
-          psi7 = psi * psi2 * psi4;
-          fprintf(debugfile,
-                  "%.16g %.16g %.16g %.16g %.16g %.16g %.16g %.16g\n",
-                  (double)x, (double)y, (double)A, (double)B,
-                  (double)(U.d11[0] +
-                           U.d22[0] +
-                           U.d33[0] +
-                           /*                      0.125 * BY_KKofxyz (x, y, z) / psi7 +*/
-                           (2.0 * Pi / psi2 / psi * sources[indx]) * FAC),
-                  (double)((U.d11[0] +
-                            U.d22[0] +
-                            U.d33[0]) *
-                           FAC),
-                  (double)(-(2.0 * Pi / psi2 / psi * sources[indx]) * FAC),
-                  (double)sources[indx]
-                  /*(double)F[indx]*/
-          );
+          rx3_To_xyz(nvar, x, r, phi, &y, &z, U_p);
+          NonLinEquations(sources[Index(0, i, j, k, 1, n1, n2, n3)],
+                          A, B, X, R, x, r, phi, y, z, U_p, values_p);
+          for (ivar = 0; ivar < nvar; ivar++)
+          {
+            indx = Index(ivar, i, j, k, nvar, n1, n2, n3);
+            F[indx] = values_p[ivar] * FAC;
+            u.d0[indx] = U_p.d0[ivar];   /*  U*/
+            u.d1[indx] = U_p.d1[ivar];   /*      U_x*/
+            u.d2[indx] = U_p.d2[ivar];   /*      U_y*/
+            u.d3[indx] = U_p.d3[ivar];   /*      U_z*/
+            u.d11[indx] = U_p.d11[ivar]; /*      U_xx*/
+            u.d12[indx] = U_p.d12[ivar]; /*      U_xy*/
+            u.d13[indx] = U_p.d13[ivar]; /*      U_xz*/
+            u.d22[indx] = U_p.d22[ivar]; /*      U_yy*/
+            u.d23[indx] = U_p.d23[ivar]; /*      U_yz*/
+            u.d33[indx] = U_p.d33[ivar]; /*      U_zz*/
+          }
         }
       }
     }
-  }
-  if (debugfile)
-  {
-    fclose(debugfile);
-  }
+    free_dvector(values_p, 0, nvar - 1);
+    free_derivs(&U_p, nvar);
+  } /* end omp parallel */
   free(sources);
   free_dvector(values, 0, nvar - 1);
   free_derivs(&U, nvar);
@@ -1457,13 +1409,11 @@ void TwoPunctures::F_of_v(int nvar, int n1, int n2, int n3, derivs v, double *F,
 double TwoPunctures::norm_inf(double const *F, int const ntotal)
 {
   double dmax = -1;
+#pragma omp parallel for reduction(max:dmax) schedule(static)
+  for (int j = 0; j < ntotal; j++)
   {
-    double dmax1 = -1;
-    for (int j = 0; j < ntotal; j++)
-      if (fabs(F[j]) > dmax1)
-        dmax1 = fabs(F[j]);
-    if (dmax1 > dmax)
-      dmax = dmax1;
+    double v = fabs(F[j]);
+    if (v > dmax) dmax = v;
   }
   return dmax;
 }
@@ -1849,7 +1799,6 @@ void TwoPunctures::SetMatrix_JFD(int nvar, int n1, int n2, int n3, derivs u,
 void TwoPunctures::J_times_dv(int nvar, int n1, int n2, int n3, derivs dv, double *Jdv, derivs u)
 { /*      Calculates the left hand sides of the non-linear equations F_m(v_n)=0*/
   /*      and the function u (u.d0[]) as well as its derivatives*/
-  /*      (u.d1[], u.d2[], u.d3[], u.d11[], u.d12[], u.d13[], u.d22[], u.d23[], u.d33[])*/
   /*      at interior points and at the boundaries "+/-"*/
   int i, j, k, ivar, indx;
   double al, be, A, B, X, R, x, r, phi, y, z, Am1, *values;
@@ -1857,6 +1806,10 @@ void TwoPunctures::J_times_dv(int nvar, int n1, int n2, int n3, derivs dv, doubl
 
   Derivatives_AB3(nvar, n1, n2, n3, dv);
 
+  /* Each i-iteration allocates/frees its own values/dU/U: thread-safe.
+   * Jdv[Index(ivar,i,j,k,...)] writes are to disjoint indices per i. */
+#pragma omp parallel for schedule(static) \
+  private(j, k, ivar, indx, al, be, A, B, X, R, x, r, phi, y, z, Am1, values, dU, U)
   for (i = 0; i < n1; i++)
   {
     values = dvector(0, nvar - 1);
@@ -1924,35 +1877,95 @@ void TwoPunctures::J_times_dv(int nvar, int n1, int n2, int n3, derivs dv, doubl
 void TwoPunctures::relax(double *dv, int const nvar, int const n1, int const n2, int const n3,
                          double const *rhs, int const *ncols, int **cols, double **JFD)
 {
-  int i, j, k, n;
+  /* OpenMP parallelized Gauss-Seidel relaxation.
+   *
+   * Original order: for each k (even then odd), do passes:
+   *   Pass 1: even-i LineRelax_be   Pass 2: odd-i LineRelax_be
+   *   Pass 3: odd-j  LineRelax_al   Pass 4: even-j LineRelax_al
+   *
+   * Key insight: stencil only couples k to k±1. Even-k planes only couple
+   * to odd-k values (never written in even-k passes), and vice versa.
+   * Therefore all even-k planes are mutually independent, as are all odd-k.
+   * Within one k-plane, the pass ordering (1→2→3→4) must be preserved
+   * because each pass uses results from the previous one.
+   *
+   * Restructure: execute "all even-k pass-1", then "all even-k pass-2", etc.
+   * This is equivalent to the original but allows collapse(2) parallelism
+   * of O(n3/2 * n1/2) or O(n3/2 * n2/2) per collapsed loop.
+   * The implicit barrier at the end of each #pragma omp for ensures
+   * the required pass ordering is maintained.
+   */
+  const int n_even_k = (n3 + 1) / 2;  /* count of even k: 0,2,4,...   */
+  const int n_odd_k  =  n3 / 2;        /* count of odd  k: 1,3,5,...   */
 
-  for (k = 0; k < n3; k = k + 2)
+  /* ============ Even k planes (k=0,2,4,...) ============ */
+
+  /* Pass 1: even-i LineRelax_be (i=2,4,...) × all even-k — fully independent */
   {
-    for (n = 0; n < N_PlaneRelax; n++)
-    {
-      for (i = 2; i < n1; i = i + 2)
-        LineRelax_be(dv, i, k, nvar, n1, n2, n3, rhs, ncols, cols, JFD);
-      for (i = 1; i < n1; i = i + 2)
-        LineRelax_be(dv, i, k, nvar, n1, n2, n3, rhs, ncols, cols, JFD);
-      for (j = 1; j < n2; j = j + 2)
-        LineRelax_al(dv, j, k, nvar, n1, n2, n3, rhs, ncols, cols, JFD);
-      for (j = 0; j < n2; j = j + 2)
-        LineRelax_al(dv, j, k, nvar, n1, n2, n3, rhs, ncols, cols, JFD);
-    }
+    const int n_ei = (n1 - 1) / 2;  /* i = (ii+1)*2, ii=0..n_ei-1: gives i=2,4,... */
+#pragma omp parallel for collapse(2) schedule(static)
+    for (int ik = 0; ik < n_even_k; ik++)
+      for (int ii = 0; ii < n_ei; ii++)
+        LineRelax_be(dv, (ii + 1) * 2, ik * 2, nvar, n1, n2, n3, rhs, ncols, cols, JFD);
   }
-  for (k = 1; k < n3; k = k + 2)
+  /* Pass 2: odd-i LineRelax_be (i=1,3,...) × all even-k */
   {
-    for (n = 0; n < N_PlaneRelax; n++)
-    {
-      for (i = 0; i < n1; i = i + 2)
-        LineRelax_be(dv, i, k, nvar, n1, n2, n3, rhs, ncols, cols, JFD);
-      for (i = 1; i < n1; i = i + 2)
-        LineRelax_be(dv, i, k, nvar, n1, n2, n3, rhs, ncols, cols, JFD);
-      for (j = 1; j < n2; j = j + 2)
-        LineRelax_al(dv, j, k, nvar, n1, n2, n3, rhs, ncols, cols, JFD);
-      for (j = 0; j < n2; j = j + 2)
-        LineRelax_al(dv, j, k, nvar, n1, n2, n3, rhs, ncols, cols, JFD);
-    }
+    const int n_oi = n1 / 2;  /* i = ii*2+1, ii=0..n_oi-1: gives i=1,3,... */
+#pragma omp parallel for collapse(2) schedule(static)
+    for (int ik = 0; ik < n_even_k; ik++)
+      for (int ii = 0; ii < n_oi; ii++)
+        LineRelax_be(dv, ii * 2 + 1, ik * 2, nvar, n1, n2, n3, rhs, ncols, cols, JFD);
+  }
+  /* Pass 3: odd-j LineRelax_al (j=1,3,...) × all even-k */
+  {
+    const int n_oj = n2 / 2;
+#pragma omp parallel for collapse(2) schedule(static)
+    for (int ik = 0; ik < n_even_k; ik++)
+      for (int jj = 0; jj < n_oj; jj++)
+        LineRelax_al(dv, jj * 2 + 1, ik * 2, nvar, n1, n2, n3, rhs, ncols, cols, JFD);
+  }
+  /* Pass 4: even-j LineRelax_al (j=0,2,...) × all even-k */
+  {
+    const int n_ej = (n2 + 1) / 2;
+#pragma omp parallel for collapse(2) schedule(static)
+    for (int ik = 0; ik < n_even_k; ik++)
+      for (int jj = 0; jj < n_ej; jj++)
+        LineRelax_al(dv, jj * 2, ik * 2, nvar, n1, n2, n3, rhs, ncols, cols, JFD);
+  }
+
+  /* ============ Odd k planes (k=1,3,5,...) ============ */
+
+  /* Pass 1: even-i (i=0,2,...) × all odd-k */
+  {
+    const int n_ei = (n1 + 1) / 2;  /* i = ii*2, ii=0..n_ei-1: gives i=0,2,... */
+#pragma omp parallel for collapse(2) schedule(static)
+    for (int ik = 0; ik < n_odd_k; ik++)
+      for (int ii = 0; ii < n_ei; ii++)
+        LineRelax_be(dv, ii * 2, ik * 2 + 1, nvar, n1, n2, n3, rhs, ncols, cols, JFD);
+  }
+  /* Pass 2: odd-i × all odd-k */
+  {
+    const int n_oi = n1 / 2;
+#pragma omp parallel for collapse(2) schedule(static)
+    for (int ik = 0; ik < n_odd_k; ik++)
+      for (int ii = 0; ii < n_oi; ii++)
+        LineRelax_be(dv, ii * 2 + 1, ik * 2 + 1, nvar, n1, n2, n3, rhs, ncols, cols, JFD);
+  }
+  /* Pass 3: odd-j × all odd-k */
+  {
+    const int n_oj = n2 / 2;
+#pragma omp parallel for collapse(2) schedule(static)
+    for (int ik = 0; ik < n_odd_k; ik++)
+      for (int jj = 0; jj < n_oj; jj++)
+        LineRelax_al(dv, jj * 2 + 1, ik * 2 + 1, nvar, n1, n2, n3, rhs, ncols, cols, JFD);
+  }
+  /* Pass 4: even-j × all odd-k */
+  {
+    const int n_ej = (n2 + 1) / 2;
+#pragma omp parallel for collapse(2) schedule(static)
+    for (int ik = 0; ik < n_odd_k; ik++)
+      for (int jj = 0; jj < n_ej; jj++)
+        LineRelax_al(dv, jj * 2, ik * 2 + 1, nvar, n1, n2, n3, rhs, ncols, cols, JFD);
   }
 }
 /* --------------------------------------------------------------------------*/
@@ -1964,17 +1977,17 @@ void TwoPunctures::LineRelax_be(double *dv,
 {
   int j, m, Ic, Ip, Im, col, ivar;
 
-  double *diag = new double[n2];
-  double *e = new double[n2 - 1]; /* above diagonal */
-  double *f = new double[n2 - 1]; /* below diagonal */
-  double *b = new double[n2];     /* rhs */
-  double *x = new double[n2];     /* solution vector */
-
-  //  gsl_vector *diag = gsl_vector_alloc(n2);
-  //  gsl_vector *e = gsl_vector_alloc(n2-1); /* above diagonal */
-  //  gsl_vector *f = gsl_vector_alloc(n2-1); /* below diagonal */
-  //  gsl_vector *b = gsl_vector_alloc(n2);   /* rhs */
-  //  gsl_vector *x = gsl_vector_alloc(n2);   /* solution vector */
+  static const int MAX_N = 512;
+  thread_local static double tl_be_diag[MAX_N];
+  thread_local static double tl_be_e[MAX_N];
+  thread_local static double tl_be_f[MAX_N];
+  thread_local static double tl_be_b[MAX_N];
+  thread_local static double tl_be_x[MAX_N];
+  double *diag = tl_be_diag;
+  double *e    = tl_be_e;
+  double *f    = tl_be_f;
+  double *b    = tl_be_b;
+  double *x    = tl_be_x;
 
   for (ivar = 0; ivar < nvar; ivar++)
   {
@@ -2030,16 +2043,7 @@ void TwoPunctures::LineRelax_be(double *dv,
     }
   }
 
-  delete[] diag;
-  delete[] e;
-  delete[] f;
-  delete[] b;
-  delete[] x;
-  //  gsl_vector_free(diag);
-  //  gsl_vector_free(e);
-  //  gsl_vector_free(f);
-  //  gsl_vector_free(b);
-  //  gsl_vector_free(x);
+  /* thread_local buffers — no delete needed */
 }
 /* --------------------------------------------------------------------------*/
 void TwoPunctures::JFD_times_dv(int i, int j, int k, int nvar, int n1, int n2,
@@ -2209,17 +2213,17 @@ void TwoPunctures::LineRelax_al(double *dv,
 {
   int i, m, Ic, Ip, Im, col, ivar;
 
-  double *diag = new double[n1];
-  double *e = new double[n1 - 1]; /* above diagonal */
-  double *f = new double[n1 - 1]; /* below diagonal */
-  double *b = new double[n1];     /* rhs */
-  double *x = new double[n1];     /* solution vector */
-
-  //  gsl_vector *diag = gsl_vector_alloc(n1);
-  //  gsl_vector *e = gsl_vector_alloc(n1-1); /* above diagonal */
-  //  gsl_vector *f = gsl_vector_alloc(n1-1); /* below diagonal */
-  //  gsl_vector *b = gsl_vector_alloc(n1);   /* rhs */
-  //  gsl_vector *x = gsl_vector_alloc(n1);   /* solution vector */
+  static const int MAX_N = 512;
+  thread_local static double tl_al_diag[MAX_N];
+  thread_local static double tl_al_e[MAX_N];
+  thread_local static double tl_al_f[MAX_N];
+  thread_local static double tl_al_b[MAX_N];
+  thread_local static double tl_al_x[MAX_N];
+  double *diag = tl_al_diag;
+  double *e    = tl_al_e;
+  double *f    = tl_al_f;
+  double *b    = tl_al_b;
+  double *x    = tl_al_x;
 
   for (ivar = 0; ivar < nvar; ivar++)
   {
@@ -2269,17 +2273,7 @@ void TwoPunctures::LineRelax_al(double *dv,
     }
   }
 
-  delete[] diag;
-  delete[] e;
-  delete[] f;
-  delete[] b;
-  delete[] x;
-
-  //  gsl_vector_free(diag);
-  //  gsl_vector_free(e);
-  //  gsl_vector_free(f);
-  //  gsl_vector_free(b);
-  //  gsl_vector_free(x);
+  /* thread_local buffers — no delete needed */
 }
 /* -------------------------------------------------------------------------*/
 // a[N], b[N-1], c[N-1], x[N], q[N]
@@ -2291,12 +2285,16 @@ void TwoPunctures::LineRelax_al(double *dv,
 //"Parallel Scientific Computing in C++ and MPI" P361
 void TwoPunctures::ThomasAlgorithm(int N, double *b, double *a, double *c, double *x, double *q)
 {
+  /* thread_local static buffers: allocated once per thread, never freed.
+   * Safe because ThomasAlgorithm is not re-entrant from the same thread.
+   * MAX_N=512 covers all practical TwoPunctures resolutions.             */
+  static const int MAX_N = 512;
+  thread_local static double tl_l[MAX_N];
+  thread_local static double tl_u[MAX_N];
+  thread_local static double tl_d[MAX_N];
+  thread_local static double tl_y[MAX_N];
+  double *l = tl_l, *u = tl_u, *d = tl_d, *y = tl_y;
   int i;
-  double *l, *u, *d, *y;
-  l = new double[N - 1];
-  u = new double[N - 1];
-  d = new double[N];
-  y = new double[N];
 
   /* LU Decomposition */
   d[0] = a[0];
@@ -2323,11 +2321,7 @@ void TwoPunctures::ThomasAlgorithm(int N, double *b, double *a, double *c, doubl
   for (i = N - 2; i >= 0; i--)
     x[i] = (y[i] - u[i] * x[i + 1]) / d[i];
 
-  delete[] l;
-  delete[] u;
-  delete[] d;
-  delete[] y;
-
+  /* thread_local buffers — no delete needed */
   return;
 }
 // --------------------------------------------------------------------------*/

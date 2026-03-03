@@ -10,6 +10,7 @@
 
 import AMSS_NCKU_Input as input_data
 import subprocess
+import os
 
 
 ##################################################################
@@ -150,8 +151,20 @@ def run_TwoPunctureABE():
     TwoPuncture_command         = "./TwoPunctureABE"
     TwoPuncture_command_outfile = "TwoPunctureABE_out.log"
 
+    ## Build subprocess environment: inherit current env and add OpenMP settings.
+    ## OMP_NUM_THREADS must be set explicitly because subprocess.Popen with
+    ## shell=True does not reliably inherit shell-level exports from run.sh.
+    ## Priority: environment variable already set → fallback default of 16.
+    tp_env = os.environ.copy()
+    tp_omp_threads = int(tp_env.get("OMP_NUM_THREADS", 48))
+    tp_env["OMP_NUM_THREADS"]  = str(tp_omp_threads)
+    tp_env["KMP_AFFINITY"]     = "granularity=fine,scatter"
+    print( f" [OpenMP] TwoPunctureABE will use {tp_omp_threads} OpenMP thread(s)" )
+
     ## Execute the command with subprocess.Popen and stream output
-    TwoPuncture_process = subprocess.Popen(TwoPuncture_command, shell=True, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True)
+    TwoPuncture_process = subprocess.Popen(TwoPuncture_command, shell=True,
+                                           env=tp_env,
+                                           stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True)
 
     ## Write TwoPunctureABE run output to file while printing to stdout
     with open(TwoPuncture_command_outfile, 'w') as file0:  

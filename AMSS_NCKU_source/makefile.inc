@@ -1,4 +1,4 @@
-MPI_DIR = /home/jjsnam/spack/opt/spack/linux-haswell/intel-oneapi-mpi-2021.17.2-tzh7zdi7akujs3w3z6xura62oofpnlw7/mpi/2021.17/
+MPI_DIR = /home/foreverhyx/spack/opt/spack/linux-x86_64_v3/intel-oneapi-mpi-2021.17.2-geoxesl7gjei2ybcrfbkeglnhcpiukzn/mpi/2021.17
 
 CUDA_DIR = /home/jjsnam/spack/opt/spack/linux-icelake/cuda-13.0.2-nxiq75wz7g54wiu5ublimzvgspxrweit/
 CUDA_COMPUTE_CAPABILITY = 89
@@ -11,7 +11,7 @@ filein  =
 LDLIBS  = -lifcoremt -L$(CUDA_DIR)/lib64 -lcudart
 
 # Compiler flags
-CXXAPPFLAGS  = -O3 -Wno-deprecated -Dfortran3 -Dnewc -I$(CUDA_DIR)/include
+CXXAPPFLAGS  = -O3 -qopenmp -Wno-deprecated -Dfortran3 -Dnewc -I$(CUDA_DIR)/include
 f90appflags  = -O3 -fpp
 #f90appflags  = -O3 -x f95-cpp-input
 
