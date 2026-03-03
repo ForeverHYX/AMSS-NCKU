@@ -40,9 +40,10 @@ mpirun -bootstrap fork -np 1 ./ABEGPU
 # ncu \
 #   -o ~/profile/kernel/rhs_profile_%p \
 #   --target-processes all \
-#   --kernel-name regex:rhs_kernel \
+#   --kernel-name regex:bssn_advection_dissipation_kernel \
 #   --launch-skip 10 \
 #   --launch-count 5 \
+#   mpirun -bootstrap fork -np 1 ./ABEGPU
 #   mpirun -bootstrap fork -np 1 ./ABEGPU
 # mpirun -bootstrap fork -np 1 compute-sanitizer --tool memcheck ./ABEGPU
 # mpirun -bootstrap fork -np 1 vtune -collect hotspots -trace-mpi -result-dir ../../profile/ABEGPU/${TS}/ -- ./ABEGPU
