@@ -1,4 +1,5 @@
 #include "bssn_rhs.h"
+#include "bssn_rhs_gpu.cuh"
 
 #include "fmisc_gpu.cuh"
 #include "diff_new_gpu.cuh"
@@ -29,180 +30,6 @@ constexpr double FF = 0.75;
 constexpr double eta = 2.0;
 constexpr double F8 = 8.0;
 constexpr double F16 = 16.0;
-
-// ==============================================================================
-// Helper: Shared Memory Load & Batch Derivatives
-// ==============================================================================
-
-__device__ __forceinline__ void load_field_to_smem(
-    double smem[8][12][12], const double* f,
-    const int ex[3], int block_i, int block_j, int block_k,
-    double SYM1, double SYM2, double SYM3
-) {
-    int tid = threadIdx.z * blockDim.y * blockDim.x + threadIdx.y * blockDim.x + threadIdx.x;
-    double SoA[3] = {SYM1, SYM2, SYM3};
-    for(int idx = tid; idx < 1152; idx += 256) {
-        int loc_k = idx / 144;
-        int rem   = idx % 144;
-        int loc_j = rem / 12;
-        int loc_i = rem % 12;
-
-        int glob_i = block_i + loc_i - 2;
-        int glob_j = block_j + loc_j - 2;
-        int glob_k = block_k + loc_k - 2;
-
-        smem[loc_k][loc_j][loc_i] = d_symmetry_bd_0b(2, ex[0], ex[1], ex[2], f, glob_i, glob_j, glob_k, SoA[0], SoA[1], SoA[2]);
-    }
-}
-
-__device__ __forceinline__ void compute_all_derivs_smem(
-    const double smem[8][12][12],
-    double* fx, double* fy, double* fz,
-    double* fxx, double* fxy, double* fxz,
-    double* fyy, double* fyz, double* fzz,
-    double dX, double dY, double dZ,
-    int i, int j, int k,
-    int imin, int jmin, int kmin,
-    int imax, int jmax, int kmax
-) {
-    *fx = 0.0; *fy = 0.0; *fz = 0.0;
-    *fxx = 0.0; *fyy = 0.0; *fzz = 0.0;
-    *fxy = 0.0; *fxz = 0.0; *fyz = 0.0;
-
-    if (i >= imax || j >= jmax || k >= kmax) return;
-
-    const double d12dx = 1.0 / 12.0 / dX;
-    const double d12dy = 1.0 / 12.0 / dY;
-    const double d12dz = 1.0 / 12.0 / dZ;
-    const double d2dx = 1.0 / 2.0 / dX;
-    const double d2dy = 1.0 / 2.0 / dY;
-    const double d2dz = 1.0 / 2.0 / dZ;
-
-    const double Sdxdx = 1.0 / (dX * dX);
-    const double Sdydy = 1.0 / (dY * dY);
-    const double Sdzdz = 1.0 / (dZ * dZ);
-    const double Fdxdx = (1.0 / 12.0) / (dX * dX);
-    const double Fdydy = (1.0 / 12.0) / (dY * dY);
-    const double Fdzdz = (1.0 / 12.0) / (dZ * dZ);
-    const double Sdxdy = 0.25 / (dX * dY);
-    const double Sdxdz = 0.25 / (dX * dZ);
-    const double Sdydz = 0.25 / (dY * dZ);
-    const double Fdxdy = (1.0 / 144.0) / (dX * dY);
-    const double Fdxdz = (1.0 / 144.0) / (dX * dZ);
-    const double Fdydz = (1.0 / 144.0) / (dY * dZ);
-
-    int c_i = threadIdx.x + 2;
-    int c_j = threadIdx.y + 2;
-    int c_k = threadIdx.z + 2;
-
-    auto fh = [&](int di, int dj, int dk) -> double {
-        return smem[c_k + dk][c_j + dj][c_i + di];
-    };
-
-    bool fit_4th = (i + 2 <= imax && i - 2 >= imin && j + 2 <= jmax && j - 2 >= jmin && k + 2 <= kmax && k - 2 >= kmin);
-    bool fit_2nd = (i + 1 <= imax && i - 1 >= imin && j + 1 <= jmax && j - 1 >= jmin && k + 1 <= kmax && k - 1 >= kmin);
-
-    if (fit_4th) {
-        *fx = d12dx * (fh(-2,0,0) - 8.0*fh(-1,0,0) + 8.0*fh(1,0,0) - fh(2,0,0));
-        *fy = d12dy * (fh(0,-2,0) - 8.0*fh(0,-1,0) + 8.0*fh(0,1,0) - fh(0,2,0));
-        *fz = d12dz * (fh(0,0,-2) - 8.0*fh(0,0,-1) + 8.0*fh(0,0,1) - fh(0,0,2));
-
-        *fxx = Fdxdx * (-fh(-2,0,0) + 16.0*fh(-1,0,0) - 30.0*fh(0,0,0) - fh(2,0,0) + 16.0*fh(1,0,0));
-        *fyy = Fdydy * (-fh(0,-2,0) + 16.0*fh(0,-1,0) - 30.0*fh(0,0,0) - fh(0,2,0) + 16.0*fh(0,1,0));
-        *fzz = Fdzdz * (-fh(0,0,-2) + 16.0*fh(0,0,-1) - 30.0*fh(0,0,0) - fh(0,0,2) + 16.0*fh(0,0,1));
-
-        *fxy = Fdxdy * (    (fh(-2,-2,0) - 8.0*fh(-1,-2,0) + 8.0*fh(1,-2,0) - fh(2,-2,0))
-                        -8.0*(fh(-2,-1,0) - 8.0*fh(-1,-1,0) + 8.0*fh(1,-1,0) - fh(2,-1,0))
-                        +8.0*(fh(-2, 1,0) - 8.0*fh(-1, 1,0) + 8.0*fh(1, 1,0) - fh(2, 1,0))
-                        -   (fh(-2, 2,0) - 8.0*fh(-1, 2,0) + 8.0*fh(1, 2,0) - fh(2, 2,0)) );
-        *fxz = Fdxdz * (    (fh(-2,0,-2) - 8.0*fh(-1,0,-2) + 8.0*fh(1,0,-2) - fh(2,0,-2))
-                        -8.0*(fh(-2,0,-1) - 8.0*fh(-1,0,-1) + 8.0*fh(1,0,-1) - fh(2,0,-1))
-                        +8.0*(fh(-2,0, 1) - 8.0*fh(-1,0, 1) + 8.0*fh(1,0, 1) - fh(2,0, 1))
-                        -   (fh(-2,0, 2) - 8.0*fh(-1,0, 2) + 8.0*fh(1,0, 2) - fh(2,0, 2)) );
-        *fyz = Fdydz * (    (fh(0,-2,-2) - 8.0*fh(0,-1,-2) + 8.0*fh(0,1,-2) - fh(0,2,-2))
-                        -8.0*(fh(0,-2,-1) - 8.0*fh(0,-1,-1) + 8.0*fh(0,1,-1) - fh(0,2,-1))
-                        +8.0*(fh(0,-2, 1) - 8.0*fh(0,-1, 1) + 8.0*fh(0,1, 1) - fh(0,2, 1))
-                        -   (fh(0,-2, 2) - 8.0*fh(0,-1, 2) + 8.0*fh(0,1, 2) - fh(0,2, 2)) );
-    } 
-    else if (fit_2nd) {
-        *fx = d2dx * (-fh(-1,0,0) + fh(1,0,0));
-        *fy = d2dy * (-fh(0,-1,0) + fh(0,1,0));
-        *fz = d2dz * (-fh(0,0,-1) + fh(0,0,1));
-
-        *fxx = Sdxdx * (fh(-1,0,0) - 2.0*fh(0,0,0) + fh(1,0,0));
-        *fyy = Sdydy * (fh(0,-1,0) - 2.0*fh(0,0,0) + fh(0,1,0));
-        *fzz = Sdzdz * (fh(0,0,-1) - 2.0*fh(0,0,0) + fh(0,0,1));
-
-        *fxy = Sdxdy * (fh(-1,-1,0) - fh(1,-1,0) - fh(-1,1,0) + fh(1,1,0));
-        *fxz = Sdxdz * (fh(-1,0,-1) - fh(1,0,-1) - fh(-1,0,1) + fh(1,0,1));
-        *fyz = Sdydz * (fh(0,-1,-1) - fh(0,1,-1) - fh(0,-1,1) + fh(0,1,1));
-    }
-}
-
-__device__ __forceinline__ void load_field_to_smem_rad3(
-    double smem[10][14][14], const double* f,
-    const int ex[3], int block_i, int block_j, int block_k,
-    double SYM1, double SYM2, double SYM3
-) {
-    int tid = threadIdx.z * blockDim.y * blockDim.x + threadIdx.y * blockDim.x + threadIdx.x;
-    double SoA[3] = {SYM1, SYM2, SYM3};
-    // Tile 尺寸: 14 * 14 * 10 = 1960。总线程数 256
-    for(int idx = tid; idx < 1960; idx += 256) {
-        int loc_k = idx / 196;
-        int rem   = idx % 196;
-        int loc_j = rem / 14;
-        int loc_i = rem % 14;
-
-        int glob_i = block_i + loc_i - 3;
-        int glob_j = block_j + loc_j - 3;
-        int glob_k = block_k + loc_k - 3;
-
-        // 调用原有的 symmetry boundary 函数来填充 Halo
-        smem[loc_k][loc_j][loc_i] = d_symmetry_bd_0b(3, ex[0], ex[1], ex[2], f, glob_i, glob_j, glob_k, SoA[0], SoA[1], SoA[2]);
-    }
-}
-
-__device__ __forceinline__ void compute_first_derivs_smem(
-    const double smem[8][12][12],
-    double* fx, double* fy, double* fz,
-    double dX, double dY, double dZ,
-    int i, int j, int k,
-    int imin, int jmin, int kmin,
-    int imax, int jmax, int kmax
-) {
-    *fx = 0.0; *fy = 0.0; *fz = 0.0;
-
-    if (i >= imax || j >= jmax || k >= kmax) return;
-
-    const double d12dx = 1.0 / 12.0 / dX;
-    const double d12dy = 1.0 / 12.0 / dY;
-    const double d12dz = 1.0 / 12.0 / dZ;
-    const double d2dx  = 1.0 / 2.0  / dX;
-    const double d2dy  = 1.0 / 2.0  / dY;
-    const double d2dz  = 1.0 / 2.0  / dZ;
-
-    int c_i = threadIdx.x + 2;
-    int c_j = threadIdx.y + 2;
-    int c_k = threadIdx.z + 2;
-
-    auto fh = [&](int di, int dj, int dk) -> double {
-        return smem[c_k + dk][c_j + dj][c_i + di];
-    };
-
-    bool fit_4th = (i + 2 <= imax && i - 2 >= imin && j + 2 <= jmax && j - 2 >= jmin && k + 2 <= kmax && k - 2 >= kmin);
-    bool fit_2nd = (i + 1 <= imax && i - 1 >= imin && j + 1 <= jmax && j - 1 >= jmin && k + 1 <= kmax && k - 1 >= kmin);
-
-    if (fit_4th) {
-        *fx = d12dx * (fh(-2,0,0) - 8.0*fh(-1,0,0) + 8.0*fh(1,0,0) - fh(2,0,0));
-        *fy = d12dy * (fh(0,-2,0) - 8.0*fh(0,-1,0) + 8.0*fh(0,1,0) - fh(0,2,0));
-        *fz = d12dz * (fh(0,0,-2) - 8.0*fh(0,0,-1) + 8.0*fh(0,0,1) - fh(0,0,2));
-    } 
-    else if (fit_2nd) {
-        *fx = d2dx * (-fh(-1,0,0) + fh(1,0,0));
-        *fy = d2dy * (-fh(0,-1,0) + fh(0,1,0));
-        *fz = d2dz * (-fh(0,0,-1) + fh(0,0,1));
-    }
-}
 
 __launch_bounds__(256, 2)
 __global__ void bssn_ricci_kernel(
@@ -466,7 +293,6 @@ __global__ void bssn_rhs_eval_kernel(
 
     __shared__ double smem[8][12][12];
 
-    // (Smem Batch Derivatives 载入和求导部分保持不变，这段设计很高效)
     double betaxx, betaxy, betaxz, bx_gxxx, bx_gxyx, bx_gxzx, bx_gyyx, bx_gyzx, bx_gzzx;
     load_field_to_smem(smem, betax, dims, block_i, block_j, block_k, ANTI, SYM, SYM);
     __syncthreads(); compute_all_derivs_smem(smem, &betaxx, &betaxy, &betaxz, &bx_gxxx, &bx_gxyx, &bx_gxzx, &bx_gyyx, &bx_gyzx, &bx_gzzx, dX, dY, dZ, i, j, k, imin, jmin, kmin, imax, jmax, kmax); __syncthreads();
@@ -624,7 +450,8 @@ __global__ void bssn_rhs_eval_kernel(
     double conf_trK_rhs = gupxx * D2_Lap_xx + gupyy * D2_Lap_yy + gupzz * D2_Lap_zz + TWO * (gupxy * D2_Lap_xy + gupxz * D2_Lap_xz + gupyz * D2_Lap_yz);
     double trK_rhs_val = conf_trK_rhs - HALF * chi_dot_Lap; 
 
-    double S = chin1 * (gupxx * Sxx[idx] + gupyy * Syy[idx] + gupzz * Szz[idx] + TWO * (gupxy * Sxy[idx] + gupxz * Sxz[idx] + gupyz * Syz[idx]));
+    double l_Sxx = Sxx[idx], l_Sxy = Sxy[idx], l_Sxz = Sxz[idx], l_Syy = Syy[idx], l_Syz = Syz[idx], l_Szz = Szz[idx];
+    double S = chin1 * (gupxx * l_Sxx + gupyy * l_Syy + gupzz * l_Szz + TWO * (gupxy * l_Sxy + gupxz * l_Sxz + gupyz * l_Syz));
 
     double term_xx = l_Axx * Au_d_xx + l_Axy * Au_d_yx + l_Axz * Au_d_zx;
     double term_xy = l_Axx * Au_d_xy + l_Axy * Au_d_yy + l_Axz * Au_d_zy;
@@ -640,12 +467,12 @@ __global__ void bssn_rhs_eval_kernel(
     double f_trace = -F1o3 * (trK_rhs_val + alpn1*inv_chin1 * f);
 
     // 换用无污染的物理 Hessian
-    double src_xx = alpn1 * (l_Rxx - EIGHT*PI*Sxx[idx]) - fxx_Lap_phy;
-    double src_yy = alpn1 * (l_Ryy - EIGHT*PI*Syy[idx]) - fyy_Lap_phy;
-    double src_zz = alpn1 * (l_Rzz - EIGHT*PI*Szz[idx]) - fzz_Lap_phy;
-    double src_xy = alpn1 * (l_Rxy - EIGHT*PI*Sxy[idx]) - fxy_Lap_phy;
-    double src_xz = alpn1 * (l_Rxz - EIGHT*PI*Sxz[idx]) - fxz_Lap_phy;
-    double src_yz = alpn1 * (l_Ryz - EIGHT*PI*Syz[idx]) - fyz_Lap_phy;
+    double src_xx = alpn1 * (l_Rxx - EIGHT*PI*l_Sxx) - fxx_Lap_phy;
+    double src_yy = alpn1 * (l_Ryy - EIGHT*PI*l_Syy) - fyy_Lap_phy;
+    double src_zz = alpn1 * (l_Rzz - EIGHT*PI*l_Szz) - fzz_Lap_phy;
+    double src_xy = alpn1 * (l_Rxy - EIGHT*PI*l_Sxy) - fxy_Lap_phy;
+    double src_xz = alpn1 * (l_Rxz - EIGHT*PI*l_Sxz) - fxz_Lap_phy;
+    double src_yz = alpn1 * (l_Ryz - EIGHT*PI*l_Syz) - fyz_Lap_phy;
 
     Axx_rhs[idx] = chin1 * (src_xx - l_gxx * f_trace) + alpn1 * (val_trK * l_Axx - TWO * term_xx) + TWO * (l_Axx * betaxx + l_Axy * betayx + l_Axz * betazx) - F2o3 * l_Axx * div_beta;
     Ayy_rhs[idx] = chin1 * (src_yy - l_gyy * f_trace) + alpn1 * (val_trK * l_Ayy - TWO * term_yy) + TWO * (l_Axy * betaxy + l_Ayy * betayy + l_Ayz * betazy) - F2o3 * l_Ayy * div_beta;
@@ -658,11 +485,12 @@ __global__ void bssn_rhs_eval_kernel(
     trK_rhs[idx] = -chin1 * trK_rhs_val + alpn1 * (F1o3 * val_trK * val_trK + trA2 + FOUR * PI * (rho[idx] + S));
 
     const double FF = 0.75; const double eta = 2.0;
+    double l_dtSfx = dtSfx[idx], l_dtSfy = dtSfy[idx], l_dtSfz = dtSfz[idx];
     Lap_rhs[idx] = -TWO * alpn1 * val_trK;
-    betax_rhs[idx] = FF * dtSfx[idx]; betay_rhs[idx] = FF * dtSfy[idx]; betaz_rhs[idx] = FF * dtSfz[idx];
-    dtSfx_rhs[idx] = val_Gamx_rhs - eta * dtSfx[idx];
-    dtSfy_rhs[idx] = val_Gamy_rhs - eta * dtSfy[idx];
-    dtSfz_rhs[idx] = val_Gamz_rhs - eta * dtSfz[idx];
+    betax_rhs[idx] = FF * l_dtSfx; betay_rhs[idx] = FF * l_dtSfy; betaz_rhs[idx] = FF * l_dtSfz;
+    dtSfx_rhs[idx] = val_Gamx_rhs - eta * l_dtSfx;
+    dtSfy_rhs[idx] = val_Gamy_rhs - eta * l_dtSfy;
+    dtSfz_rhs[idx] = val_Gamz_rhs - eta * l_dtSfz;
 
     Gamx_rhs[idx] = val_Gamx_rhs; Gamy_rhs[idx] = val_Gamy_rhs; Gamz_rhs[idx] = val_Gamz_rhs;
 }
@@ -923,6 +751,7 @@ __global__ void bssn_constraints_kernel(
     const double EIGHT = 8.0; const double F16 = 16.0; const double PI = M_PI;
 
     double chin1 = chi[idx] + 1.0; double val_trK = trK[idx];
+    double inv_chin1 = 1.0 / chin1;
 
     double l_gxx = dxx[idx] + 1.0; double l_gxy = gxy[idx]; double l_gxz = gxz[idx];
     double l_gyy = dyy[idx] + 1.0; double l_gyz = gyz[idx]; double l_gzz = dzz[idx] + 1.0;
@@ -981,7 +810,7 @@ __global__ void bssn_constraints_kernel(
     double grad_chi_sq = gupxx * chix*chix + gupyy * chiy*chiy + gupzz * chiz*chiz + TWO * (gupxy * chix*chiy + gupxz * chix*chiz + gupyz * chiy*chiz);
     
     // 直接组装物理标量曲率，绕过 6 个物理里奇张量的强行更新
-    double phys_R = chin1 * conf_R + TWO * D2_chi - 2.5 / chin1 * grad_chi_sq;
+    double phys_R = chin1 * conf_R + TWO * D2_chi - 2.5 * inv_chin1 * grad_chi_sq;
     ham_Res[idx] = phys_R + F2o3 * val_trK * val_trK - trA2 - F16 * PI * rho[idx];
 
     // 【数学降维 3：动量约束的无物理克氏符推导】
@@ -1001,9 +830,9 @@ __global__ void bssn_constraints_kernel(
     double A_Gam_z = Au_d_xx * l_Gamxxz + Au_d_yx * l_Gamxyz + Au_d_zx * l_Gamxzz + Au_d_xy * l_Gamyxz + Au_d_yy * l_Gamyyz + Au_d_zy * l_Gamyzz + Au_d_xz * l_Gamzxz + Au_d_yz * l_Gamzyz + Au_d_zz * l_Gamzzz;
 
     // Conformal factor 修正项
-    double chi_A_x = 1.5 / chin1 * (Au_d_xx * chix + Au_d_yx * chiy + Au_d_zx * chiz);
-    double chi_A_y = 1.5 / chin1 * (Au_d_xy * chix + Au_d_yy * chiy + Au_d_zy * chiz);
-    double chi_A_z = 1.5 / chin1 * (Au_d_xz * chix + Au_d_yz * chiy + Au_d_zz * chiz);
+    double chi_A_x = 1.5 * inv_chin1 * (Au_d_xx * chix + Au_d_yx * chiy + Au_d_zx * chiz);
+    double chi_A_y = 1.5 * inv_chin1 * (Au_d_xy * chix + Au_d_yy * chiy + Au_d_zy * chiz);
+    double chi_A_z = 1.5 * inv_chin1 * (Au_d_xz * chix + Au_d_yz * chiy + Au_d_zz * chiz);
 
     // 最终组装物理动量约束 (彻底埋葬那 18 块臭长又慢的 `DA_ijk`)
     movx_Res[idx] = div_A_x - Gam_A_x - A_Gam_x - chi_A_x - F2o3 * Kx - EIGHT * PI * Sx[idx];

@@ -89,7 +89,7 @@ $(C++FILES) $(C++FILES_GPU) $(AHFDOBJS) $(CUDAFILES): macrodef.h
 TwoPunctureFILES: TwoPunctures.h
 
 $(CUDAFILES): kodiss.h derivatives.h gpu_manager.h fmisc.h rungekutta4_rout.h sommerfeld_rout.h derivatives.h \
-			  fmisc_gpu.cuh diff_new_gpu.cuh misc_gpu.cuh lopsidediff_gpu.cuh kodiss_gpu.cuh 
+			  fmisc_gpu.cuh diff_new_gpu.cuh misc_gpu.cuh lopsidediff_gpu.cuh kodiss_gpu.cuh bssn_rhs_gpu.cuh
 
 misc.o : zbesh.o
 
