@@ -18,6 +18,9 @@
 echo "Job start at $(date)"
 echo "Node: $(hostname)"
 
+rm -rf GW150914/AMSS_NCKU_output/binary_output
+rm -rf GW150914/figure
+
 . ~/spack/share/spack/setup-env.sh
 # spack load openmpi
 spack load intel-oneapi-compilers

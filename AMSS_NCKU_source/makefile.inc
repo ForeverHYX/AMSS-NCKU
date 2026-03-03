@@ -24,4 +24,4 @@ CLINKER      = mpiicpx
 
 Cu = $(CUDA_DIR)/bin/nvcc
 CUDA_LIB_PATH = -L$(CUDA_DIR)/lib64 -I$(CUDA_DIR)/include
-CUDA_APP_FLAGS = -g -Xptxas -O3 --ptxas-options=-v -Dfortran3 -Dnewc  -arch=sm_$(CUDA_COMPUTE_CAPABILITY) --use_fast_math --extra-device-vectorization
+CUDA_APP_FLAGS = -g -Xptxas -O3 --ptxas-options=-v -Dfortran3 -Dnewc  -arch=sm_$(CUDA_COMPUTE_CAPABILITY)
