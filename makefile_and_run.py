@@ -29,9 +29,9 @@ def makefile_ABE():
 
     ## Build command
     if (input_data.GPU_Calculation == "no"):
-        makefile_command  = "make -j4" + " ABE"
+        makefile_command  = "make -j16" + " ABE"
     elif (input_data.GPU_Calculation == "yes"):
-        makefile_command  = "make -j4" + " ABEGPU"
+        makefile_command  = "make -j16" + " ABEGPU"
     else:
         print( " CPU/GPU numerical calculation setting is wrong " )
         print(                                                    )
