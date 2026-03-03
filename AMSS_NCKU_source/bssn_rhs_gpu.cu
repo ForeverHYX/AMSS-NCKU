@@ -11,6 +11,10 @@
 #include <device_launch_parameters.h>
 #include <iostream>
 
+constexpr int DIM_X = 8;
+constexpr int DIM_Y = 8;
+constexpr int DIM_Z = 4;
+
 #define IDX3D(i, j, k, nx, ny, nz) ((i) + (nx) * ((j) + (ny) * (k)))
 
 constexpr double SYM = 1.0;
@@ -35,17 +39,17 @@ constexpr double F16 = 16.0;
 // ==============================================================================
 
 __device__ __forceinline__ void load_field_to_smem(
-    double smem[8][12][12], const double* f,
+    double smem[DIM_Z + 2 * 2][DIM_Y + 2 * 2][DIM_X + 2 * 2], const double* f,
     const int ex[3], int block_i, int block_j, int block_k,
     double SYM1, double SYM2, double SYM3
 ) {
     int tid = threadIdx.z * blockDim.y * blockDim.x + threadIdx.y * blockDim.x + threadIdx.x;
     double SoA[3] = {SYM1, SYM2, SYM3};
-    for(int idx = tid; idx < 1152; idx += 256) {
-        int loc_k = idx / 144;
-        int rem   = idx % 144;
-        int loc_j = rem / 12;
-        int loc_i = rem % 12;
+    for(int idx = tid; idx < (DIM_Z + 4) * (DIM_Y + 4) * (DIM_X + 4); idx += blockDim.x * blockDim.y * blockDim.z) {
+        int loc_k = idx / ((DIM_X + 4) * (DIM_Y + 4));
+        int rem   = idx % ((DIM_X + 4) * (DIM_Y + 4));
+        int loc_j = rem / (DIM_X + 4);
+        int loc_i = rem % (DIM_X + 4);
 
         int glob_i = block_i + loc_i - 2;
         int glob_j = block_j + loc_j - 2;
@@ -56,7 +60,7 @@ __device__ __forceinline__ void load_field_to_smem(
 }
 
 __device__ __forceinline__ void compute_all_derivs_smem(
-    const double smem[8][12][12],
+    const double smem[DIM_Z + 2 * 2][DIM_Y + 2 * 2][DIM_X + 2 * 2],
     double* fx, double* fy, double* fz,
     double* fxx, double* fxy, double* fxz,
     double* fyy, double* fyz, double* fzz,
@@ -140,18 +144,18 @@ __device__ __forceinline__ void compute_all_derivs_smem(
 }
 
 __device__ __forceinline__ void load_field_to_smem_rad3(
-    double smem[10][14][14], const double* f,
+    double smem[DIM_Z + 2 * 3][DIM_Y + 2 * 3][DIM_X + 2 * 3], const double* f,
     const int ex[3], int block_i, int block_j, int block_k,
     double SYM1, double SYM2, double SYM3
 ) {
     int tid = threadIdx.z * blockDim.y * blockDim.x + threadIdx.y * blockDim.x + threadIdx.x;
     double SoA[3] = {SYM1, SYM2, SYM3};
-    // Tile 尺寸: 14 * 14 * 10 = 1960。总线程数 256
-    for(int idx = tid; idx < 1960; idx += 256) {
-        int loc_k = idx / 196;
-        int rem   = idx % 196;
-        int loc_j = rem / 14;
-        int loc_i = rem % 14;
+    // Tile 尺寸: (DIM_X + 6) * (DIM_Y + 6) * (DIM_Z + 6)。总线程数 blockDim.x * blockDim.y * blockDim.z
+    for(int idx = tid; idx < (DIM_X + 6) * (DIM_Y + 6) * (DIM_Z + 6); idx += blockDim.x * blockDim.y * blockDim.z) {
+        int loc_k = idx / ((DIM_X + 6) * (DIM_Y + 6));
+        int rem   = idx % ((DIM_X + 6) * (DIM_Y + 6));
+        int loc_j = rem / (DIM_X + 6);
+        int loc_i = rem % (DIM_X + 6);
 
         int glob_i = block_i + loc_i - 3;
         int glob_j = block_j + loc_j - 3;
@@ -163,7 +167,7 @@ __device__ __forceinline__ void load_field_to_smem_rad3(
 }
 
 __device__ __forceinline__ void compute_first_derivs_smem(
-    const double smem[8][12][12],
+    const double smem[DIM_Z + 2 * 2][DIM_Y + 2 * 2][DIM_X + 2 * 2],
     double* fx, double* fy, double* fz,
     double dX, double dY, double dZ,
     int i, int j, int k,
@@ -239,7 +243,7 @@ __global__ void bssn_ricci_kernel(
     int block_j = blockIdx.y * blockDim.y;
     int block_k = blockIdx.z * blockDim.z;
 
-    __shared__ double smem[8][12][12];
+    __shared__ double smem[DIM_Z + 2 * 2][DIM_Y + 2 * 2][DIM_X + 2 * 2];
 
     // ================== BATCH DERIVATIVES: 混合导数（需一阶和二阶） ==================
     double gxxx, gxxy, gxxz, dxx_xx, dxx_xy, dxx_xz, dxx_yy, dxx_yz, dxx_zz;
@@ -288,23 +292,16 @@ __global__ void bssn_ricci_kernel(
     double l_gxx = dxx[idx] + ONE; double l_gxy = gxy[idx]; double l_gxz = gxz[idx];
     double l_gyy = dyy[idx] + ONE; double l_gyz = gyz[idx]; double l_gzz = dzz[idx] + ONE;
 
-    double gupzz = l_gxx * l_gyy * l_gzz + l_gxy * l_gyz * l_gxz + l_gxz * l_gxy * l_gyz - l_gxz * l_gyy * l_gxz - l_gxy * l_gxy * l_gzz - l_gxx * l_gyz * l_gyz;
-    double gupxx = (l_gyy * l_gzz - l_gyz * l_gyz) / gupzz;
-    double gupxy = -(l_gxy * l_gzz - l_gyz * l_gxz) / gupzz;
-    double gupxz = (l_gxy * l_gyz - l_gyy * l_gxz) / gupzz;
-    double gupyy = (l_gxx * l_gzz - l_gxz * l_gxz) / gupzz;
-    double gupyz = -(l_gxx * l_gyz - l_gxy * l_gxz) / gupzz;
-    gupzz = (l_gxx * l_gyy - l_gxy * l_gxy) / gupzz;
+    double det = l_gxx * l_gyy * l_gzz + TWO * l_gxy * l_gyz * l_gxz - l_gxx * l_gyz * l_gyz - l_gyy * l_gxz * l_gxz - l_gzz * l_gxy * l_gxy;
+    double inv_det = ONE / det;
+    double gupxx = (l_gyy * l_gzz - l_gyz * l_gyz) * inv_det;
+    double gupxy = -(l_gxy * l_gzz - l_gyz * l_gxz) * inv_det;
+    double gupxz = (l_gxy * l_gyz - l_gyy * l_gxz) * inv_det;
+    double gupyy = (l_gxx * l_gzz - l_gxz * l_gxz) * inv_det;
+    double gupyz = -(l_gxx * l_gyz - l_gxy * l_gxz) * inv_det;
+    double gupzz = (l_gxx * l_gyy - l_gxy * l_gxy) * inv_det;
 
-    double l_Gamxxx = HALF * (gupxx * gxxx + gupxy * (TWO * gxyx - gxxy) + gupxz * (TWO * gxzx - gxxz));
-    double l_Gamyxx = HALF * (gupxy * gxxx + gupyy * (TWO * gxyx - gxxy) + gupyz * (TWO * gxzx - gxxz));
-    double l_Gamzxx = HALF * (gupxz * gxxx + gupyz * (TWO * gxyx - gxxy) + gupzz * (TWO * gxzx - gxxz));
-    double l_Gamxyy = HALF * (gupxx * (TWO * gxyy - gyyx) + gupxy * gyyy + gupxz * (TWO * gyzy - gyyz));
-    double l_Gamyyy = HALF * (gupxy * (TWO * gxyy - gyyx) + gupyy * gyyy + gupyz * (TWO * gyzy - gyyz));
-    double l_Gamzyy = HALF * (gupxz * (TWO * gxyy - gyyx) + gupyz * gyyy + gupzz * (TWO * gyzy - gyyz));
-    double l_Gamxzz = HALF * (gupxx * (TWO * gxzz - gzzx) + gupxy * (TWO * gyzz - gzzy) + gupxz * gzzz);
-    double l_Gamyzz = HALF * (gupxy * (TWO * gxzz - gzzx) + gupyy * (TWO * gyzz - gzzy) + gupyz * gzzz);
-    double l_Gamzzz = HALF * (gupxz * (TWO * gxzz - gzzx) + gupyz * (TWO * gyzz - gzzy) + gupzz * gzzz);
+    // 1. 先计算结构更紧凑的【非对角联络】
     double l_Gamxxy = HALF * (gupxx * gxxy + gupxy * gyyx + gupxz * (gxzy + gyzx - gxyz));
     double l_Gamyxy = HALF * (gupxy * gxxy + gupyy * gyyx + gupyz * (gxzy + gyzx - gxyz));
     double l_Gamzxy = HALF * (gupxz * gxxy + gupyz * gyyx + gupzz * (gxzy + gyzx - gxyz));
@@ -314,6 +311,19 @@ __global__ void bssn_ricci_kernel(
     double l_Gamxyz = HALF * (gupxx * (gxyz + gxzy - gyzx) + gupxy * gyyz + gupxz * gzzy);
     double l_Gamyyz = HALF * (gupxy * (gxyz + gxzy - gyzx) + gupyy * gyyz + gupyz * gzzy);
     double l_Gamzyz = HALF * (gupxz * (gxyz + gxzy - gyzx) + gupyz * gyyz + gupzz * gzzy);
+
+    // 2. 【数学优化 2】：利用行列式为1的解析约束，直接给出三个对角主元！(省去36次乘法+加法)
+    double l_Gamxxx = -(l_Gamyxy + l_Gamzxz);
+    double l_Gamyyy = -(l_Gamxxy + l_Gamzyz);
+    double l_Gamzzz = -(l_Gamxxz + l_Gamyyz);
+
+    // 3. 其余必需计算的非对角偏项
+    double l_Gamyxx = HALF * (gupxy * gxxx + gupyy * (TWO * gxyx - gxxy) + gupyz * (TWO * gxzx - gxxz));
+    double l_Gamzxx = HALF * (gupxz * gxxx + gupyz * (TWO * gxyx - gxxy) + gupzz * (TWO * gxzx - gxxz));
+    double l_Gamxyy = HALF * (gupxx * (TWO * gxyy - gyyx) + gupxy * gyyy + gupxz * (TWO * gyzy - gyyz));
+    double l_Gamzyy = HALF * (gupxz * (TWO * gxyy - gyyx) + gupyz * gyyy + gupzz * (TWO * gyzy - gyyz));
+    double l_Gamxzz = HALF * (gupxx * (TWO * gxzz - gzzx) + gupxy * (TWO * gyzz - gzzy) + gupxz * gzzz);
+    double l_Gamyzz = HALF * (gupxy * (TWO * gxzz - gzzx) + gupyy * (TWO * gyzz - gzzy) + gupyz * gzzz);
 
     double Gamxa = gupxx * l_Gamxxx + gupyy * l_Gamxyy + gupzz * l_Gamxzz + TWO * (gupxy * l_Gamxxy + gupxz * l_Gamxxz + gupyz * l_Gamxyz);
     double Gamya = gupxx * l_Gamyxx + gupyy * l_Gamyyy + gupzz * l_Gamyzz + TWO * (gupxy * l_Gamyxy + gupxz * l_Gamyxz + gupyz * l_Gamyyz);
@@ -458,7 +468,7 @@ __global__ void bssn_rhs_eval_kernel(
     int block_j = blockIdx.y * blockDim.y;
     int block_k = blockIdx.z * blockDim.z;
 
-    __shared__ double smem[8][12][12];
+    __shared__ double smem[DIM_Z + 2 * 2][DIM_Y + 2 * 2][DIM_X + 2 * 2];
 
     // ==============================================================================
     // BATCH DERIVATIVES: 统一进入 Smem 流水线计算
@@ -519,13 +529,14 @@ __global__ void bssn_rhs_eval_kernel(
     gyz_rhs[idx] = -TWO * alpn1 * l_Ayz + F1o3 * l_gyz * div_beta + l_gxy * betaxz + l_gyy * betayz + l_gxz * betaxy + l_gzz * betazy - l_gyz * betaxx;
     gxz_rhs[idx] = -TWO * alpn1 * l_Axz + F1o3 * l_gxz * div_beta + l_gxx * betaxz + l_gxy * betayz + l_gyz * betayx + l_gzz * betazx - l_gxz * betayy;
 
-    double gupzz = l_gxx * l_gyy * l_gzz + l_gxy * l_gyz * l_gxz + l_gxz * l_gxy * l_gyz - l_gxz * l_gyy * l_gxz - l_gxy * l_gxy * l_gzz - l_gxx * l_gyz * l_gyz;
-    double gupxx = (l_gyy * l_gzz - l_gyz * l_gyz) / gupzz;
-    double gupxy = -(l_gxy * l_gzz - l_gyz * l_gxz) / gupzz;
-    double gupxz = (l_gxy * l_gyz - l_gyy * l_gxz) / gupzz;
-    double gupyy = (l_gxx * l_gzz - l_gxz * l_gxz) / gupzz;
-    double gupyz = -(l_gxx * l_gyz - l_gxy * l_gxz) / gupzz;
-    gupzz = (l_gxx * l_gyy - l_gxy * l_gxy) / gupzz;
+    double det = l_gxx * l_gyy * l_gzz + TWO * l_gxy * l_gyz * l_gxz - l_gxx * l_gyz * l_gyz - l_gyy * l_gxz * l_gxz - l_gzz * l_gxy * l_gxy;
+    double inv_det = ONE / det;
+    double gupxx = (l_gyy * l_gzz - l_gyz * l_gyz) * inv_det;
+    double gupxy = -(l_gxy * l_gzz - l_gyz * l_gxz) * inv_det;
+    double gupxz = (l_gxy * l_gyz - l_gyy * l_gxz) * inv_det;
+    double gupyy = (l_gxx * l_gzz - l_gxz * l_gxz) * inv_det;
+    double gupyz = -(l_gxx * l_gyz - l_gxy * l_gxz) * inv_det;
+    double gupzz = (l_gxx * l_gyy - l_gxy * l_gxy) * inv_det;
 
     // 【剥离脏复用】：显式计算混合张量 A^i_j (消除大量重复冗余算式)
     double Au_d_xx = gupxx * l_Axx + gupxy * l_Axy + gupxz * l_Axz;
@@ -734,7 +745,7 @@ __global__ void bssn_advection_dissipation_kernel(
         vz = __ldg(&betaz[idx]);
     }
 
-    __shared__ double smem[10][14][14];
+    __shared__ double smem[DIM_Z + 2 * 3][DIM_Y + 2 * 3][DIM_X + 2 * 3];
 
     auto fh = [&](int di, int dj, int dk) -> double {
         return smem[threadIdx.z + 3 + dk][threadIdx.y + 3 + dj][threadIdx.x + 3 + di];
@@ -862,7 +873,7 @@ __global__ void bssn_constraints_kernel(
     int block_j = blockIdx.y * blockDim.y;
     int block_k = blockIdx.z * blockDim.z;
 
-    __shared__ double smem[8][12][12];
+    __shared__ double smem[DIM_Z + 2 * 2][DIM_Y + 2 * 2][DIM_X + 2 * 2];
     double dum1, dum2, dum3, dum4, dum5, dum6;
 
     // --- 外曲率 A (需一阶导数) ---
@@ -905,7 +916,7 @@ __global__ void bssn_constraints_kernel(
     const double HALF = 0.5; const double TWO = 2.0; const double F2o3 = 2.0 / 3.0; 
     const double F3o2 = 1.5; const double EIGHT = 8.0; const double F16 = 16.0; const double PI = M_PI;
 
-    double val_chi = chi[idx]; double chin1 = val_chi + 1.0;
+    double val_chi = chi[idx]; double chin1 = val_chi + 1.0; double inv_chin1 = ONE / chin1;
     double val_trK = trK[idx];
 
     double l_gxx = dxx[idx] + 1.0; double l_gxy = gxy[idx]; double l_gxz = gxz[idx];
@@ -913,13 +924,14 @@ __global__ void bssn_constraints_kernel(
     double l_Axx = Axx[idx]; double l_Axy = Axy[idx]; double l_Axz = Axz[idx];
     double l_Ayy = Ayy[idx]; double l_Ayz = Ayz[idx]; double l_Azz = Azz[idx];
 
-    double gupzz = l_gxx * l_gyy * l_gzz + l_gxy * l_gyz * l_gxz + l_gxz * l_gxy * l_gyz - l_gxz * l_gyy * l_gxz - l_gxy * l_gxy * l_gzz - l_gxx * l_gyz * l_gyz;
-    double gupxx = (l_gyy * l_gzz - l_gyz * l_gyz) / gupzz;
-    double gupxy = -(l_gxy * l_gzz - l_gyz * l_gxz) / gupzz;
-    double gupxz = (l_gxy * l_gyz - l_gyy * l_gxz) / gupzz;
-    double gupyy = (l_gxx * l_gzz - l_gxz * l_gxz) / gupzz;
-    double gupyz = -(l_gxx * l_gyz - l_gxy * l_gxz) / gupzz;
-    gupzz = (l_gxx * l_gyy - l_gxy * l_gxy) / gupzz;
+    double det = l_gxx * l_gyy * l_gzz + TWO * l_gxy * l_gyz * l_gxz - l_gxx * l_gyz * l_gyz - l_gyy * l_gxz * l_gxz - l_gzz * l_gxy * l_gxy;
+    double inv_det = ONE / det;
+    double gupxx = (l_gyy * l_gzz - l_gyz * l_gyz) * inv_det;
+    double gupxy = -(l_gxy * l_gzz - l_gyz * l_gxz) * inv_det;
+    double gupxz = (l_gxy * l_gyz - l_gyy * l_gxz) * inv_det;
+    double gupyy = (l_gxx * l_gzz - l_gxz * l_gxz) * inv_det;
+    double gupyz = -(l_gxx * l_gyz - l_gxy * l_gxz) * inv_det;
+    double gupzz = (l_gxx * l_gyy - l_gxy * l_gxy) * inv_det;
 
     double l_Gamxxx = Gamxxx_in[idx]; double l_Gamxxy = Gamxxy_in[idx]; double l_Gamxxz = Gamxxz_in[idx];
     double l_Gamxyy = Gamxyy_in[idx]; double l_Gamxyz = Gamxyz_in[idx]; double l_Gamxzz = Gamxzz_in[idx];
@@ -944,13 +956,13 @@ __global__ void bssn_constraints_kernel(
     double fyz = chiyz - l_Gamxyz * chix - l_Gamyyz * chiy - l_Gamzyz * chiz;
     double fzz = chizz - l_Gamxzz * chix - l_Gamyzz * chiy - l_Gamzzz * chiz;
 
-    double f_scalar = gupxx * (fxx - F3o2/chin1 * chix * chix) + gupyy * (fyy - F3o2/chin1 * chiy * chiy) + gupzz * (fzz - F3o2/chin1 * chiz * chiz) + TWO * (gupxy * (fxy - F3o2/chin1 * chix * chiy) + gupxz * (fxz - F3o2/chin1 * chix * chiz) + gupyz * (fyz - F3o2/chin1 * chiy * chiz));
-    l_Rxx += (fxx - chix*chix/chin1/TWO + l_gxx * f_scalar)/chin1/TWO;
-    l_Ryy += (fyy - chiy*chiy/chin1/TWO + l_gyy * f_scalar)/chin1/TWO;
-    l_Rzz += (fzz - chiz*chiz/chin1/TWO + l_gzz * f_scalar)/chin1/TWO;
-    l_Rxy += (fxy - chix*chiy/chin1/TWO + l_gxy * f_scalar)/chin1/TWO;
-    l_Rxz += (fxz - chix*chiz/chin1/TWO + l_gxz * f_scalar)/chin1/TWO;
-    l_Ryz += (fyz - chiy*chiz/chin1/TWO + l_gyz * f_scalar)/chin1/TWO;
+    double f_scalar = gupxx * (fxx - F3o2*inv_chin1 * chix * chix) + gupyy * (fyy - F3o2*inv_chin1 * chiy * chiy) + gupzz * (fzz - F3o2*inv_chin1 * chiz * chiz) + TWO * (gupxy * (fxy - F3o2*inv_chin1 * chix * chiy) + gupxz * (fxz - F3o2*inv_chin1 * chix * chiz) + gupyz * (fyz - F3o2*inv_chin1 * chiy * chiz));
+    l_Rxx += (fxx - chix*chix*inv_chin1*HALF + l_gxx * f_scalar)*inv_chin1*HALF;
+    l_Ryy += (fyy - chiy*chiy*inv_chin1*HALF + l_gyy * f_scalar)*inv_chin1*HALF;
+    l_Rzz += (fzz - chiz*chiz*inv_chin1*HALF + l_gzz * f_scalar)*inv_chin1*HALF;
+    l_Rxy += (fxy - chix*chiy*inv_chin1*HALF + l_gxy * f_scalar)*inv_chin1*HALF;
+    l_Rxz += (fxz - chix*chiz*inv_chin1*HALF + l_gxz * f_scalar)*inv_chin1*HALF;
+    l_Ryz += (fyz - chiy*chiz*inv_chin1*HALF + l_gyz * f_scalar)*inv_chin1*HALF;
     
     double ham_val = gupxx * l_Rxx + gupyy * l_Ryy + gupzz * l_Rzz + TWO * (gupxy * l_Rxy + gupxz * l_Rxz + gupyz * l_Ryz);
 
@@ -965,16 +977,16 @@ __global__ void bssn_constraints_kernel(
 
     ham_Res[idx] = chin1 * ham_val + F2o3 * val_trK * val_trK - trA2 - F16 * PI * rho[idx];
 
-    double gx_phy = (gupxx * chix + gupxy * chiy + gupxz * chiz)/chin1;
-    double gy_phy = (gupxy * chix + gupyy * chiy + gupyz * chiz)/chin1;
-    double gz_phy = (gupxz * chix + gupyz * chiy + gupzz * chiz)/chin1;
+    double gx_phy = (gupxx * chix + gupxy * chiy + gupxz * chiz)*inv_chin1;
+    double gy_phy = (gupxy * chix + gupyy * chiy + gupyz * chiz)*inv_chin1;
+    double gz_phy = (gupxz * chix + gupyz * chiy + gupzz * chiz)*inv_chin1;
     
-    l_Gamxxx -= ((chix + chix)/chin1 - l_gxx * gx_phy)*HALF; l_Gamyxx -= (- l_gxx * gy_phy)*HALF; l_Gamzxx -= (- l_gxx * gz_phy)*HALF; 
-    l_Gamxyy -= (- l_gyy * gx_phy)*HALF; l_Gamyyy -= ((chiy + chiy)/chin1 - l_gyy * gy_phy)*HALF; l_Gamzyy -= (- l_gyy * gz_phy)*HALF; 
-    l_Gamxzz -= (- l_gzz * gx_phy)*HALF; l_Gamyzz -= (- l_gzz * gy_phy)*HALF; l_Gamzzz -= ((chiz + chiz)/chin1 - l_gzz * gz_phy)*HALF; 
-    l_Gamxxy -= (chiy/chin1 - l_gxy * gx_phy)*HALF; l_Gamyxy -= (chix/chin1 - l_gxy * gy_phy)*HALF; l_Gamzxy -= (- l_gxy * gz_phy)*HALF; 
-    l_Gamxxz -= (chiz/chin1 - l_gxz * gx_phy)*HALF; l_Gamyxz -= (- l_gxz * gy_phy)*HALF; l_Gamzxz -= (chix/chin1 - l_gxz * gz_phy)*HALF; 
-    l_Gamxyz -= (- l_gyz * gx_phy)*HALF; l_Gamyyz -= (chiz/chin1 - l_gyz * gy_phy)*HALF; l_Gamzyz -= (chiy/chin1 - l_gyz * gz_phy)*HALF;
+    l_Gamxxx -= ((chix + chix)*inv_chin1 - l_gxx * gx_phy)*HALF; l_Gamyxx -= (- l_gxx * gy_phy)*HALF; l_Gamzxx -= (- l_gxx * gz_phy)*HALF; 
+    l_Gamxyy -= (- l_gyy * gx_phy)*HALF; l_Gamyyy -= ((chiy + chiy)*inv_chin1 - l_gyy * gy_phy)*HALF; l_Gamzyy -= (- l_gyy * gz_phy)*HALF; 
+    l_Gamxzz -= (- l_gzz * gx_phy)*HALF; l_Gamyzz -= (- l_gzz * gy_phy)*HALF; l_Gamzzz -= ((chiz + chiz)*inv_chin1 - l_gzz * gz_phy)*HALF; 
+    l_Gamxxy -= (chiy*inv_chin1 - l_gxy * gx_phy)*HALF; l_Gamyxy -= (chix*inv_chin1 - l_gxy * gy_phy)*HALF; l_Gamzxy -= (- l_gxy * gz_phy)*HALF; 
+    l_Gamxxz -= (chiz*inv_chin1 - l_gxz * gx_phy)*HALF; l_Gamyxz -= (- l_gxz * gy_phy)*HALF; l_Gamzxz -= (chix*inv_chin1 - l_gxz * gz_phy)*HALF; 
+    l_Gamxyz -= (- l_gyz * gx_phy)*HALF; l_Gamyyz -= (chiz*inv_chin1 - l_gyz * gy_phy)*HALF; l_Gamzyz -= (chiy*inv_chin1 - l_gyz * gz_phy)*HALF;
 
     double DA_xxx = d_Axx_x - (l_Gamxxx * l_Axx + l_Gamyxx * l_Axy + l_Gamzxx * l_Axz + l_Gamxxx * l_Axx + l_Gamyxx * l_Axy + l_Gamzxx * l_Axz) - chix * l_Axx / chin1;
     double DA_xyx = d_Axy_x - (l_Gamxxy * l_Axx + l_Gamyxy * l_Axy + l_Gamzxy * l_Axz + l_Gamxxx * l_Axy + l_Gamyxx * l_Ayy + l_Gamzxx * l_Ayz) - chix * l_Axy / chin1;
@@ -1030,7 +1042,7 @@ void gpu_compute_rhs_bssn_launch(
     double* Gmx_Res, double* Gmy_Res, double* Gmz_Res,
     int symmetry, int lev, double eps, int co
 ) {
-    dim3 block(8, 8, 4);
+    dim3 block(DIM_X, DIM_Y, DIM_Z);
     dim3 grid(
         (ex[0] + block.x - 1) / block.x,
         (ex[1] + block.y - 1) / block.y,
