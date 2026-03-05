@@ -1,0 +1,36 @@
+ASC26 TIME-DELAYED ACADEMIC LICENSE
+===================================
+
+Copyright (c) 2026 Tianyang Liu (jjsnam) and Yixun Hong (ForeverHYX), Zhejiang University Supercomputing Team, and AMSS-NCKU Original Authors.
+
+This software is provided under a two-phase license to protect the integrity of the ASC26 Student Supercomputer Challenge while ultimately contributing to the open-source community.
+
+PHASE 1: EMBARGO PERIOD (Effective from [March 5, 2026] to [May 20, 2026])
+-----------------------------------------------------------------------
+During the Embargo Period, the following restrictions apply:
+
+1. ACADEMIC & EDUCATIONAL USE ONLY: You are granted permission to view, download, and study the code for personal, educational, and academic review purposes only.
+2. STRICT COMPETITION BAN: You are STRICTLY PROHIBITED from using, copying, modifying, merging, or integrating any part of this software, its underlying logic, or its specific GPU optimization strategies into any submission for the ASC26 Student Supercomputer Challenge, regardless of the stage of the competition, unless you have obtained explicit prior written consent from the copyright holders.
+3. ATTRIBUTION REQUIRED: For any permitted academic use (e.g., citing this work in a paper or using it as a reference for non-ASC26 research), explicit attribution to the copyright holders must be provided.
+
+PHASE 2: OPEN SOURCE PERIOD (Effective on and after [May 21, 2026])
+-----------------------------------------------------------------------
+Upon the expiration of the Embargo Period, the software will automatically and irrevocably transition to the standard MIT License, as stated below:
+
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in all
+copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+SOFTWARE.

@@ -1,139 +1,87 @@
-# AMSS-NCKU 
+# AMSS-NCKU-GPU: GPU-Accelerated Numerical Relativity Code (ASC26)
 
-#### What can AMSS-NCKU do
+## Overview
 
-AMSS - NCKU is a numerical relativity program developed in China, which is used to numerically solve Einstein's equations and calculate the change of the gravitational field over time. 
+This repository hosts a heavily optimized, fully GPU-accelerated version of **AMSS-NCKU**, serving as the scientific computing application for the **ASC26 Student Supercomputer Challenge (Preliminary Round)**. 
 
-AMSS - NCKU uses the finite difference method and the adaptive mesh refinement technique to achieve the numerical solution of Einstein's equations. 
+Based on the [Original AMSS-NCKU Repository](https://github.com/ASC-Competition/AMSS-NCKU), this numerical relativity program is designed to solve Einstein's field equations, simulate binary black hole systems, and capture the released gravitational waves using adaptive mesh refinement (AMR) techniques. 
 
-Currently, AMSS - NCKU can successfully handle binary black hole systems and multiple black hole systems, calculate the time evolution of these systems, and solve the gravitational waves released during these processes.
+Our core contribution in this repository is a fundamentally re-engineered, completely device-resident GPU spacetime evolution pipeline that minimizes CPU intervention and maximizes modern HPC accelerator efficiency.
 
-#### The Development of AMSS-NCKU
+[See our proposal here](https://www.asc-events.net/StudentChallenge/ASC26/upload/ASC1514-8ba6e938-6ee3-545f-bf2b-c3c662181438.pdf). This repository's content belongs to Chapter 6.
 
-In 2008, the AMSS-NCKU code was successfully developed, enabling the numerical simulation for binary black hole and multiple black hole systems via the BSSN equations.
+## 🚀 Performance Breakthrough
 
-In 2013, AMSS-NCKU achieved the numerical simulation for black hole systems via the Z4C equations, greatly improving the accuracy of the calculation.
+By shifting the computational paradigm entirely to the GPU and applying deep hardware-aware optimizations, we achieved a massive **18.6X end-to-end speedup** for the spacetime evolution process, without compromising physical accuracy (RMS deviation < 0.05%).
 
-In 2015, AMSS-NCKU implemented hybrid CPU and GPU computing for the BSSN equations, improving the computational efficiency.
+- **Baseline (32-core MPI CPU):** 44,425 seconds
+- **Optimized (Single NVIDIA A100 GPU):** **2,376 seconds**
 
-In 2024, we developed a Python operation interface for AMSS-NCKU to facilitate the freshman users and subsequent development.
+## Key Optimizations
 
-#### Authors of AMSS-NCKU
+### 1. Fully GPU-Resident Spacetime Evolution (Core Contribution)
+The evolution pipeline (`ABEGPU`) has been completely overhauled to maintain strict data residency on the GPU, effectively eliminating devastating PCIe transfer bottlenecks:
+- **"Shadow Array" Architecture**: Replicated the complex host AMR linked-list structures into flat, contiguous device memory mappings, allowing the GPU to traverse grid hierarchies autonomously.
+- **PCIe-Optimized Ghost Zone Synchronization**: Ghost zone extraction and packing are now executed purely on the GPU. By overlapping concurrent boundary-domain kernel launches with MPI Irecv/Isend, we successfully hide up to 68% of network latency behind useful arithmetic.
+- **Multi-Stream Block-Level Concurrency**: Utilized asynchronous memory pooling (`cudaMallocAsync`) and dynamic CUDA stream assignments to execute multiple non-dependent AMR blocks concurrently, ensuring high Streaming Multiprocessor (SM) occupancy.
+- **Register-Intensive Kernel Tuning**: Mitigated severe register spilling via aggressive kernel fission (decomposing the monolithic Z4c RHS kernel) and explicit launch bounds tuning.
 
-Cao, Zhoujian (Beijing Normal University; Academy of Mathematics and Systems Science, Chinese Academy of Sciences; Hangzhou Institute for Advanced Study, University of Chinese Academy of Sciences)
+### 2. CPU-Side Initial Data Generation (Secondary Optimization)
+While the evolution phase is the primary focus, we also optimized the original serial `TwoPuncture` initial data solver using OpenMP. By eliminating high-concurrency heap contention (replacing dynamic allocations with thread-local buffers) and exposing independent computational planes for massive multi-threading, the initialization phase was accelerated by **~9.6X** (from ~548 seconds to ~57 seconds).
 
-Yo, Hwei-Jang (National Cheng Kung University)
+## The Development of AMSS-NCKU
+- **2008**: Developed for binary and multiple black hole systems via BSSN equations.
+- **2013**: Implemented Z4C equations, greatly improving calculation accuracy.
+- **2015**: Introduced hybrid CPU/GPU computing for BSSN.
+- **2024**: Developed a Python operation interface to facilitate usage.
+- **2026 (This Repository)**: Comprehensive GPU-resident parallelization and CUDA-aware optimizations developed for the ASC26 competition.
 
-Liu, Runqiu (Academy of Mathematics and Systems Science, Chinese Academy of Sciences)
+## Quick Start
 
-Du, Zhihui (Tsinghua University)
+A stable and reproducible high-performance computing environment (using Spack or Conda) is required, including modern C++, Fortran, CUDA compilers, Python 3, and an MPI implementation.
 
-Ji, Liwei (Rochester Institute of Technology)
+For detailed environment variables, thread binding, and SLURM submission configurations, please directly refer to the `run.sh` script provided in this repository.
 
-Zhao, Zhichao (China Agricultural University)
+**Execution:**
+```bash
+# To run locally:
+./run.sh
 
-Qiao, Chenkai (Chongqing University of Technology)
+# To submit via Slurm workload manager:
+sbatch run.sh
 
-Yu, Jui-Ping (Former student)
+```
 
-Lin, Chun-Yu (Former student)
+## Results & Limitations
 
-Zuo, Yi (Student)
+Please note that currently, **only the specific physical equations and numerical approaches configured in [`AMSS_NCKU_Input.py`](AMSS_NCKU_Input.py) have been fully optimized and ported to the GPU.** Other numerical methods, boundary conditions, or equation formulations available in the original AMSS-NCKU framework have not been implemented in this GPU-accelerated version. We do not guarantee the correctness, stability, or performance of the code if it is migrated to or configured with other unoptimized methods.
 
+Below are the simulation results generated using the currently supported GPU configurations:
 
-#### Install the required packages and software that are prequisite to AMSS-NCKU code
+![Simulation Result](run-result.png)
+*Figure: Description of the first result.*
 
-Here, we take the Ubuntu 22.04 system as an example
+## Authors
 
-1.  Install the C++, Fortran, and Cuda compilers.
+### Original AMSS-NCKU
 
-    $ sudo apt-get install gcc
+- **Cao, Zhoujian** (Beijing Normal University; AMSS, CAS; HIAS, UCAS)
+- **Yo, Hwei-Jang** (National Cheng Kung University)
+- **Liu, Runqiu** (AMSS, CAS)
+- **Du, Zhihui** (Tsinghua University)
+- **Ji, Liwei** (Rochester Institute of Technology)
+- **Zhao, Zhichao** (China Agricultural University)
+- **Qiao, Chenkai** (Chongqing University of Technology)
+- **Yu, Jui-Ping** (Former student)
+- **Lin, Chun-Yu** (Former student)
+- **Zuo, Yi** (Student)
 
-    $ sudo apt-get install gfortran
+### GPU-based AMSS-NCKU
 
-    $ sudo apt-get install make
+*(Recent HPC optimizations and GPU pipeline restructuring contributed by the Zhejiang University Supercomputing Team).*
 
-    $ sudo apt-get install build-essential
+- **Tianyang Liu** [@jjsnam](https://github.com/jjsnam) (Zhejiang University, Student)
+- **Yixun Hong** [@ForeverHYX](https://github.com/ForeverHYX) (Zhejiang University, Student)
 
-    $ sudo apt-get install nvidia-cuda-toolkit
-
-2.  Install the MPI tool
-
-    $ sudo apt install openmpi-bin
-
-    $ sudo apt install libopenmpi-dev
-
-3.  Install the Python3
-
-    $ sudo apt-get install python3
-
-    $ sudo apt-get install python3-pip
-
-4.  Install the required Python packages
-
-    $ pip install numpy
-
-    $ pip install scipy
-
-    $ pip install matplotlib
-
-    $ pip install SymPy
-
-    $ pip install opencv-python-full
-
-    $ pip install notebook
-
-    $ pip install torch
-
-5.  Install the OpenCV tool
-
-    $ sudo apt-get install libopencv-dev
-
-    $ sudo apt-get install python-opencv
-
-#### How to use AMSS-NCKU
-
-0.  Setting the parameters for compilation
-
-    Modify the makefile.inc file in the AMSS_NCKU_source directory and change the settings according to your computer.
-
-    The settings for the Ubuntu 22.04 system do not need to be modified.
-
-1.  Enter the AMSS-NCKU Python code folder and modify the input.
-
-    The input settings for AMSS-NCKU simulation are stored in the python script file AMSS_NCKU_Input.py. Modify the parameters in this script file and save it.
-
-2.  Build the executable program and run the AMSS-NCKU simulation.
-
-    Run the following command in the bash terminal. 
-    
-    $ python AMSS_NCKU_Program.py 
-    
-    or 
-    
-    $ python3 AMSS_NCKU_Program.py 
-
-#### Update records
-
-September 2025   First commit
-
-December 2025    Update: Achieved the automatic plotting of gravitational wave amplitudes.
-
-January 2026     Update: Fixed some bugs.
-
-
-#### Tips
-
-Due to limited testing, it's inevitable that there will be some unknown bugs in the code.
-
-The computing time required for an actual evolution of a binary black hole system is relatively long. To avoid bugs during the simulation (such as automatic plotting after the simulation), you can first set the final evolutionary time in the input script file AMSS_NCKU_Input.py to 5M for testing.
-
-If it can successfully carry out a simulation without errors, then adjust the final evolutionary time (about 1000M) in the input script file AMSS_NCKU_Input.py to start an actual simulation. This can reduce unnecessary waste of computing resources.
-
-Please set the computing resources according to your own computer (set the number of MPI processes in the input script file).
-
-#### Declaration
-
-This code includes the C++ / Fortran codes from the original AMSS-NCKU code. A small number of functions are referenced from BAM.
-
-Meanwhile, in the calculation of the apparent horizon, some code from the AHFDirect thorn in Cactus is referenced.
+## License
+This project is licensed under a custom Time-Delayed Academic License. It will automatically transition to the MIT License after the ASC26 Finals. See the [LICENSE](LICENSE) file for details.
